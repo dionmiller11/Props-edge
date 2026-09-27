@@ -312,8 +312,11 @@
 // Linemate straights = individual player props (not SGPs)
 const LINEMATE_PROVIDERS = 'betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
 const LINEMATE_BASE = 'https://api.linemate.io/api/nfl/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER';
+// Fetch multiple pages to get all teams/props
 const LINEMATE_ENDPOINTS = [
-  LINEMATE_BASE + '&limit=200',
+  LINEMATE_BASE + '&limit=200&offset=0',
+  LINEMATE_BASE + '&limit=200&offset=200',
+  LINEMATE_BASE + '&limit=200&offset=400',
 ];
 const PROXY = 'https://sports-proxy.dion-miller11.workers.dev';
 
