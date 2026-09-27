@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NFL Props Edge Finder</title>
+<style>
+  :root {
+    --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
+    --accent:#4a9eff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;
+    --text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;
+    --font:'DM Mono','Fira Code','Courier New',monospace;
+    --sans:'DM Sans','Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+  .logo{display:flex;align-items:center;gap:8px;}
+  .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;flex-shrink:0;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;}
+  .logo span{color:var(--accent);}
+  .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 9px;border:1px solid var(--border);border-radius:4px;}
+  .btn{border:none;padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+  .btn-primary{background:var(--accent);color:#000;}
+  .btn-primary:hover{background:#7dbfff;transform:translateY(-1px);}
+  .btn-primary:disabled{background:var(--muted);cursor:not-allowed;transform:none;}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+  .btn-purple{background:rgba(176,110,255,.15);color:#b06eff;border:1px solid rgba(176,110,255,.35);}
+  .btn-obsidian{background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.35);}
+  .api-banner{background:rgba(74,158,255,.05);border-bottom:1px solid rgba(74,158,255,.12);padding:9px 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted);}
+  .api-row{display:flex;align-items:center;gap:8px;}
+  .api-banner input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:5px;font-family:var(--font);font-size:11px;outline:none;}
+  .api-banner input:focus{border-color:var(--accent);}
+  .api-status{font-size:10px;font-family:var(--font);padding:3px 7px;border-radius:3px;white-space:nowrap;}
+  .api-status.connected{color:var(--accent2);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2);}
+  .api-status.missing{color:var(--warn);background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);}
+  .data-banner{background:rgba(74,158,255,.04);border-bottom:1px solid rgba(74,158,255,.1);padding:7px 20px;font-size:11px;font-family:var(--font);color:var(--muted);display:flex;align-items:center;gap:8px;}
+  .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
+  .tab{padding:11px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+  .filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
+  .filter-group{display:flex;align-items:center;gap:6px;}
+  input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
+  select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
+  .chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+  .chip.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .status-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--font);font-size:12px;color:var(--muted);min-height:20px;}
+  .status-bar.running{color:var(--accent);}
+  .status-bar.done{color:var(--accent2);}
+  .status-bar.error{color:var(--miss);}
+  .progress-wrap{margin-bottom:14px;display:none;}
+  .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%;}
+  .progress-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:4px;}
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--accent);line-height:1;margin-bottom:3px;}
+  .stat-card .val.green{color:var(--accent2);}
+  .stat-card .val.gold{color:var(--gold);}
+  .stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+  .parlay-panel{background:var(--surface);border:1px solid rgba(74,158,255,.3);border-radius:10px;padding:16px 18px;margin-bottom:16px;display:none;}
+  .parlay-panel.open{display:block;}
+  .parlay-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .parlay-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;}
+  .parlay-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .parlay-odds{font-family:var(--font);font-size:18px;font-weight:700;color:var(--gold);}
+  .parlay-count{font-family:var(--font);font-size:11px;color:var(--muted);}
+  .parlay-legs{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .parlay-leg{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);}
+  .parlay-leg-info{flex:1;}
+  .parlay-leg-player{font-family:var(--sans);font-weight:600;color:var(--text);font-size:12px;}
+  .parlay-leg-prop{color:var(--muted);font-size:10px;font-family:var(--font);margin-top:1px;}
+  .parlay-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;}
+  .parlay-remove:hover{color:var(--miss);}
+  .parlay-empty{text-align:center;padding:16px;color:var(--muted);font-size:12px;}
+  .parlay-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .add-parlay-btn{font-size:10px;padding:2px 8px;border-radius:3px;background:rgba(74,158,255,.1);color:var(--accent);border:1px solid rgba(74,158,255,.2);cursor:pointer;font-family:var(--font);transition:all .15s;}
+  .add-parlay-btn:hover{background:rgba(74,158,255,.2);}
+  .add-parlay-btn.added{background:rgba(74,158,255,.3);color:#fff;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;}
+  .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;color:var(--accent);}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+  tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;}
+  tbody tr:hover{background:var(--surface2);}
+  tbody tr:last-child{border-bottom:none;}
+  td{padding:9px 10px;white-space:nowrap;font-family:var(--font);vertical-align:middle;}
+  .player-name{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--text);}
+  .sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
+  .lm-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(74,158,255,.1);color:var(--accent);border:1px solid rgba(74,158,255,.2);margin-left:4px;font-family:var(--font);}
+  .pos-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(74,158,255,.08);color:var(--accent);border:1px solid rgba(74,158,255,.15);margin-right:4px;font-family:var(--font);}
+  .prop-type{color:var(--accent);font-size:11px;}
+  .hit-rate{font-size:13px;font-weight:700;}
+  .hit-rate.elite{color:var(--gold);}
+  .hit-rate.strong{color:var(--accent2);}
+  .hit-rate.solid{color:var(--accent);}
+  .sparkline{display:flex;gap:3px;align-items:center;}
+  .spark-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;}
+  .spark-dot.hit{background:var(--hit);}
+  .spark-dot.miss{background:rgba(255,77,109,.4);}
+  .streak-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;}
+  .streak-badge.hot{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
+  .streak-badge.cold{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+  .edge-badge{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;}
+  .edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+  .edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+  .edge-badge.ok{background:rgba(74,158,255,.08);color:var(--accent);border:1px solid rgba(74,158,255,.2);}
+  .empty{padding:44px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
+  .empty p{font-size:13px;line-height:1.6;}
+  .loading-row td{padding:32px;text-align:center;color:var(--muted);font-size:13px;}
+  .error-box{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);border-radius:8px;padding:12px 16px;color:var(--miss);font-size:13px;margin-bottom:14px;}
+  .token-box{background:rgba(74,158,255,.05);border:1px solid rgba(74,158,255,.2);border-radius:8px;padding:14px 16px;margin-bottom:14px;font-size:12px;}
+  .token-box p{color:var(--muted);line-height:1.6;margin-bottom:8px;}
+  .token-box ol{color:var(--muted);padding-left:16px;line-height:1.8;}
+  .token-box li{font-family:var(--font);font-size:11px;}
+  footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+  .toast.show{transform:translateY(0);opacity:1;}
+  @media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 8px;}.hide-mobile{display:none;}.api-banner{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="logo-dot"></div><h1>NFL <span>PROPS</span> EDGE FINDER</h1></div>
+  <div class="header-right">
+    <div class="date-badge" id="dateBadge">—</div>
+    <button class="btn btn-green" id="exportBtn" onclick="exportCSV()" style="display:none">📊 CSV</button>
+    <button class="btn btn-purple" id="parlayBtn" onclick="toggleParlay()" style="display:none">🎰 Parlay</button>
+    <button class="btn btn-obsidian" id="obsidianBtn" onclick="exportObsidian()" style="display:none">🟣 Obsidian</button>
+    <button class="btn btn-primary" id="runBtn" onclick="runScan()">⚡ RUN SCAN</button>
+  </div>
+</header>
+
+<div class="api-banner">
+  <div class="api-row">
+    <span style="white-space:nowrap;font-size:11px">🔑 Linemate Token:</span>
+    <input type="password" id="lmToken" placeholder="Paste JWT token from linemate.io DevTools…" oninput="saveKey('lmToken',this.value)">
+    <span class="api-status missing" id="lmStatus">NOT SET</span>
+  </div>
+  <div class="api-row">
+    <span style="white-space:nowrap;font-size:11px">📡 Odds API:</span>
+    <input type="password" id="oddsApiKey" placeholder="Paste key from the-odds-api.com…" oninput="saveKey('oddsApiKey',this.value)">
+    <span class="api-status missing" id="oddsStatus">NOT SET</span>
+  </div>
+</div>
+
+<div class="data-banner">
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
+  LINEMATE MODE — real hit rates + lines from 20+ sportsbooks
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('all')">🏈 ALL PROPS</button>
+  <button class="tab" onclick="switchTab('passing')">🎯 PASSING</button>
+  <button class="tab" onclick="switchTab('rushing')">💨 RUSHING</button>
+  <button class="tab" onclick="switchTab('receiving')">✋ RECEIVING</button>
+  <button class="tab" onclick="switchTab('td')">⭐ TDs</button>
+</div>
+
+<main>
+  <div class="filters">
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="50" max="100" step="5" oninput="renderTable()"> %</div>
+    <div class="filter-group"><span class="filter-label">SORT</span>
+      <select id="sortBy" onchange="renderTable()">
+        <option value="rate">Hit Rate</option>
+        <option value="streak">Streak</option>
+        <option value="edge">Edge</option>
+        <option value="time">Game Time</option>
+      </select>
+    </div>
+    <div class="filter-group"><span class="filter-label">DIRECTION</span>
+      <select id="dirFilter" onchange="renderTable()">
+        <option value="all">All</option>
+        <option value="OVER">Over Only</option>
+        <option value="UNDER">Under Only</option>
+      </select>
+    </div>
+    <div class="filter-group"><span class="filter-label">TEAM</span>
+      <select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select>
+    </div>
+    <div class="filter-group" style="margin-left:auto">
+      <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
+      <button class="chip" id="upcomingChip" onclick="toggleUpcoming(this)" style="margin-left:4px">⏰ UPCOMING ONLY</button>
+      <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
+    </div>
+  </div>
+
+  <div class="status-bar" id="statusBar">Ready — paste your Linemate token then click ⚡ RUN SCAN</div>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">Starting…</div>
+  </div>
+
+  <div class="summary" id="summary" style="display:none">
+    <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL EDGES</div></div>
+    <div class="stat-card"><div class="val gold" id="s-fire">0</div><div class="lbl">🔥 ELITE 90%+</div></div>
+    <div class="stat-card"><div class="val" id="s-strong">0</div><div class="lbl">STRONG 80–89%</div></div>
+    <div class="stat-card"><div class="val" id="s-streak">0</div><div class="lbl">🔥 HOT STREAKS</div></div>
+  </div>
+
+  <div id="errorBox" style="display:none" class="error-box"></div>
+
+  <div id="tokenBox" class="token-box">
+    <p>To get your Linemate token:</p>
+    <ol>
+      <li>Open linemate.io/nfl/trends in Firefox on your Mac</li>
+      <li>Press Cmd+Option+I → Network tab</li>
+      <li>Filter by "api" → click any api.linemate.io request</li>
+      <li>Click Headers → copy the Authorization Bearer token</li>
+      <li>Paste it above — valid for ~1 hour</li>
+    </ol>
+  </div>
+
+  <div class="parlay-panel" id="parlayPanel">
+    <div class="parlay-header">
+      <span class="parlay-title">🎰 PARLAY BUILDER</span>
+      <div class="parlay-meta">
+        <span class="parlay-count" id="parlayCount">0 legs</span>
+        <span class="parlay-odds" id="parlayOdds">—</span>
+        <div class="parlay-actions">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button>
+          <button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
+          <button class="btn btn-obsidian" style="padding:4px 10px;font-size:11px" onclick="exportObsidian()">🟣 Obsidian</button>
+        </div>
+      </div>
+    </div>
+    <div class="parlay-legs" id="parlayLegsEl"><div class="parlay-empty">Add plays using + on each row</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <span class="table-title" id="tableTitle">🏈 ALL NFL PROPS — THIS WEEK</span>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
+        <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 5</th>
+        <th>MATCHUP</th><th>STREAK</th><th>EDGE</th><th>+</th>
+      </tr></thead>
+      <tbody id="tableBody"><tr class="loading-row"><td colspan="10">
+        <div class="empty"><div class="empty-icon">🏈</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div>
+      </td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<footer>
+  <span id="lastRun">Never run</span>
+  <span style="color:var(--accent2)">● LINEMATE · REAL HIT RATES</span>
+</footer>
+<div class="copy-toast" id="copyToast"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// Linemate straights = individual player props (not SGPs)
+const LINEMATE_PROVIDERS = 'betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
+const LINEMATE_BASE = 'https://api.linemate.io/api/nfl/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER';
+const LINEMATE_ENDPOINTS = [
+  LINEMATE_BASE + '&limit=200',
+];
+const PROXY = 'https://sports-proxy.dion-miller11.workers.dev';
+
+const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+let allData = [], activeTab = 'all', edgeOnly = false, upcomingOnly = false, parlayLegs = [];
+
+// Prop category mapping
+const PROP_CATS = {
+  passing: ['passingYards','passingAttempts','passingCompletions','passingTouchdowns','interceptions'],
+  rushing: ['rushingYards','rushingAttempts','rushingTouchdowns'],
+  receiving: ['receptions','receivingYards','receivingTouchdowns','targets'],
+  td: ['passingTouchdowns','rushingTouchdowns','receivingTouchdowns','anytimeTouchdown'],
+};
+
+const PROP_LABELS = {
+  passingYards:'Pass Yds', passingAttempts:'Pass Att', passingCompletions:'Completions',
+  passingTouchdowns:'Pass TDs', interceptions:'INTs', rushingYards:'Rush Yds',
+  rushingAttempts:'Rush Att', rushingTouchdowns:'Rush TD', receptions:'Receptions',
+  receivingYards:'Rec Yds', receivingTouchdowns:'Rec TD', targets:'Targets',
+  anytimeTouchdown:'Anytime TD', rushingReceivingYards:'Rush+Rec Yds',
+  // Raw API name mappings
+  rushingYards10:'Rush Yds (L10)', rushingPlusReceivingYards:'Rush+Rec Yds',
+  passingYards1stQuarter:'Pass Yds 1Q', rushingYards1stQuarter:'Rush Yds 1Q',
+  receivingYards1stQuarter:'Rec Yds 1Q', passingAttempts1stQuarter:'Pass Att 1Q',
+  longestReception:'Longest Rec', longestRush:'Longest Rush',
+  passerRating:'Passer Rating', passingYardsPlusRushingYards:'Pass+Rush Yds',
+  receivingYardsPlusRushingYards:'Rec+Rush Yds', touchdowns:'TDs',
+  sacks:'Sacks', tackles:'Tackles', tacklesAssists:'Tkl+Ast',
+};
+
+// Clean up raw API prop names that don't have a label
+function cleanPropName(rawName) {
+  if(!rawName) return rawName;
+  return rawName
+    .replace(/_1ST_QUARTER/gi, ' 1Q')
+    .replace(/_PLUS_/gi, '+')
+    .replace(/_10$/gi, ' L10')
+    .replace(/_5$/gi, ' L5')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(w => w ? w[0].toUpperCase()+w.slice(1).toLowerCase() : '')
+    .join(' ')
+    .replace(/Yards/g,'Yds').replace(/Attempts/g,'Att').replace(/Touchdowns/g,'TDs')
+    .replace(/Completions/g,'Comp').replace(/Receptions/g,'Rec')
+    .replace(/Rushing/g,'Rush').replace(/Passing/g,'Pass').replace(/Receiving/g,'Rec')
+    .replace(/Interceptions/g,'INTs').replace(/Plus/g,'+');
+}
+
+document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+// Check URL for token param (for bookmarking with token)
+const _urlParams = new URLSearchParams(window.location.search);
+const _urlToken = _urlParams.get('token')||_urlParams.get('lmToken');
+if(_urlToken){ try{localStorage.setItem('lmToken',_urlToken);}catch(e){} }
+
+['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
+
+function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
+function updateStatus(k,ok){
+  if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
+  if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
+}
+function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['all','passing','rushing','receiving','td'][i]===tab);});document.getElementById('tableTitle').textContent={all:'🏈 ALL NFL PROPS',passing:'🎯 PASSING PROPS',rushing:'💨 RUSHING PROPS',receiving:'✋ RECEIVING PROPS',td:'⭐ TOUCHDOWN PROPS'}[tab]+' — THIS WEEK';renderTable();}
+function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
+function toggleUpcoming(el){upcomingOnly=!upcomingOnly;el.classList.toggle('active',upcomingOnly);renderTable();}
+function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');renderTable();}
+function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
+function hideProgress(){document.getElementById('progressWrap').style.display='none';}
+
+function populateTeamFilter(){
+  const sel=document.getElementById('teamFilter');
+  const cur=sel.value;
+  const teams=[...new Set(allData.map(p=>p.team).filter(Boolean))].sort();
+  sel.innerHTML='<option value="all">All</option>'+teams.map(t=>'<option value="'+t+'">'+t+'</option>').join('');
+  if(teams.includes(cur))sel.value=cur;
+}
+
+async function runScan(){
+  const token = getStored('lmToken');
+  if(!token){showError('Paste your Linemate JWT token above first.');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
+  const btn=document.getElementById('runBtn');
+  const minRate=parseInt(document.getElementById('minRate').value)||70;
+  btn.disabled=true;btn.textContent='⏳ Scanning...';
+  document.getElementById('summary').style.display='none';
+  document.getElementById('errorBox').style.display='none';
+  document.getElementById('tokenBox').style.display='none';
+  ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
+  setStatus('running','📡 Fetching NFL props from Linemate…');
+  setLoadingRow();
+
+  try {
+    setProgress(20,'Fetching Linemate NFL trends…');
+
+    // Fetch all prop type endpoints and merge
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+
+    setProgress(30, 'Fetching player props…');
+    const responses = await Promise.all(LINEMATE_ENDPOINTS.map(url =>
+      fetch(url, {headers}).then(r => {
+        if(r.status===401) throw new Error('Token expired — get a new one from linemate.io DevTools');
+        if(!r.ok) throw new Error('Linemate API error: '+r.status);
+        return r.json();
+      }).catch(e => { console.warn('Endpoint failed:', e); return []; })
+    ));
+
+    const data = responses.flat();
+    setProgress(70, 'Processing '+data.length+' props…');
+
+    const results = [];
+    for(const item of data) {
+      try {
+        const playerName = item.player?.fullName||'Unknown';
+        const team = item.team?.code||'—';
+        const opp = item.opposingTeam?.code||'—';
+        const pos = item.player?.position||'';
+        const rawName = item.market?.name||'';
+        const propType = rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
+        const propLabel = PROP_LABELS[propType]||cleanPropName(rawName)||propType;
+        const gameTime = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : '';
+        const direction = (item.outcome||'over').toUpperCase();
+
+        // Get consensus line and best odds from books
+        const books = item.market?.books||{};
+        let bestLine=null, bestOverOdds=null, bestUnderOdds=null;
+        for(const bk of Object.keys(books)){
+          const b=books[bk];
+          const ol=b?.over?.current?.value;
+          const oo=b?.over?.current?.odds?.american;
+          const uo=b?.under?.current?.odds?.american;
+          if(ol&&!bestLine)bestLine=ol;
+          if(oo&&(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)))bestOverOdds=oo;
+          if(uo&&(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)))bestUnderOdds=uo;
+        }
+        if(!bestLine) continue;
+
+        // Hit rate from signals[].annotation where type=RECENT_FORM
+        const signals = item.signals||[];
+        const recentForm = signals.find(s=>s.type==='RECENT_FORM');
+        if(!recentForm) continue;
+        const hitRate = parseInt((recentForm.annotation||'0').replace('%',''))||0;
+        if(hitRate < minRate) continue;
+
+        // Parse description for sparkline eg "Hit in 12 of last 17 games"
+        const desc = recentForm.description||'';
+        const parts = desc.match(/Hit in (\d+) of last (\d+)/i);
+        const hits = parts ? parseInt(parts[1]) : 0;
+        const games = parts ? parseInt(parts[2]) : 10;
+        const misses = games - hits;
+        const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
+        const streak = calcStreak(last10);
+
+        const h2h = signals.find(s=>s.type==='HEAD_TO_HEAD');
+        const matchupNote = h2h ? h2h.description : ('vs '+opp);
+        const bestOdds = direction==='OVER' ? bestOverOdds : bestUnderOdds;
+
+        results.push({
+          player: playerName, team, position: pos, propKey: propType,
+          prop: propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
+          line: String(bestLine), direction, rate: hitRate,
+          hits, games, last10, streak, hotStreak: streak>=2,
+          opposingTeam: opp, gameTime,
+          matchupGrade: hitRate>=90?'A':hitRate>=80?'B':'C',
+          matchupNote, bestOdds, realData: true, source: 'linemate',
+          category: Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other',
+        });
+      } catch(e){ console.warn('Parse error:', e); }
+    }
+
+    setProgress(95,'Sorting…');
+    // Deduplicate — keep highest rate per player+prop
+    const seen={};
+    allData = results.filter(p=>{
+      const k=p.player+p.propKey+p.direction;
+      if(seen[k]&&seen[k]>=p.rate)return false;
+      seen[k]=p.rate;return true;
+    }).sort((a,b)=>(b.rate||0)-(a.rate||0));
+
+    hideProgress();
+    populateTeamFilter();
+    renderTable();updateSummary();
+    document.getElementById('summary').style.display='grid';
+    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
+    document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
+    setStatus('done',`✅ ${allData.length} NFL prop edges from Linemate — ${new Date().toLocaleTimeString()}`);
+    document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
+
+  } catch(err){
+    hideProgress();
+    showError(err.message);
+    setStatus('error','❌ '+err.message);
+    document.getElementById('tokenBox').style.display='block';
+  }
+  btn.disabled=false;btn.textContent='⚡ RUN SCAN';
+}
+
+function calcStreak(r){let s=0;for(let i=0;i<r.length;i++){if(r[i]===1)s++;else break;}return s;}
+
+function renderTable(){
+  const tbody=document.getElementById('tableBody');
+  const minRate=parseInt(document.getElementById('minRate').value)||70;
+  const sortBy=document.getElementById('sortBy')?.value||'rate';
+  const dirFilter=document.getElementById('dirFilter')?.value||'all';
+  const teamFilter=document.getElementById('teamFilter')?.value||'all';
+
+  let data=allData.filter(p=>{
+    if(activeTab!=='all'&&p.category!==activeTab)return false;
+    if((p.rate||0)<minRate)return false;
+    if(edgeOnly&&(p.streak||0)<2)return false;
+    if(upcomingOnly&&p.gameTime){
+      const now=new Date();const t=p.gameTime;const h=parseInt(t);const pm=t.toLowerCase().includes('pm');
+      const hr=(pm&&h!==12)?h+12:(!pm&&h===12?0:h);const min=parseInt((t.split(':')[1]||'0').replace(/[^0-9]/g,''));
+      const gd=new Date();gd.setHours(hr,min,0,0);if(gd<=now)return false;
+    }
+    if(dirFilter!=='all'&&p.direction!==dirFilter)return false;
+    if(teamFilter!=='all'&&p.team!==teamFilter)return false;
+    return true;
+  });
+
+  data=[...data].sort((a,b)=>{
+    if(sortBy==='streak')return(b.streak||0)-(a.streak||0);
+    if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);
+    return(b.rate||0)-(a.rate||0);
+  });
+
+  if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props found at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the minimum rate or changing filters.'}</p></div></td></tr>`;return;}
+
+  tbody.innerHTML=data.map(p=>{
+    const rate=p.rate||0;
+    const rc=rate>=90?'elite':rate>=80?'strong':'solid';
+    const ec=rate>=90?'fire':rate>=80?'strong':'ok';
+    const el=rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
+    const spark=`<div class="sparkline">${(p.last10||[]).map(v=>`<div class="spark-dot ${v?'hit':'miss'}"></div>`).join('')}</div>`;
+    const st=(p.streak||0)>=2?`<span class="streak-badge hot">🔥${p.streak}W</span>`:'<span class="streak-badge cold">—</span>';
+    const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
+    const op=p.bestOdds;
+    const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span><br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
+    return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
+      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span></div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+      <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
+      <td><span class="prop-type">${esc(p.prop)}</span></td>
+      <td>${lineHtml}</td>
+      <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits||''}/${p.games||5} ${dir}</span></td>
+      <td>${spark}</td>
+      <td><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}</span></td>
+      <td>${st}</td>
+      <td>${isConsensus(p)?'<span class="edge-badge consensus">⚡ CONSENSUS</span>':'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
+      <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-streak').textContent=q.filter(p=>(p.streak||0)>=2).length;}
+
+function toggleParlay(){const p=document.getElementById('parlayPanel');p.classList.toggle('open');document.getElementById('parlayBtn').textContent=p.classList.contains('open')?'🎰 Hide':'🎰 Parlay';}
+function addToParlay(play){if(parlayLegs.find(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in parlay');return;}if(parlayLegs.length>=10){showToast('Max 10 legs');return;}parlayLegs.push(play);const b=document.getElementById('pb-'+esc(play.player+play.prop));if(b){b.textContent='✓';b.classList.add('added');b.disabled=true;}renderParlay();if(!document.getElementById('parlayPanel').classList.contains('open'))toggleParlay();}
+function removeFromParlay(i){const l=parlayLegs[i];parlayLegs.splice(i,1);const b=document.getElementById('pb-'+esc(l.player+l.prop));if(b){b.textContent='+';b.classList.remove('added');b.disabled=false;}renderParlay();}
+function clearParlay(){parlayLegs.forEach(l=>{const b=document.getElementById('pb-'+esc(l.player+l.prop));if(b){b.textContent='+';b.classList.remove('added');b.disabled=false;}});parlayLegs=[];renderParlay();}
+function calcParlayOdds(legs){let d=1;legs.forEach(()=>{d*=(110/210+1);});const a=d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));return(a>0?'+':'')+a;}
+function renderParlay(){document.getElementById('parlayCount').textContent=parlayLegs.length+(parlayLegs.length===1?' leg':' legs');document.getElementById('parlayOdds').textContent=parlayLegs.length>=2?calcParlayOdds(parlayLegs):'—';const c=document.getElementById('parlayLegsEl');if(!parlayLegs.length){c.innerHTML='<div class="parlay-empty">Add plays using + on each row</div>';return;}c.innerHTML=parlayLegs.map((l,i)=>`<div class="parlay-leg"><div class="parlay-leg-info"><div class="parlay-leg-player">${esc(l.player)} <span style="color:var(--muted);font-size:10px">${esc(l.team)}</span></div><div class="parlay-leg-prop">${esc(l.prop)} <span style="font-size:10px;color:${l.direction==='UNDER'?'var(--miss)':'var(--accent2)'}">${l.direction==='UNDER'?'▼ UNDER':'▲ OVER'}</span> ${l.rate}%</div></div><button class="parlay-remove" onclick="removeFromParlay(${i})">✕</button></div>`).join('');}
+function copyParlay(){if(!parlayLegs.length){showToast('No legs');return;}const t=parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.team}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');navigator.clipboard.writeText(`🎰 NFL PARLAY — ${today.toLocaleDateString()}\n${calcParlayOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${t}`).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));}
+
+function exportCSV(){const rows=allData;const csv=['Player,Team,Pos,Prop,Direction,Line,Rate%,Streak,Opp,GameTime',...rows.map(p=>[`"${p.player}"`,p.team,p.position,`"${p.prop}"`,p.direction,p.line,p.rate,p.streak||0,p.opposingTeam||'',p.gameTime||''].join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`nfl-props-${todayStr}.csv`;a.click();URL.revokeObjectURL(url);showToast('📊 Exported');}
+function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏈 Player Props\n\n| Player | Pos | Team | Prop | Dir | Rate | Opp | Game | Streak |\n|--------|-----|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.position} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}W |`).join('\n')}\n`;const md=`---\ntags: [props, nfl, betting, linemate]\ndate: ${todayStr}\nsport: NFL\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏈 NFL Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NFL Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
+
+function copyPlay(p) {
+  const dir = p.direction||'OVER';
+  const arrow = dir==='OVER'?'▲':'▼';
+  const txt = `${p.player} (${p.team}) · ${arrow} ${dir} ${p.prop.split(' ').slice(-1)[0]} · ${p.rate}% L${p.games} · ${p.bestOdds?(p.bestOdds>0?'+':'')+p.bestOdds:'—'}`;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const t=document.getElementById('copyToast');
+    t.textContent='📋 Copied: '+p.player;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2000);
+  }).catch(()=>showToast('Copy failed'));
+}
+
+function isConsensus(p) {
+  const rate = p.rate||0;
+  const odds = p.bestOdds;
+  const streak = p.streak||0;
+  const goodOdds = !odds || (p.direction==='OVER' ? odds>=-130 : odds>=-130);
+  return rate>=80 && streak>=2 && goodOdds;
+}
+
+function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching NFL props from Linemate…</td></tr>`;}
+function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
+function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+
+// Auto-run if token is already saved
+if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
+</script>
+</body>
+</html>
