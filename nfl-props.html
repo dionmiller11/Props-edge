@@ -549,7 +549,7 @@ function renderTable(){
     const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
     const op=p.bestOdds;
     const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
-    const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
+    const timeStr=p.gameTime?` · <span style="${gameTimeColor(p.gameTime)};font-weight:600">${gameTimeDot(p.gameTime)}${esc(p.gameTime)}</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
       <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span></div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
@@ -750,6 +750,43 @@ function lineMoveBadge(p){
   const label = mv.sharp ? '🚨 '+arrow+Math.abs(mv.diff) : arrow+Math.abs(mv.diff);
   const cls = mv.sharp ? 'move-badge sharp' : 'move-badge '+dir;
   return `<span class="${cls}" title="Line moved ${mv.diff>0?'+':''}${mv.diff} since last scan">${label}</span>`;
+}
+
+
+function gameTimeColor(gameTime){
+  if(!gameTime) return '';
+  const now = new Date();
+  const t = gameTime;
+  const h = parseInt(t);
+  const pm = t.toLowerCase().includes('pm');
+  const hr = (pm&&h!==12)?h+12:(!pm&&h===12?0:h);
+  const min = parseInt((t.split(':')[1]||'0').replace(/[^0-9]/g,''));
+  const gd = new Date();
+  gd.setHours(hr, min, 0, 0);
+  const diff = (gd - now) / 60000; // minutes
+  if(diff < 0) return 'color:#4a5568'; // already started - dim
+  if(diff < 30) return 'color:#ff4d6d'; // starting soon - red
+  if(diff < 90) return 'color:#ffd700'; // within 90 min - gold
+  if(diff < 180) return 'color:#ff6b35'; // within 3hrs - orange
+  return 'color:#00ff88'; // plenty of time - green
+}
+
+function gameTimeDot(gameTime){
+  if(!gameTime) return '';
+  const now = new Date();
+  const t = gameTime;
+  const h = parseInt(t);
+  const pm = t.toLowerCase().includes('pm');
+  const hr = (pm&&h!==12)?h+12:(!pm&&h===12?0:h);
+  const min = parseInt((t.split(':')[1]||'0').replace(/[^0-9]/g,''));
+  const gd = new Date();
+  gd.setHours(hr, min, 0, 0);
+  const diff = (gd - now) / 60000;
+  if(diff < 0) return '⬤ ';
+  if(diff < 30) return '<span style="color:#ff4d6d">⬤ </span>';
+  if(diff < 90) return '<span style="color:#ffd700">⬤ </span>';
+  if(diff < 180) return '<span style="color:#ff6b35">⬤ </span>';
+  return '<span style="color:#00ff88">⬤ </span>';
 }
 
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
