@@ -544,7 +544,7 @@ async function runScan() {
     hitterData = dedup(allHitters);
     pitcherData = dedup(allPitchers);
     hideProgress();
-    saveLines(allData);
+    saveLines([...hitterData,...pitcherData]);
     renderTable(); updateSummary();
     document.getElementById('summary').style.display='grid';
     ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
@@ -793,7 +793,8 @@ function runOptimizer(){
   const minRate = parseInt(document.getElementById('minRate').value)||70;
   
   // Get top plays — filter out same-game correlations
-  const pool = allData
+  const merged = [...(hitterData||[]),...(pitcherData||[])];
+  const pool = merged
     .filter(p=>(p.rate||0)>=80 && p.direction)
     .sort((a,b)=>{
       // Score: hit rate + streak bonus + consensus bonus
