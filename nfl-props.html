@@ -145,6 +145,11 @@
   .opt-add-btn{font-size:10px;padding:3px 8px;border-radius:3px;background:rgba(255,215,0,.1);color:var(--gold);border:1px solid rgba(255,215,0,.25);cursor:pointer;font-family:var(--font);}
   .opt-add-btn:hover{background:rgba(255,215,0,.2);}
   .opt-empty{text-align:center;padding:20px;color:var(--muted);font-size:12px;}
+  
+  .move-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px;}
+  .move-badge.up{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
+  .move-badge.down{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+  .move-badge.sharp{background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.35);animation:pulse 1.5s infinite;}
   .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
   .toast.show{transform:translateY(0);opacity:1;}
   @media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 8px;}.hide-mobile{display:none;}.api-banner{grid-template-columns:1fr;}}
@@ -486,6 +491,7 @@ async function runScan(){
 
     hideProgress();
     populateTeamFilter();
+    saveLines(allData);
     renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
     ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
@@ -542,7 +548,7 @@ function renderTable(){
     const st=(p.streak||0)>=2?`<span class="streak-badge hot">🔥${p.streak}W</span>`:'<span class="streak-badge cold">—</span>';
     const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
     const op=p.bestOdds;
-    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span><br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
       <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span></div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
@@ -708,6 +714,42 @@ function addAllLegs(si){
   legs.forEach(p=>addToParlay({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:p.direction||'OVER',rate:p.rate,sport:''}));
   if(!document.getElementById('parlayPanel').classList.contains('open')) toggleParlay();
   showToast('🎯 '+legs.length+' legs added to parlay!');
+}
+
+
+// ── LINE MOVEMENT ALERTS ──
+const LM_STORAGE_KEY = 'lineMovement_' + window.location.pathname.split('/').pop().replace('.html','');
+
+function saveLines(data){
+  const snapshot = {};
+  data.forEach(p=>{
+    const key = p.player+'|'+p.propKey+'|'+p.direction;
+    snapshot[key] = {line: parseFloat(p.line)||0, rate: p.rate, ts: Date.now()};
+  });
+  try{ localStorage.setItem(LM_STORAGE_KEY, JSON.stringify({ts:Date.now(), lines:snapshot})); }catch(e){}
+}
+
+function getLineMovement(p){
+  try{
+    const saved = JSON.parse(localStorage.getItem(LM_STORAGE_KEY)||'{}');
+    if(!saved.lines) return null;
+    const key = p.player+'|'+p.propKey+'|'+p.direction;
+    const prev = saved.lines[key];
+    if(!prev) return null;
+    const diff = (parseFloat(p.line)||0) - (prev.line||0);
+    if(Math.abs(diff) < 0.5) return null;
+    return {diff, sharp: Math.abs(diff)>=1.5, ts: saved.ts};
+  }catch(e){ return null; }
+}
+
+function lineMoveBadge(p){
+  const mv = getLineMovement(p);
+  if(!mv) return '';
+  const dir = mv.diff > 0 ? 'up' : 'down';
+  const arrow = mv.diff > 0 ? '▲' : '▼';
+  const label = mv.sharp ? '🚨 '+arrow+Math.abs(mv.diff) : arrow+Math.abs(mv.diff);
+  const cls = mv.sharp ? 'move-badge sharp' : 'move-badge '+dir;
+  return `<span class="${cls}" title="Line moved ${mv.diff>0?'+':''}${mv.diff} since last scan">${label}</span>`;
 }
 
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
