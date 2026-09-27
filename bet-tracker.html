@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bet Tracker — Props Edge</title>
+<style>
+  :root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+  .logo{display:flex;align-items:center;gap:8px;}
+  .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);flex-shrink:0;}
+  .logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;}
+  .logo span{color:var(--gold);}
+  .btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+  .btn-primary{background:var(--accent);color:#000;}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+  .btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+  .btn-red{background:rgba(255,77,109,.12);color:var(--miss);border:1px solid rgba(255,77,109,.3);}
+  .btn-gold{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+  .home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;letter-spacing:.04em;}
+  main{max-width:1100px;margin:0 auto;padding:18px 16px;}
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;}
+  .stat-val{font-size:26px;font-weight:700;font-family:var(--font);line-height:1;margin-bottom:4px;}
+  .stat-val.green{color:var(--accent2);}
+  .stat-val.red{color:var(--miss);}
+  .stat-val.gold{color:var(--gold);}
+  .stat-val.blue{color:var(--accent);}
+  .stat-lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+  .add-bet-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px;}
+  .add-bet-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;margin-bottom:14px;}
+  .form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+  .form-group{display:flex;flex-direction:column;gap:4px;}
+  .form-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;}
+  .form-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font-family:var(--font);font-size:12px;outline:none;}
+  .form-input:focus{border-color:var(--accent);}
+  select.form-input{cursor:pointer;}
+  .form-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+  .filter-chip{padding:4px 12px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+  .filter-chip.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .filter-chip.win{border-color:var(--accent2);color:var(--accent2);}
+  .filter-chip.win.active{background:var(--accent2);color:#000;}
+  .filter-chip.loss{border-color:var(--miss);color:var(--miss);}
+  .filter-chip.loss.active{background:var(--miss);color:#fff;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
+  .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+  tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;}
+  tbody tr:hover{background:var(--surface2);}
+  tbody tr:last-child{border-bottom:none;}
+  td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle;}
+  .player-name{font-family:var(--sans);font-weight:600;font-size:13px;}
+  .sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
+  .result-badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;}
+  .result-badge.win{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
+  .result-badge.loss{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+  .result-badge.push{background:rgba(255,215,0,.1);color:var(--gold);border:1px solid rgba(255,215,0,.2);}
+  .result-badge.pending{background:rgba(0,212,255,.08);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+  .sport-badge{padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;}
+  .sport-badge.mlb{background:rgba(0,255,136,.1);color:var(--accent2);}
+  .sport-badge.nfl{background:rgba(255,107,53,.1);color:var(--warn);}
+  .sport-badge.wnba{background:rgba(255,105,180,.1);color:#ff69b4;}
+  .sport-badge.nba{background:rgba(0,212,255,.1);color:var(--accent);}
+  .del-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;}
+  .del-btn:hover{color:var(--miss);}
+  .result-btn{background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font);}
+  .result-btn:hover{border-color:var(--accent2);color:var(--accent2);}
+  .empty{padding:44px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
+  .roi-bar{height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden;}
+  .roi-fill{height:100%;border-radius:2px;transition:width .5s;}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+  .toast.show{transform:translateY(0);opacity:1;}
+  @media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr);}.form-grid{grid-template-columns:1fr 1fr;}.hide-mobile{display:none;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard(6).html" class="home-btn">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>BET <span>TRACKER</span></h1>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-gold" onclick="exportCSV()">📊 CSV</button>
+    <button class="btn btn-ghost" onclick="clearAll()">🗑 Clear All</button>
+  </div>
+</header>
+
+<main>
+  <!-- Stats Summary -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="stat-val blue" id="s-total">0</div><div class="stat-lbl">TOTAL BETS</div></div>
+    <div class="stat-card"><div class="stat-val green" id="s-record">0-0</div><div class="stat-lbl">WIN-LOSS</div><div class="roi-bar"><div class="roi-fill" id="roi-fill" style="width:0%;background:var(--accent2)"></div></div></div>
+    <div class="stat-card"><div class="stat-val gold" id="s-roi">0%</div><div class="stat-lbl">WIN RATE</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-units" style="color:var(--accent)">+0.0u</div><div class="stat-lbl">NET UNITS</div></div>
+  </div>
+
+  <!-- Add Bet Form -->
+  <div class="add-bet-panel">
+    <div class="add-bet-title">➕ LOG A BET</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <span class="form-label">PLAYER</span>
+        <input class="form-input" id="f-player" placeholder="e.g. D. Henry" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">PROP</span>
+        <input class="form-input" id="f-prop" placeholder="e.g. Rush Yds O90.5" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">SPORT</span>
+        <select class="form-input" id="f-sport">
+          <option value="MLB">MLB</option>
+          <option value="NFL">NFL</option>
+          <option value="WNBA">WNBA</option>
+          <option value="NBA">NBA</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <span class="form-label">ODDS</span>
+        <input class="form-input" id="f-odds" placeholder="-110" type="number" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">UNITS WAGERED</span>
+        <input class="form-input" id="f-units" placeholder="1" type="number" step="0.5" value="1" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">HIT RATE %</span>
+        <input class="form-input" id="f-rate" placeholder="86" type="number" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">BOOK</span>
+        <input class="form-input" id="f-book" placeholder="e.g. DraftKings" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">DATE</span>
+        <input class="form-input" id="f-date" type="date" />
+      </div>
+      <div class="form-group">
+        <span class="form-label">RESULT</span>
+        <select class="form-input" id="f-result">
+          <option value="pending">Pending</option>
+          <option value="win">Win ✅</option>
+          <option value="loss">Loss ❌</option>
+          <option value="push">Push 🟡</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="addBet()">➕ Add Bet</button>
+      <button class="btn btn-ghost" onclick="clearForm()">Clear</button>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="filters">
+    <span style="font-size:10px;color:var(--muted);font-family:var(--font);">FILTER:</span>
+    <button class="filter-chip active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-chip win" onclick="setFilter('win',this)">✅ Wins</button>
+    <button class="filter-chip loss" onclick="setFilter('loss',this)">❌ Losses</button>
+    <button class="filter-chip" onclick="setFilter('pending',this)">⏳ Pending</button>
+    <button class="filter-chip" onclick="setFilter('MLB',this)">⚾ MLB</button>
+    <button class="filter-chip" onclick="setFilter('NFL',this)">🏈 NFL</button>
+    <button class="filter-chip" onclick="setFilter('WNBA',this)">🏀 WNBA</button>
+  </div>
+
+  <!-- Bets Table -->
+  <div class="table-wrap">
+    <div class="table-header">
+      <span class="table-title">📋 BET LOG</span>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="betCount">0 bets</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>DATE</th><th>PLAYER</th><th>PROP</th><th class="hide-mobile">SPORT</th>
+        <th>ODDS</th><th class="hide-mobile">RATE</th><th class="hide-mobile">BOOK</th>
+        <th>UNITS</th><th>RESULT</th><th>P/L</th><th></th>
+      </tr></thead>
+      <tbody id="betBody"></tbody>
+    </table>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+let bets = [], activeFilter = 'all';
+
+// Load from localStorage
+try { bets = JSON.parse(localStorage.getItem('propsBets')||'[]'); } catch(e) { bets = []; }
+
+// Set today's date
+document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+
+function saveBets(){ try{ localStorage.setItem('propsBets', JSON.stringify(bets)); }catch(e){} }
+
+function calcPL(bet){
+  if(bet.result==='win'){
+    const odds=parseInt(bet.odds)||(-110);
+    const units=parseFloat(bet.units)||1;
+    return odds>0 ? +(units*odds/100).toFixed(2) : +(units*100/Math.abs(odds)).toFixed(2);
+  }
+  if(bet.result==='loss') return -(parseFloat(bet.units)||1);
+  return 0;
+}
+
+function addBet(){
+  const player = document.getElementById('f-player').value.trim();
+  const prop = document.getElementById('f-prop').value.trim();
+  if(!player||!prop){ showToast('Enter player and prop'); return; }
+  const bet = {
+    id: Date.now(),
+    date: document.getElementById('f-date').value,
+    player, prop,
+    sport: document.getElementById('f-sport').value,
+    odds: document.getElementById('f-odds').value||'-110',
+    units: document.getElementById('f-units').value||'1',
+    rate: document.getElementById('f-rate').value||'',
+    book: document.getElementById('f-book').value.trim()||'',
+    result: document.getElementById('f-result').value,
+  };
+  bets.unshift(bet);
+  saveBets();
+  renderBets();
+  updateStats();
+  clearForm();
+  showToast('✅ Bet logged!');
+}
+
+function updateResult(id, result){
+  const bet = bets.find(b=>b.id===id);
+  if(bet){ bet.result=result; saveBets(); renderBets(); updateStats(); }
+}
+
+function deleteBet(id){
+  bets = bets.filter(b=>b.id!==id);
+  saveBets(); renderBets(); updateStats();
+}
+
+function setFilter(f, el){
+  activeFilter=f;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderBets();
+}
+
+function renderBets(){
+  const body = document.getElementById('betBody');
+  let filtered = bets.filter(b=>{
+    if(activeFilter==='all') return true;
+    if(['win','loss','pending','push'].includes(activeFilter)) return b.result===activeFilter;
+    return b.sport===activeFilter;
+  });
+  document.getElementById('betCount').textContent = filtered.length+' bet'+(filtered.length!==1?'s':'');
+  if(!filtered.length){
+    body.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">📋</div><p>No bets yet. Log your first play above.</p></div></td></tr>`;
+    return;
+  }
+  body.innerHTML = filtered.map(b=>{
+    const pl=calcPL(b);
+    const plColor=pl>0?'var(--accent2)':pl<0?'var(--miss)':'var(--muted)';
+    const plStr=pl>0?'+'+pl.toFixed(2)+'u':pl<0?pl.toFixed(2)+'u':'0u';
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px">${b.date||'—'}</td>
+      <td><div class="player-name">${esc(b.player)}</div><div class="sub-text">${esc(b.book)||'—'}</div></td>
+      <td style="color:var(--accent);font-size:11px">${esc(b.prop)}</td>
+      <td class="hide-mobile"><span class="sport-badge ${(b.sport||'').toLowerCase()}">${esc(b.sport)}</span></td>
+      <td>${esc(b.odds)}</td>
+      <td class="hide-mobile" style="color:var(--muted)">${b.rate?b.rate+'%':'—'}</td>
+      <td class="hide-mobile" style="color:var(--muted);font-size:11px">${esc(b.book)||'—'}</td>
+      <td>${esc(b.units)}u</td>
+      <td>
+        ${b.result==='pending'
+          ? `<div style="display:flex;gap:4px"><button class="result-btn" onclick="updateResult(${b.id},'win')">W</button><button class="result-btn" onclick="updateResult(${b.id},'loss')">L</button><button class="result-btn" onclick="updateResult(${b.id},'push')">P</button></div>`
+          : `<span class="result-badge ${b.result}">${b.result==='win'?'✅ WIN':b.result==='loss'?'❌ LOSS':b.result==='push'?'🟡 PUSH':'⏳'}</span>`
+        }
+      </td>
+      <td style="font-weight:700;color:${plColor}">${b.result==='pending'?'—':plStr}</td>
+      <td><button class="del-btn" onclick="deleteBet(${b.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateStats(){
+  const settled = bets.filter(b=>b.result==='win'||b.result==='loss');
+  const wins = bets.filter(b=>b.result==='win').length;
+  const losses = bets.filter(b=>b.result==='loss').length;
+  const netUnits = bets.reduce((s,b)=>s+calcPL(b),0);
+  const winRate = settled.length ? Math.round(wins/settled.length*100) : 0;
+
+  document.getElementById('s-total').textContent = bets.length;
+  document.getElementById('s-record').textContent = wins+'-'+losses;
+  document.getElementById('s-roi').textContent = winRate+'%';
+  const unitsEl = document.getElementById('s-units');
+  unitsEl.textContent = (netUnits>=0?'+':'')+netUnits.toFixed(1)+'u';
+  unitsEl.style.color = netUnits>=0?'var(--accent2)':'var(--miss)';
+  document.getElementById('roi-fill').style.width = winRate+'%';
+  document.getElementById('roi-fill').style.background = winRate>=55?'var(--accent2)':winRate>=45?'var(--gold)':'var(--miss)';
+}
+
+function clearForm(){
+  ['f-player','f-prop','f-odds','f-rate','f-book'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-units').value='1';
+  document.getElementById('f-result').value='pending';
+  document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
+}
+
+function clearAll(){
+  if(!confirm('Clear all bets? This cannot be undone.')) return;
+  bets=[]; saveBets(); renderBets(); updateStats();
+}
+
+function exportCSV(){
+  const csv=['Date,Player,Prop,Sport,Odds,Units,Rate,Book,Result,P/L',...bets.map(b=>{
+    const pl=calcPL(b);
+    return [b.date,`"${b.player}"`,`"${b.prop}"`,b.sport,b.odds,b.units,b.rate||'',`"${b.book||''}"`,b.result,b.result==='pending'?'':pl.toFixed(2)].join(',');
+  })].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='bet-tracker.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+renderBets();
+updateStats();
+</script>
+</body>
+</html>
