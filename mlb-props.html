@@ -921,21 +921,27 @@ function lineMoveBadge(p){
 
 
 function gameTimeColor(gameTime){
-  if(!gameTime) return '';
-  const now = new Date();
-  const t = gameTime;
-  const h = parseInt(t);
-  const pm = t.toLowerCase().includes('pm');
-  const hr = (pm&&h!==12)?h+12:(!pm&&h===12?0:h);
-  const min = parseInt((t.split(':')[1]||'0').replace(/[^0-9]/g,''));
-  const gd = new Date();
-  gd.setHours(hr, min, 0, 0);
-  const diff = (gd - now) / 60000; // minutes
-  if(diff < 0) return 'color:#4a5568'; // already started - dim
-  if(diff < 30) return 'color:#ff4d6d'; // starting soon - red
-  if(diff < 90) return 'color:#ffd700'; // within 90 min - gold
-  if(diff < 180) return 'color:#ff6b35'; // within 3hrs - orange
-  return 'color:#00ff88'; // plenty of time - green
+  if(!gameTime) return 'color:var(--muted)';
+  try {
+    const now = new Date();
+    // Handle formats like "1:00 PM", "1:00PM", "13:00"
+    const clean = gameTime.trim();
+    const pm = /pm/i.test(clean);
+    const am = /am/i.test(clean);
+    const parts = clean.replace(/[apm]/gi,'').trim().split(':');
+    let h = parseInt(parts[0])||0;
+    const min = parseInt(parts[1])||0;
+    if(pm && h!==12) h+=12;
+    if(am && h===12) h=0;
+    const gd = new Date();
+    gd.setHours(h, min, 0, 0);
+    const diff = (gd - now) / 60000;
+    if(diff < 0) return 'color:#4a5568';
+    if(diff < 30) return 'color:#ff4d6d';
+    if(diff < 90) return 'color:#ffd700';
+    if(diff < 180) return 'color:#ff6b35';
+    return 'color:#00ff88';
+  } catch(e){ return 'color:var(--muted)'; }
 }
 
 function gameTimeDot(gameTime){
