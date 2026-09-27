@@ -150,6 +150,11 @@
   .move-badge.up{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
   .move-badge.down{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
   .move-badge.sharp{background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.35);animation:pulse 1.5s infinite;}
+  
+  .injury-banner{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px;}
+  .injury-banner.out{background:rgba(255,77,109,.15);color:var(--miss);border:1px solid rgba(255,77,109,.3);}
+  .injury-banner.questionable{background:rgba(255,107,53,.12);color:var(--warn);border:1px solid rgba(255,107,53,.3);}
+  .injury-banner.news{background:rgba(255,215,0,.1);color:var(--gold);border:1px solid rgba(255,215,0,.25);}
   .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
   .toast.show{transform:translateY(0);opacity:1;}
   @media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 8px;}.hide-mobile{display:none;}.api-banner{grid-template-columns:1fr;}}
@@ -492,6 +497,7 @@ async function runScan(){
     hideProgress();
     populateTeamFilter();
     saveLines(allData);
+    await prefetchInjuries(allData);
     renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
     ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
@@ -551,7 +557,7 @@ function renderTable(){
     const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const gtColor=gameTimeColor(p.gameTime); const timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
-      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span></div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
@@ -793,6 +799,58 @@ function gameTimeDot(gameTime){
   if(diff < 90) return '<span style="color:#ffd700">⬤ </span>';
   if(diff < 180) return '<span style="color:#ff6b35">⬤ </span>';
   return '<span style="color:#00ff88">⬤ </span>';
+}
+
+
+// ── INJURY / NEWS BANNER ──
+const INJURY_CACHE = {};
+const INJURY_KEYWORDS_BAD = ['out','injured reserve','IR','doubtful','did not practice','DNP','ruled out','placed on'];
+const INJURY_KEYWORDS_QUESTIONABLE = ['questionable','limited','day-to-day','illness','rest','load management'];
+
+async function fetchInjuryStatus(playerName, team) {
+  const key = playerName.toLowerCase();
+  if(INJURY_CACHE[key] !== undefined) return INJURY_CACHE[key];
+  
+  try {
+    // Use ESPN search API via proxy
+    const searchName = playerName.replace(/[^a-zA-Z ]/g,'').trim();
+    const url = `https://site.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(searchName)}&type=player&limit=1`;
+    const res = await fetch('https://sports-proxy.dion-miller11.workers.dev?url='+encodeURIComponent(url));
+    if(!res.ok){ INJURY_CACHE[key]=null; return null; }
+    const data = await res.json();
+    const athlete = data?.items?.[0]?.results?.[0];
+    if(!athlete){ INJURY_CACHE[key]=null; return null; }
+    
+    // Check injury status
+    const status = (athlete.status||'').toLowerCase();
+    const description = (athlete.injuryStatus||athlete.statusDescription||'').toLowerCase();
+    
+    if(INJURY_KEYWORDS_BAD.some(k=>status.includes(k.toLowerCase())||description.includes(k.toLowerCase()))){
+      INJURY_CACHE[key] = {type:'out', label:'⚠️ OUT/IR'};
+    } else if(INJURY_KEYWORDS_QUESTIONABLE.some(k=>status.includes(k.toLowerCase())||description.includes(k.toLowerCase()))){
+      INJURY_CACHE[key] = {type:'questionable', label:'❓ QUEST'};
+    } else {
+      INJURY_CACHE[key] = null;
+    }
+    return INJURY_CACHE[key];
+  } catch(e){ INJURY_CACHE[key]=null; return null; }
+}
+
+function getInjuryBadge(playerName){
+  const key = playerName.toLowerCase();
+  const status = INJURY_CACHE[key];
+  if(!status) return '';
+  return `<span class="injury-banner ${status.type}">${status.label}</span>`;
+}
+
+async function prefetchInjuries(players){
+  // Fetch in small batches to avoid hammering the API
+  const unique = [...new Set(players.map(p=>p.player))].slice(0,30);
+  for(let i=0; i<unique.length; i+=5){
+    const batch = unique.slice(i,i+5);
+    await Promise.all(batch.map(name=>fetchInjuryStatus(name)));
+    await new Promise(r=>setTimeout(r,300)); // small delay between batches
+  }
 }
 
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
