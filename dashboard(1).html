@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Props Edge — Dashboard</title>
+<style>
+  :root {
+    --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;
+    --text:#e8edf5;--muted:#6b7a96;--purple:#b06eff;--nfl:#4a9eff;--nba:#c8a84b;
+    --font:'DM Mono','Fira Code','Courier New',monospace;
+    --sans:'DM Sans','Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .logo{display:flex;align-items:center;gap:10px;}
+  .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent2);box-shadow:0 0 10px var(--accent2);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .logo h1{font-size:15px;font-weight:700;letter-spacing:.08em;}
+  .logo span{color:var(--accent);}
+  .date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 10px;border:1px solid var(--border);border-radius:4px;}
+  main{max-width:900px;margin:0 auto;padding:24px 16px;}
+  .greeting{margin-bottom:28px;}
+  .greeting h2{font-size:20px;font-weight:700;margin-bottom:4px;}
+  .greeting p{color:var(--muted);font-size:13px;font-family:var(--font);}
+  .sport-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;}
+  .sport-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-decoration:none;color:var(--text);transition:all .2s;position:relative;overflow:hidden;}
+  .sport-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+  .sport-card.mlb{border-top:3px solid var(--accent2);}
+  .sport-card.nfl{border-top:3px solid var(--nfl);}
+  .sport-card.nba{border-top:3px solid var(--nba);}
+  .sport-card.mlb:hover{border-color:var(--accent2);box-shadow:0 8px 32px rgba(0,255,136,.08);}
+  .sport-card.nfl:hover{border-color:var(--nfl);box-shadow:0 8px 32px rgba(74,158,255,.08);}
+  .sport-card.nba:hover{border-color:var(--nba);box-shadow:0 8px 32px rgba(200,168,75,.08);}
+  .sport-icon{font-size:28px;margin-bottom:10px;}
+  .sport-name{font-size:13px;font-weight:700;letter-spacing:.08em;margin-bottom:4px;}
+  .sport-name.mlb{color:var(--accent2);}
+  .sport-name.nfl{color:var(--nfl);}
+  .sport-name.nba{color:var(--nba);}
+  .sport-desc{font-size:11px;color:var(--muted);font-family:var(--font);line-height:1.5;}
+  .sport-status{display:inline-block;margin-top:10px;font-size:10px;padding:2px 8px;border-radius:3px;font-family:var(--font);font-weight:700;}
+  .status-live{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+  .status-soon{background:rgba(74,158,255,.1);color:var(--nfl);border:1px solid rgba(74,158,255,.2);}
+  .status-off{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
+  .arrow{position:absolute;bottom:16px;right:16px;font-size:16px;color:var(--muted);transition:all .2s;}
+  .sport-card:hover .arrow{color:var(--text);transform:translateX(3px);}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--muted);margin-bottom:12px;font-family:var(--font);}
+  .quick-links{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:32px;}
+  .quick-link{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-decoration:none;color:var(--text);display:flex;align-items:center;gap:10px;transition:all .15s;}
+  .quick-link:hover{border-color:var(--accent);background:var(--surface2);}
+  .quick-link-icon{font-size:18px;flex-shrink:0;}
+  .quick-link-text{font-size:12px;font-weight:600;}
+  .quick-link-sub{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:1px;}
+  .tips{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:24px;}
+  .tips-header{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--gold);margin-bottom:10px;font-family:var(--font);}
+  .tip{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted);line-height:1.5;}
+  .tip:last-child{margin-bottom:0;}
+  .tip-icon{flex-shrink:0;margin-top:1px;}
+  .schedule{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+  .schedule-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,69,.5);font-size:12px;}
+  .schedule-row:last-child{border-bottom:none;}
+  .schedule-sport{font-family:var(--font);font-size:10px;padding:2px 6px;border-radius:3px;font-weight:700;}
+  .schedule-sport.mlb{background:rgba(0,255,136,.1);color:var(--accent2);}
+  .schedule-sport.nfl{background:rgba(74,158,255,.1);color:var(--nfl);}
+  .schedule-sport.nba{background:rgba(200,168,75,.1);color:var(--nba);}
+  .schedule-desc{color:var(--text);flex:1;margin:0 10px;}
+  .schedule-time{color:var(--muted);font-family:var(--font);font-size:11px;}
+  footer{max-width:900px;margin:24px auto 0;padding:12px 16px;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  @media(max-width:600px){
+    .sport-grid{grid-template-columns:1fr;}
+    .quick-links{grid-template-columns:1fr;}
+    header,main{padding-left:12px;padding-right:12px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="logo-dot"></div><h1>PROPS <span>EDGE</span> FINDER</h1></div>
+  <div class="date-badge" id="dateBadge">—</div>
+</header>
+<main>
+  <div class="greeting">
+    <h2 id="greeting">Good morning ⚡</h2>
+    <p id="greetingSub">Select a sport to find today's edges</p>
+  </div>
+
+  <div class="sport-grid">
+    <a class="sport-card mlb" href="https://dionmiller11.github.io/Props-edge/mlb-combined(2).html">
+      <div class="sport-icon">⚾</div>
+      <div class="sport-name mlb">MLB</div>
+      <div class="sport-desc">Hits · Total Bases · RBI · Runs · H+R+RBI · Pitcher Ks · Outs · Hits Allowed · BB · ER · Linemate lines</div>
+      <div class="sport-status status-live">● IN SEASON</div>
+      <div class="arrow">→</div>
+    </a>
+    <a class="sport-card nfl" href="https://dionmiller11.github.io/Props-edge/nfl-props-github(3).html">
+      <div class="sport-icon">🏈</div>
+      <div class="sport-name nfl">NFL</div>
+      <div class="sport-desc">Pass Yds · Rush Yds · Rec Yds · TDs · Receptions · Completions · Anytime TD · INTs · Linemate</div>
+      <div class="sport-status status-soon">● THU / SUN / MON</div>
+      <div class="arrow">→</div>
+    </a>
+    <a class="sport-card nba" href="https://dionmiller11.github.io/Props-edge/nba-linemate.html">
+      <div class="sport-icon">🏀</div>
+      <div class="sport-name nba">NBA</div>
+      <div class="sport-desc">Points · Rebounds · Assists · 3-Pointers · Steals · Blocks · PTS+REB+AST</div>
+      <div class="sport-status status-off">● STARTS OCT 2026 · LINEMATE</div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+
+  <div class="section-title">QUICK ACCESS</div>
+  <div class="quick-links">
+    <a class="quick-link" href="https://dionmiller11.github.io/Props-edge/mlb-combined(2).html">
+      <div class="quick-link-icon">🔥</div>
+      <div><div class="quick-link-text">MLB Elite Edges</div><div class="quick-link-sub">90%+ hit rate plays</div></div>
+    </a>
+    <a class="quick-link" href="https://dionmiller11.github.io/Props-edge/mlb-combined(2).html">
+      <div class="quick-link-icon">🎰</div>
+      <div><div class="quick-link-text">Build a Parlay</div><div class="quick-link-sub">Multi-leg parlay builder</div></div>
+    </a>
+    <a class="quick-link" href="https://dionmiller11.github.io/Props-edge/nfl-props-github(3).html">
+      <div class="quick-link-icon">🏈</div>
+      <div><div class="quick-link-text">NFL Week Props</div><div class="quick-link-sub">Thu · Sun · Mon games</div></div>
+    </a>
+    <a class="quick-link" href="https://dionmiller11.github.io/Props-edge/nba-linemate.html">
+      <div class="quick-link-icon">🏀</div>
+      <div><div class="quick-link-text">NBA Props</div><div class="quick-link-sub">Available Oct 2026</div></div>
+    </a>
+  </div>
+
+  <div class="section-title">BETTING TIPS</div>
+  <div class="tips">
+    <div class="tips-header">⚡ SHARP BETTING REMINDERS</div>
+    <div class="tip"><span class="tip-icon">🎯</span><span>Focus on 80%+ hit rates — that's where real edge lives. 70-79% is noise.</span></div>
+    <div class="tip"><span class="tip-icon">🔥</span><span>Streaks of 5+ games in a row are the strongest signal — momentum is real in props.</span></div>
+    <div class="tip"><span class="tip-icon">📊</span><span>Cross-reference OVER plays with the opposing pitcher/defense before pulling the trigger.</span></div>
+    <div class="tip"><span class="tip-icon">🎰</span><span>Max 4-leg parlays. Beyond that, variance kills you even with 80% hit rates.</span></div>
+    <div class="tip"><span class="tip-icon">💡</span><span>UNDER plays at 80%+ are often more +EV than OVERs — books shade lines toward overs.</span></div>
+    <div class="tip"><span class="tip-icon">⏰</span><span>Run the scan within 2 hours of first pitch — lineups lock late and pitchers scratch.</span></div>
+  </div>
+
+  <div class="section-title">THIS WEEK'S SCHEDULE</div>
+  <div class="schedule">
+    <div class="schedule-row">
+      <span class="schedule-sport mlb">MLB</span>
+      <span class="schedule-desc">Regular season — daily games</span>
+      <span class="schedule-time">Every day</span>
+    </div>
+    <div class="schedule-row">
+      <span class="schedule-sport nfl">NFL</span>
+      <span class="schedule-desc">Week 4 games</span>
+      <span class="schedule-time">Thu · Sun · Mon</span>
+    </div>
+    <div class="schedule-row">
+      <span class="schedule-sport nba">NBA</span>
+      <span class="schedule-desc">Preseason / Tip-off</span>
+      <span class="schedule-time">Oct 2026</span>
+    </div>
+  </div>
+</main>
+<footer>
+  <span>Props Edge Finder · Real stats via MLB Stats API + ESPN</span>
+  <span style="color:var(--accent2)">● REAL STATS MODE</span>
+</footer>
+
+<script>
+const today = new Date();
+document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+const hr = today.getHours();
+const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+document.getElementById('greeting').textContent = greet + ' ⚡';
+const day = today.toLocaleDateString('en-US',{weekday:'long'});
+const subs = {
+  'Monday': 'MLB games today + MNF tonight',
+  'Thursday': 'MLB games today + TNF tonight',
+  'Sunday': 'Full NFL slate today + MLB games',
+  'Saturday': 'MLB games today — big card',
+};
+document.getElementById('greetingSub').textContent = subs[day] || 'MLB games today — run the scan for today\'s edges';
+</script>
+</body>
+</html>
