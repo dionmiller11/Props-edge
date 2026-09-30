@@ -9,19 +9,30 @@
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
     --accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;
     --text:#e8edf5;--muted:#6b7a96;--purple:#b06eff;--nfl:#4a9eff;--nba:#c8a84b;--ncaafb:#ff6b35;
+    --hit:#00ff88;--miss:#ff4d6d;
     --font:'DM Mono','Fira Code','Courier New',monospace;
     --sans:'DM Sans','Inter',system-ui,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
-  header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:sticky;top:env(safe-area-inset-top,0);z-index:100;}
   .logo{display:flex;align-items:center;gap:10px;}
   .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent2);box-shadow:0 0 10px var(--accent2);animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .logo h1{font-size:15px;font-weight:700;letter-spacing:.08em;}
   .logo span{color:var(--accent);}
   .date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 10px;border:1px solid var(--border);border-radius:4px;}
-  main{max-width:900px;margin:0 auto;padding:24px 16px;}
+
+  /* ── TABS ── */
+  .dash-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
+  .dash-tab{padding:11px 16px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+  .dash-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-pane{display:none;}
+  .tab-pane.active{display:block;}
+
+  main{max-width:960px;margin:0 auto;padding:24px 16px;}
+
+  /* ── SPORT GRID ── */
   .greeting{margin-bottom:28px;}
   .greeting h2{font-size:20px;font-weight:700;margin-bottom:4px;}
   .greeting p{color:var(--muted);font-size:13px;font-family:var(--font);}
@@ -32,10 +43,10 @@
   .sport-card.nfl{border-top:3px solid var(--nfl);}
   .sport-card.nba{border-top:3px solid var(--nba);}
   .sport-card.ncaafb{border-top:3px solid var(--ncaafb);}
-  .sport-card.mlb:hover{border-color:var(--accent2);box-shadow:0 8px 32px rgba(0,255,136,.08);}
-  .sport-card.nfl:hover{border-color:var(--nfl);box-shadow:0 8px 32px rgba(74,158,255,.08);}
-  .sport-card.nba:hover{border-color:var(--nba);box-shadow:0 8px 32px rgba(200,168,75,.08);}
-  .sport-card.ncaafb:hover{border-color:var(--ncaafb);box-shadow:0 8px 32px rgba(255,107,53,.08);}
+  .sport-card.mlb:hover{box-shadow:0 8px 32px rgba(0,255,136,.08);}
+  .sport-card.nfl:hover{box-shadow:0 8px 32px rgba(74,158,255,.08);}
+  .sport-card.nba:hover{box-shadow:0 8px 32px rgba(200,168,75,.08);}
+  .sport-card.ncaafb:hover{box-shadow:0 8px 32px rgba(255,107,53,.08);}
   .sport-icon{font-size:28px;margin-bottom:10px;}
   .sport-name{font-size:13px;font-weight:700;letter-spacing:.08em;margin-bottom:4px;}
   .sport-name.mlb{color:var(--accent2);}
@@ -72,11 +83,64 @@
   .schedule-sport.ncaafb{background:rgba(255,107,53,.1);color:var(--ncaafb);}
   .schedule-desc{color:var(--text);flex:1;margin:0 10px;}
   .schedule-time{color:var(--muted);font-family:var(--font);font-size:11px;}
-  footer{max-width:900px;margin:24px auto 0;padding:12px 16px;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  /* ── RECAP TAB ── */
+  .recap-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;}
+  .recap-title{font-size:16px;font-weight:700;}
+  .recap-date-nav{display:flex;align-items:center;gap:8px;}
+  .recap-date-nav button{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:5px;cursor:pointer;font-family:var(--font);font-size:12px;}
+  .recap-date-nav button:hover{border-color:var(--accent);}
+  .recap-date-label{font-family:var(--font);font-size:12px;color:var(--accent);padding:4px 12px;border:1px solid rgba(0,212,255,.2);border-radius:4px;min-width:120px;text-align:center;}
+  .recap-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+  .recap-stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .recap-stat .val{font-size:24px;font-weight:700;font-family:var(--font);line-height:1;margin-bottom:3px;}
+  .recap-stat .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+  .recap-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+  .breakdown-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+  .breakdown-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;margin-bottom:10px;font-family:var(--font);}
+  .breakdown-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(30,45,69,.4);font-size:12px;}
+  .breakdown-row:last-child{border-bottom:none;}
+  .breakdown-bar-wrap{flex:1;margin:0 10px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .breakdown-bar{height:100%;border-radius:2px;background:var(--accent2);transition:width .4s;}
+  .breakdown-val{font-family:var(--font);font-size:11px;color:var(--accent2);min-width:32px;text-align:right;}
+  .recap-plays{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .recap-plays-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
+  .recap-plays-title{font-size:12px;font-weight:600;letter-spacing:.05em;color:var(--accent);}
+  .recap-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .recap-table thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+  .recap-table tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;}
+  .recap-table tbody tr:hover{background:var(--surface2);}
+  .recap-table tbody tr:last-child{border-bottom:none;}
+  .recap-table td{padding:9px 10px;font-family:var(--font);vertical-align:middle;}
+  .grade-btns{display:flex;gap:4px;}
+  .grade-btn{background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:10px;padding:2px 8px;border-radius:3px;font-family:var(--font);transition:all .15s;}
+  .grade-btn.w:hover,.grade-btn.w.active{border-color:var(--accent2);color:var(--accent2);background:rgba(0,255,136,.1);}
+  .grade-btn.l:hover,.grade-btn.l.active{border-color:var(--miss);color:var(--miss);background:rgba(255,77,109,.08);}
+  .grade-btn.p:hover,.grade-btn.p.active{border-color:var(--gold);color:var(--gold);background:rgba(255,215,0,.08);}
+  .result-badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;}
+  .result-badge.win{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
+  .result-badge.loss{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+  .result-badge.push{background:rgba(255,215,0,.1);color:var(--gold);border:1px solid rgba(255,215,0,.2);}
+  .result-badge.pending{background:rgba(0,212,255,.08);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+  .edge-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;}
+  .edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+  .edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+  .edge-badge.ok{background:rgba(0,212,255,.08);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+  .source-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;background:rgba(176,110,255,.1);color:var(--purple);border:1px solid rgba(176,110,255,.2);}
+  .empty-recap{padding:44px 20px;text-align:center;color:var(--muted);}
+  .empty-recap-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
+  .empty-recap p{font-size:13px;line-height:1.6;}
+  .export-obsidian-btn{background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.35);padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);}
+  .export-obsidian-btn:hover{background:rgba(124,58,237,.25);}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+  .toast.show{transform:translateY(0);opacity:1;}
+
+  footer{max-width:960px;margin:24px auto 0;padding:12px 16px;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
   @media(max-width:600px){
-    .sport-grid{grid-template-columns:1fr;}
+    .sport-grid,.recap-stats,.recap-breakdown{grid-template-columns:1fr;}
     .quick-links{grid-template-columns:1fr;}
     header,main{padding-left:12px;padding-right:12px;}
+    .hide-mobile{display:none;}
   }
 </style>
 </head>
@@ -85,6 +149,14 @@
   <div class="logo"><div class="logo-dot"></div><h1>PROPS <span>EDGE</span> FINDER</h1></div>
   <div class="date-badge" id="dateBadge">—</div>
 </header>
+
+<div class="dash-tabs">
+  <button class="dash-tab active" onclick="switchDashTab('home',this)">🏠 HOME</button>
+  <button class="dash-tab" onclick="switchDashTab('recap',this)">📊 DAILY RECAP</button>
+</div>
+
+<!-- ══════════════════════════════════════════ HOME TAB ══════════════════════════════════════════ -->
+<div class="tab-pane active" id="pane-home">
 <main>
   <div class="greeting">
     <h2 id="greeting">Good morning ⚡</h2>
@@ -185,60 +257,376 @@
 
   <div class="section-title">THIS WEEK'S SCHEDULE</div>
   <div class="schedule">
-    <div class="schedule-row">
-      <span class="schedule-sport mlb">MLB</span>
-      <span class="schedule-desc">Regular season — daily games</span>
-      <span class="schedule-time">Every day</span>
-    </div>
-    <div class="schedule-row">
-      <span class="schedule-sport nfl">NFL</span>
-      <span class="schedule-desc">Week 5 games</span>
-      <span class="schedule-time">Thu · Sun · Mon</span>
-    </div>
-    <div class="schedule-row">
-      <span class="schedule-sport ncaafb">NCAAFB</span>
-      <span class="schedule-desc">College football — full slate</span>
-      <span class="schedule-time">Sat (+ Fri)</span>
-    </div>
-    <div class="schedule-row">
-      <span class="schedule-sport nba">NBA</span>
-      <span class="schedule-desc">Preseason / Tip-off</span>
-      <span class="schedule-time">Oct 2026</span>
-    </div>
+    <div class="schedule-row"><span class="schedule-sport mlb">MLB</span><span class="schedule-desc">Regular season — daily games</span><span class="schedule-time">Every day</span></div>
+    <div class="schedule-row"><span class="schedule-sport nfl">NFL</span><span class="schedule-desc">Week 5 games</span><span class="schedule-time">Thu · Sun · Mon</span></div>
+    <div class="schedule-row"><span class="schedule-sport ncaafb">NCAAFB</span><span class="schedule-desc">College football — full slate</span><span class="schedule-time">Sat (+ Fri)</span></div>
+    <div class="schedule-row"><span class="schedule-sport nba">NBA</span><span class="schedule-desc">Preseason / Tip-off</span><span class="schedule-time">Oct 2026</span></div>
   </div>
 </main>
+</div>
+
+<!-- ══════════════════════════════════════════ RECAP TAB ══════════════════════════════════════════ -->
+<div class="tab-pane" id="pane-recap">
+<main>
+  <div class="recap-header">
+    <div>
+      <div class="recap-title">📊 Daily Recap &amp; Grader</div>
+      <div style="font-size:11px;color:var(--muted);font-family:var(--font);margin-top:3px;">Grades flagged plays from the previous scan against actual results</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div class="recap-date-nav">
+        <button onclick="changeRecapDate(-1)">◀</button>
+        <span class="recap-date-label" id="recapDateLabel">—</span>
+        <button onclick="changeRecapDate(1)">▶</button>
+      </div>
+      <button class="export-obsidian-btn" onclick="exportRecapObsidian()">🟣 Obsidian</button>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="recap-stats" id="recapStats">
+    <div class="recap-stat"><div class="val" id="r-flagged" style="color:var(--accent)">—</div><div class="lbl">FLAGGED</div></div>
+    <div class="recap-stat"><div class="val" id="r-graded" style="color:var(--accent2)">—</div><div class="lbl">GRADED</div></div>
+    <div class="recap-stat"><div class="val" id="r-winrate" style="color:var(--gold)">—</div><div class="lbl">WIN RATE</div></div>
+    <div class="recap-stat"><div class="val" id="r-units" style="color:var(--accent)">—</div><div class="lbl">NET UNITS</div></div>
+  </div>
+
+  <!-- Prop type + sport breakdown -->
+  <div class="recap-breakdown" id="recapBreakdown">
+    <div class="breakdown-card">
+      <div class="breakdown-title">TOP PROP TYPES</div>
+      <div id="propTypeBreakdown"><div style="color:var(--muted);font-size:12px;padding:8px 0">No data yet</div></div>
+    </div>
+    <div class="breakdown-card">
+      <div class="breakdown-title">BY SPORT</div>
+      <div id="sportBreakdown"><div style="color:var(--muted);font-size:12px;padding:8px 0">No data yet</div></div>
+    </div>
+  </div>
+
+  <!-- Plays table -->
+  <div class="recap-plays">
+    <div class="recap-plays-header">
+      <span class="recap-plays-title" id="recapPlaysTitle">FLAGGED PLAYS</span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="recapPlayCount"></span>
+        <button onclick="gradeAllFromTracker()" style="font-size:10px;padding:3px 9px;border-radius:4px;background:rgba(0,212,255,.08);color:var(--accent);border:1px solid rgba(0,212,255,.2);cursor:pointer;font-family:var(--font);">↺ Sync Bet Tracker</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="recap-table">
+        <thead><tr>
+          <th>PLAYER</th><th>PROP</th><th class="hide-mobile">SPORT</th>
+          <th class="hide-mobile">RATE AT FLAG</th><th class="hide-mobile">EDGE</th>
+          <th>RESULT</th><th>GRADE</th>
+        </tr></thead>
+        <tbody id="recapBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;font-size:10px;color:var(--muted);font-family:var(--font);line-height:1.7;">
+    💡 <strong style="color:var(--text)">How it works:</strong> Each tool scan auto-saves flagged plays (80%+) to localStorage with a date stamp.
+    The grader loads that snapshot, cross-references your Bet Tracker for logged results, and lets you manually grade anything that wasn't tracked.
+    Run a scan in any tool first to see data here.
+  </div>
+</main>
+</div>
+
 <footer>
   <span>Props Edge Finder · Real stats via MLB Stats API + ESPN + Linemate</span>
   <span style="color:var(--accent2)">● REAL STATS MODE</span>
 </footer>
+<div class="toast" id="toast"></div>
 
 <script>
+// ── DATE + GREETING ──
 const today = new Date();
 document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 const hr = today.getHours();
-const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-document.getElementById('greeting').textContent = greet + ' ⚡';
+document.getElementById('greeting').textContent = (hr<12?'Good morning':hr<17?'Good afternoon':'Good evening')+' ⚡';
 const day = today.toLocaleDateString('en-US',{weekday:'long'});
-const subs = {
-  'Monday': 'MLB games today + MNF tonight',
-  'Thursday': 'MLB games today + TNF tonight',
-  'Friday': 'MLB games today + NCAAFB tonight',
-  'Saturday': 'Big NCAAFB slate today + MLB games',
-  'Sunday': 'Full NFL slate today + MLB games',
-};
-document.getElementById('greetingSub').textContent = subs[day] || 'MLB games today — run the scan for today\'s edges';
-</script>
-<script>
-// Pass token from URL to all tool links
+const subs = {'Monday':'MLB games today + MNF tonight','Thursday':'MLB games today + TNF tonight','Friday':'MLB games today + NCAAFB tonight','Saturday':'Big NCAAFB slate today + MLB games','Sunday':'Full NFL slate today + MLB games'};
+document.getElementById('greetingSub').textContent = subs[day]||"MLB games today — run the scan for today's edges";
+
+// ── TOKEN PASSTHROUGH ──
 const _dp = new URLSearchParams(window.location.search);
 const _dt = _dp.get('token')||_dp.get('lmToken');
-if(_dt) {
-  document.querySelectorAll('a[href*="github.io"]').forEach(a => {
-    const u = new URL(a.href);
-    u.searchParams.set('token', _dt);
-    a.href = u.toString();
-  });
+if(_dt){document.querySelectorAll('a[href*="github.io"]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('token',_dt);a.href=u.toString();});}
+
+// ── DASH TABS ──
+function switchDashTab(tab, el){
+  document.querySelectorAll('.dash-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-'+tab).classList.add('active');
+  if(tab==='recap') loadRecap();
 }
+
+// ── RECAP STATE ──
+let recapDate = yesterday();
+let recapGrades = {};   // key: player|prop -> 'win'|'loss'|'push'
+try{ recapGrades = JSON.parse(localStorage.getItem('recapGrades')||'{}'); }catch(e){}
+
+function yesterday(){
+  const d = new Date(); d.setDate(d.getDate()-1);
+  return d.toISOString().split('T')[0];
+}
+function fmtDate(ds){ const d=new Date(ds+'T12:00:00'); return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
+function changeRecapDate(dir){
+  const d=new Date(recapDate+'T12:00:00');
+  d.setDate(d.getDate()+dir);
+  const newDs=d.toISOString().split('T')[0];
+  if(newDs>today.toISOString().split('T')[0]) return; // can't go future
+  recapDate=newDs;
+  loadRecap();
+}
+
+function getSnapshot(date){
+  try{ return JSON.parse(localStorage.getItem('propsSnapshot_'+date)||'null'); }catch(e){ return null; }
+}
+
+function getBetTrackerBets(){
+  try{ return JSON.parse(localStorage.getItem('propsBets')||'[]'); }catch(e){ return []; }
+}
+
+function matchKey(p){ return (p.player+'|'+p.prop).toLowerCase().replace(/\s+/g,''); }
+
+function loadRecap(){
+  document.getElementById('recapDateLabel').textContent = fmtDate(recapDate);
+
+  const snapshot = getSnapshot(recapDate);
+  if(!snapshot || !snapshot.plays || !snapshot.plays.length){
+    document.getElementById('recapBody').innerHTML=`<tr><td colspan="7"><div class="empty-recap"><div class="empty-recap-icon">📊</div><p>No flagged plays found for ${fmtDate(recapDate)}.<br><span style="font-size:11px">Run a scan in any tool — plays are auto-saved here.</span></p></div></td></tr>`;
+    document.getElementById('recapPlayCount').textContent='';
+    document.getElementById('recapPlaysTitle').textContent='FLAGGED PLAYS';
+    setRecapStats(0,0,null,null);
+    clearBreakdowns();
+    return;
+  }
+
+  const plays = snapshot.plays;
+  const bets = getBetTrackerBets();
+
+  // Auto-match from bet tracker
+  const betMap = {};
+  bets.filter(b=>b.date===recapDate).forEach(b=>{
+    const k = (b.player+'|'+b.prop).toLowerCase().replace(/\s+/g,'');
+    if(b.result&&b.result!=='pending') betMap[k]=b.result;
+  });
+
+  // Merge: tracker > manual grades
+  const graded = plays.map(p=>{
+    const k = matchKey(p);
+    const result = betMap[k] || recapGrades[recapDate+'|'+k] || 'pending';
+    return {...p, result, fromTracker: !!betMap[k]};
+  });
+
+  renderRecapTable(graded);
+  renderRecapStats(graded);
+  renderBreakdowns(graded);
+  document.getElementById('recapPlayCount').textContent = plays.length+' plays';
+  document.getElementById('recapPlaysTitle').textContent = `FLAGGED PLAYS — ${fmtDate(recapDate)}`;
+}
+
+function renderRecapTable(graded){
+  const tbody = document.getElementById('recapBody');
+  if(!graded.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No plays</td></tr>'; return; }
+
+  tbody.innerHTML = graded.map(p=>{
+    const k = matchKey(p);
+    const rate = p.rate||0;
+    const ec = rate>=90?'fire':rate>=80?'strong':'ok';
+    const el = rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
+    const sportBadgeColor = {MLB:'var(--accent2)',NFL:'var(--nfl)',NCAAFB:'var(--ncaafb)',WNBA:'#ff69b4',NBA:'var(--nba)'}[p.sport]||'var(--muted)';
+
+    let resultHtml;
+    if(p.result==='pending'){
+      resultHtml = `<div class="grade-btns">
+        <button class="grade-btn w" onclick="gradePlay('${recapDate}','${k}','win',this)">W</button>
+        <button class="grade-btn l" onclick="gradePlay('${recapDate}','${k}','loss',this)">L</button>
+        <button class="grade-btn p" onclick="gradePlay('${recapDate}','${k}','push',this)">P</button>
+      </div>`;
+    } else {
+      const badge = p.result==='win'?'✅ WIN':p.result==='loss'?'❌ LOSS':'🟡 PUSH';
+      const src = p.fromTracker?'<span class="source-badge" style="margin-left:4px">tracker</span>':'';
+      resultHtml = `<span class="result-badge ${p.result}">${badge}</span>${src}`;
+    }
+
+    return `<tr>
+      <td><div style="font-family:var(--sans);font-weight:600;font-size:12px">${esc(p.player)}</div><div style="font-size:10px;color:var(--muted);margin-top:1px">${esc(p.team||'')} vs ${esc(p.opposingTeam||'—')}</div></td>
+      <td style="color:var(--accent);font-size:11px">${esc(p.prop)}</td>
+      <td class="hide-mobile"><span style="font-size:10px;font-weight:700;color:${sportBadgeColor}">${esc(p.sport||'—')}</span></td>
+      <td class="hide-mobile" style="font-weight:700;color:${rate>=90?'var(--gold)':rate>=80?'var(--accent2)':'var(--accent)'}">${rate}%</td>
+      <td class="hide-mobile"><span class="edge-badge ${ec}">${el}</span></td>
+      <td>${resultHtml}</td>
+      <td style="font-size:10px;color:var(--muted)">${p.result==='pending'?'—':p.result==='win'?'<span style="color:var(--accent2)">+1u</span>':'<span style="color:var(--miss)">-1u</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function gradePlay(date, key, result, btn){
+  recapGrades[date+'|'+key] = result;
+  try{ localStorage.setItem('recapGrades', JSON.stringify(recapGrades)); }catch(e){}
+  loadRecap();
+  showToast(result==='win'?'✅ Graded WIN':result==='loss'?'❌ Graded LOSS':'🟡 Push');
+}
+
+function gradeAllFromTracker(){
+  loadRecap();
+  showToast('↺ Synced with Bet Tracker');
+}
+
+function renderRecapStats(graded){
+  const settled = graded.filter(p=>p.result!=='pending');
+  const wins = graded.filter(p=>p.result==='win').length;
+  const losses = graded.filter(p=>p.result==='loss').length;
+  const winRate = settled.length ? Math.round(wins/settled.length*100) : null;
+  const netUnits = wins - losses;
+
+  setRecapStats(graded.length, settled.length, winRate, netUnits);
+}
+
+function setRecapStats(flagged, graded, winRate, netUnits){
+  document.getElementById('r-flagged').textContent = flagged||'—';
+  document.getElementById('r-graded').textContent = graded||'—';
+  const wr = document.getElementById('r-winrate');
+  wr.textContent = winRate!==null ? winRate+'%' : '—';
+  wr.style.color = winRate===null?'var(--muted)':winRate>=60?'var(--accent2)':winRate>=50?'var(--gold)':'var(--miss)';
+  const nu = document.getElementById('r-units');
+  nu.textContent = netUnits!==null ? (netUnits>=0?'+':'')+netUnits+'u' : '—';
+  nu.style.color = netUnits===null?'var(--muted)':netUnits>0?'var(--accent2)':netUnits<0?'var(--miss)':'var(--muted)';
+}
+
+function renderBreakdowns(graded){
+  const settled = graded.filter(p=>p.result!=='pending');
+
+  // By prop type
+  const propMap = {};
+  settled.forEach(p=>{
+    const cat = p.category||p.propKey||'other';
+    if(!propMap[cat]) propMap[cat]={wins:0,total:0};
+    propMap[cat].total++;
+    if(p.result==='win') propMap[cat].wins++;
+  });
+  const propTypes = Object.entries(propMap).sort((a,b)=>b[1].total-a[1].total).slice(0,6);
+  const maxProp = Math.max(...propTypes.map(([,v])=>v.total),1);
+  document.getElementById('propTypeBreakdown').innerHTML = propTypes.length
+    ? propTypes.map(([k,v])=>{
+        const wr=Math.round(v.wins/v.total*100);
+        const color=wr>=60?'var(--accent2)':wr>=50?'var(--gold)':'var(--miss)';
+        return `<div class="breakdown-row">
+          <span style="font-size:11px;min-width:80px">${esc(k)}</span>
+          <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(v.total/maxProp*100)}%;background:${color}"></div></div>
+          <span class="breakdown-val" style="color:${color}">${wr}%</span>
+        </div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:12px;padding:8px 0">Grade plays to see breakdown</div>';
+
+  // By sport
+  const sportMap = {};
+  settled.forEach(p=>{
+    const s=p.sport||'—';
+    if(!sportMap[s]) sportMap[s]={wins:0,total:0};
+    sportMap[s].total++;
+    if(p.result==='win') sportMap[s].wins++;
+  });
+  const sports = Object.entries(sportMap).sort((a,b)=>b[1].total-a[1].total);
+  const maxSport = Math.max(...sports.map(([,v])=>v.total),1);
+  document.getElementById('sportBreakdown').innerHTML = sports.length
+    ? sports.map(([k,v])=>{
+        const wr=Math.round(v.wins/v.total*100);
+        const color={MLB:'var(--accent2)',NFL:'var(--nfl)',NCAAFB:'var(--ncaafb)',WNBA:'#ff69b4',NBA:'var(--nba)'}[k]||'var(--muted)';
+        return `<div class="breakdown-row">
+          <span style="font-size:11px;min-width:60px;color:${color};font-weight:700">${esc(k)}</span>
+          <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(v.total/maxSport*100)}%;background:${color}"></div></div>
+          <span style="font-size:11px;font-weight:700;color:${color};min-width:40px;text-align:right">${wr}% (${v.wins}/${v.total})</span>
+        </div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:12px;padding:8px 0">Grade plays to see breakdown</div>';
+}
+
+function clearBreakdowns(){
+  document.getElementById('propTypeBreakdown').innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No data yet</div>';
+  document.getElementById('sportBreakdown').innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No data yet</div>';
+}
+
+function exportRecapObsidian(){
+  const snapshot = getSnapshot(recapDate);
+  if(!snapshot||!snapshot.plays) { showToast('No data for this date'); return; }
+  const bets = getBetTrackerBets();
+  const betMap = {};
+  bets.filter(b=>b.date===recapDate).forEach(b=>{
+    const k=(b.player+'|'+b.prop).toLowerCase().replace(/\s+/g,'');
+    if(b.result&&b.result!=='pending') betMap[k]=b.result;
+  });
+  const plays = snapshot.plays.map(p=>{
+    const k=matchKey(p);
+    const result=betMap[k]||recapGrades[recapDate+'|'+k]||'pending';
+    return {...p,result};
+  });
+  const settled=plays.filter(p=>p.result!=='pending');
+  const wins=settled.filter(p=>p.result==='win').length;
+  const winRate=settled.length?Math.round(wins/settled.length*100):0;
+  const netUnits=wins-(settled.length-wins);
+
+  const tableRows=plays.map(p=>`| ${p.player} | ${p.sport||'—'} | ${p.prop} | ${p.rate||'—'}% | ${p.result==='win'?'✅ WIN':p.result==='loss'?'❌ LOSS':p.result==='push'?'🟡 PUSH':'⏳'} |`).join('\n');
+  const md=`---
+tags: [recap, betting, props, ${recapDate}]
+date: ${recapDate}
+flagged: ${plays.length}
+graded: ${settled.length}
+win_rate: ${winRate}%
+net_units: ${netUnits>0?'+':''}${netUnits}u
+---
+
+# 📊 Daily Recap — ${fmtDate(recapDate)}
+
+## Summary
+- **Flagged:** ${plays.length} plays
+- **Graded:** ${settled.length} / ${plays.length}
+- **Win Rate:** ${winRate}%
+- **Net Units:** ${netUnits>0?'+':''}${netUnits}u
+
+## Plays
+
+| Player | Sport | Prop | Rate | Result |
+|--------|-------|------|------|--------|
+${tableRows}
+
+---
+*Props Edge Finder · Daily Recap*`;
+  const blob=new Blob([md],{type:'text/markdown'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`Recap ${recapDate}.md`;a.click();
+  URL.revokeObjectURL(url);
+  showToast('🟣 Recap exported!');
+}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+
+<!-- ── SNAPSHOT SAVER — inject into all prop tool pages via shared script ──
+     Each tool calls window.savePropsSnapshot(plays, sport) after a scan.
+     This script also registers a global so the dashboard can call it cross-tab via localStorage events. -->
+<script>
+// Global snapshot saver — called by prop tools when they save their scan
+// Usage: savePropsSnapshot(allData, 'NFL')
+window.savePropsSnapshot = function(plays, sport){
+  const ds = new Date().toISOString().split('T')[0];
+  const key = 'propsSnapshot_'+ds;
+  let existing;
+  try{ existing = JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ existing=null; }
+  const current = existing || {date:ds, plays:[]};
+  // Merge: add plays from this sport, dedup by player+prop
+  const seen = new Set(current.plays.map(p=>p.player+'|'+p.prop));
+  plays.filter(p=>(p.rate||0)>=80).forEach(p=>{
+    const k=p.player+'|'+p.prop;
+    if(!seen.has(k)){ current.plays.push({...p, sport: p.sport||sport, savedAt: Date.now()}); seen.add(k); }
+  });
+  current.updatedAt = Date.now();
+  try{ localStorage.setItem(key, JSON.stringify(current)); }catch(e){}
+};
 </script>
 </body>
 </html>
