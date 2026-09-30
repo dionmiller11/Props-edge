@@ -514,7 +514,7 @@ seen[k] = p.rate; return true;
 hitterData = dedup(allHitters);
 pitcherData = dedup(allPitchers);
 hideProgress();
-saveLines([...hitterData,...pitcherData]);
+saveLines([...hitterData,...pitcherData]);if(window.savePropsSnapshot) window.savePropsSnapshot([...hitterData,...pitcherData], 'MLB');
 await prefetchInjuries([...hitterData,...pitcherData]);
 renderTable(); updateSummary();
 document.getElementById('summary').style.display='grid';
