@@ -514,7 +514,7 @@ async function runScan(){
 
     hideProgress();
     populateTeamFilter();
-    saveLines(allData);
+    saveLines(allData);if(window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NFL');
     await prefetchInjuries(allData);
     renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
