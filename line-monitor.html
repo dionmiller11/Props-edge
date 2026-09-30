@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Line Monitor Dashboard</title>
 <style>
-:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;flex-wrap:wrap;gap:10px;}
@@ -22,214 +22,290 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .btn-primary:hover{background:#33ddff;}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn-gold{background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+.btn-gold:hover{background:rgba(255,215,0,.25);}
 main{max-width:1000px;margin:0 auto;padding:18px 16px;}
-.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+/* Setup boxes */
+.setup-box{border-radius:8px;padding:14px 16px;margin-bottom:14px;font-size:12px;}
+.setup-box.worker{background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);}
+.setup-box.token{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.2);}
+.setup-box.warn{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.3);}
+.setup-box h3{font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:8px;}
+.setup-box.worker h3{color:var(--accent);}
+.setup-box.token h3{color:var(--gold);}
+.setup-box.warn h3{color:var(--miss);}
+.setup-box p{color:var(--muted);line-height:1.7;margin-bottom:6px;}
+.input-row{display:flex;gap:8px;align-items:center;margin-top:8px;}
+.input-row input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;font-family:var(--font);font-size:11px;outline:none;}
+.input-row input:focus{border-color:var(--accent);}
+.token-status{font-size:10px;font-family:var(--font);padding:3px 8px;border-radius:3px;}
+.token-status.set{color:var(--accent2);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2);}
+.token-status.missing{color:var(--warn);background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);}
+/* Summary */
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
 .stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--accent);line-height:1;margin-bottom:3px;}
 .stat-card .val.green{color:var(--accent2);}
 .stat-card .val.gold{color:var(--gold);}
-.stat-card .val.warn{color:var(--warn);}
+.stat-card .val.purple{color:var(--purple);}
 .stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+/* Sections */
 .section{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;}
 .section-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);}
 .section-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+/* Alerts */
 .alert-list{display:flex;flex-direction:column;}
 .alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(30,45,69,.5);}
 .alert-item:last-child{border-bottom:none;}
-.alert-icon{font-size:20px;flex-shrink:0;margin-top:2px;}
+.alert-icon{font-size:18px;flex-shrink:0;margin-top:2px;}
 .alert-content{flex:1;}
-.alert-title{font-weight:600;font-size:13px;color:var(--text);margin-bottom:3px;}
+.alert-title{font-weight:600;font-size:12px;color:var(--text);margin-bottom:3px;}
 .alert-body{font-family:var(--font);font-size:11px;color:var(--muted);line-height:1.6;white-space:pre-line;}
 .alert-time{font-family:var(--font);font-size:10px;color:var(--muted);flex-shrink:0;margin-top:2px;}
+.alert-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;font-family:var(--font);font-weight:700;margin-left:6px;}
+.alert-tag.game{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+.alert-tag.prop{background:rgba(176,110,255,.1);color:var(--purple);border:1px solid rgba(176,110,255,.2);}
 .alert-priority-high .alert-title{color:var(--gold);}
-.sport-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:14px 16px;}
+/* Sport grids */
+.sport-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;padding:14px 16px;}
 .sport-card{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
 .sport-name{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--accent);margin-bottom:4px;}
-.sport-games{font-family:var(--font);font-size:10px;color:var(--muted);}
+.sport-name.purple{color:var(--purple);}
+.sport-count{font-family:var(--font);font-size:10px;color:var(--muted);}
 .sport-ts{font-family:var(--font);font-size:9px;color:var(--muted);margin-top:3px;opacity:.7;}
-.empty-state{padding:36px 20px;text-align:center;color:var(--muted);}
-.empty-icon{font-size:28px;margin-bottom:8px;opacity:.4;}
+/* Empty */
+.empty-state{padding:28px 20px;text-align:center;color:var(--muted);}
+.empty-icon{font-size:24px;margin-bottom:6px;opacity:.4;}
 .empty-state p{font-size:12px;line-height:1.6;}
-.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.status-row{display:flex;align-items:center;gap:8px;padding:8px 16px;font-family:var(--font);font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);}
-.ntfy-setup{background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;}
-.ntfy-setup h3{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:8px;}
-.ntfy-setup p{color:var(--muted);line-height:1.7;margin-bottom:4px;}
-.ntfy-setup code{background:var(--surface2);padding:1px 6px;border-radius:3px;font-family:var(--font);font-size:11px;color:var(--accent2);}
-.worker-url-box{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-top:10px;font-family:var(--font);font-size:11px;color:var(--muted);}
-.worker-url-box input{width:100%;background:transparent;border:none;color:var(--text);font-family:var(--font);font-size:11px;outline:none;}
+/* Thresholds */
+.threshold-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px 16px;}
 footer{max-width:1000px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
-@media(max-width:600px){.summary{grid-template-columns:repeat(2,1fr);}header,main{padding-left:12px;padding-right:12px;}}
+@media(max-width:600px){.summary{grid-template-columns:repeat(2,1fr);}.threshold-grid{grid-template-columns:repeat(2,1fr);}header,main{padding-left:12px;padding-right:12px;}}
 </style>
 </head>
 <body>
 <header>
   <div class="logo"><a href="https://dionmiller11.github.io/Props-edge/dashboard.html" style="color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;">⌂ HOME</a><div class="pulse-dot" id="pulseDot"></div><h1>LINE <span>MONITOR</span></h1></div>
   <div class="header-right">
-    <div class="badge" id="lastRunBadge">Never run</div>
+    <div class="badge" id="lastRunBadge">—</div>
     <button class="btn btn-ghost" onclick="loadStatus()">↻ Refresh</button>
     <button class="btn btn-primary" onclick="triggerRun()">▶ Run Now</button>
   </div>
 </header>
 <main>
 
-  <!-- ntfy setup banner (hidden once configured) -->
-  <div class="ntfy-setup" id="ntfySetup">
-    <h3>📱 PHONE ALERT SETUP</h3>
-    <p>1. Download the <strong>ntfy</strong> app from the App Store</p>
-    <p>2. Tap <strong>+</strong> and subscribe to: <code>dion-sharp-x9m4</code></p>
-    <p>3. You'll get a push notification every time a line moves past the threshold</p>
-    <p style="margin-top:8px;font-size:11px;opacity:.7">Paste your Worker URL below to connect the dashboard:</p>
-    <div class="worker-url-box"><input type="text" id="workerUrlInput" placeholder="https://line-monitor.YOUR-SUBDOMAIN.workers.dev" oninput="saveWorkerUrl(this.value)"></div>
+  <!-- Worker URL setup -->
+  <div class="setup-box worker" id="workerBox">
+    <h3>⚙️ WORKER URL</h3>
+    <div class="input-row">
+      <input type="text" id="workerUrlInput" placeholder="https://line-monitor.dion-miller11.workers.dev" oninput="saveWorkerUrl(this.value)">
+    </div>
+  </div>
+
+  <!-- Linemate token -->
+  <div class="setup-box token">
+    <h3>🔑 LINEMATE TOKEN — paste once daily for prop monitoring</h3>
+    <p>Get from linemate.io DevTools → Network → any api.linemate.io request → Authorization header</p>
+    <div class="input-row">
+      <input type="password" id="tokenInput" placeholder="Paste JWT token here…">
+      <button class="btn btn-gold" onclick="saveToken()">Save Token</button>
+      <span class="token-status missing" id="tokenStatus">NOT SET</span>
+    </div>
+  </div>
+
+  <!-- Token expired warning -->
+  <div class="setup-box warn" id="tokenWarn" style="display:none">
+    <h3>⚠️ LINEMATE TOKEN EXPIRED</h3>
+    <p>Prop monitoring is paused. Paste a fresh token above to resume.</p>
   </div>
 
   <div class="summary">
     <div class="stat-card"><div class="val green" id="s-alerts">—</div><div class="lbl">ALERTS TODAY</div></div>
-    <div class="stat-card"><div class="val" id="s-sports">—</div><div class="lbl">SPORTS ACTIVE</div></div>
-    <div class="stat-card"><div class="val gold" id="s-games">—</div><div class="lbl">GAMES MONITORED</div></div>
-    <div class="stat-card"><div class="val" id="s-next">15m</div><div class="lbl">NEXT CHECK</div></div>
+    <div class="stat-card"><div class="val" id="s-sports">—</div><div class="lbl">GAME SPORTS</div></div>
+    <div class="stat-card"><div class="val purple" id="s-props">—</div><div class="lbl">PROP SPORTS</div></div>
+    <div class="stat-card"><div class="val gold" id="s-next">15m</div><div class="lbl">NEXT CHECK</div></div>
   </div>
 
+  <!-- Alerts -->
   <div class="section">
     <div class="section-header">
       <span class="section-title">🚨 RECENT ALERTS</span>
       <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="alertCount">—</span>
     </div>
     <div class="alert-list" id="alertList">
-      <div class="empty-state"><div class="empty-icon">🔔</div><p>No alerts yet.<br>Worker will notify you when lines move.</p></div>
+      <div class="empty-state"><div class="empty-icon">🔔</div><p>No alerts yet.<br>Worker notifies you when lines move.</p></div>
     </div>
   </div>
 
+  <!-- Game sports -->
   <div class="section">
     <div class="section-header">
-      <span class="section-title">📡 MONITORED SPORTS</span>
-      <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="sportsTs">—</span>
+      <span class="section-title">📡 GAME LINE SPORTS</span>
+      <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="gameSportsTs">—</span>
     </div>
-    <div class="sport-grid" id="sportGrid">
-      <div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📡</div><p>Connect your Worker URL above to see live status.</p></div>
+    <div class="sport-grid" id="gameSportGrid">
+      <div class="empty-state" style="grid-column:1/-1"><p>Run the monitor to see active sports.</p></div>
     </div>
   </div>
 
+  <!-- Prop sports -->
   <div class="section">
-    <div class="section-header"><span class="section-title">⚙️ THRESHOLDS</span></div>
-    <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-      <div class="sport-card"><div class="sport-name">SPREAD</div><div class="sport-games" style="font-size:14px;font-weight:700;color:var(--accent2)">±1.5 pts</div></div>
-      <div class="sport-card"><div class="sport-name">TOTAL</div><div class="sport-games" style="font-size:14px;font-weight:700;color:var(--accent2)">±2.0 pts</div></div>
-      <div class="sport-card"><div class="sport-name">MONEYLINE</div><div class="sport-games" style="font-size:14px;font-weight:700;color:var(--accent2)">±20¢</div></div>
+    <div class="section-header">
+      <span class="section-title">🟣 PROP LINE SPORTS</span>
+      <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="propSportsTs">—</span>
+    </div>
+    <div class="sport-grid" id="propSportGrid">
+      <div class="empty-state" style="grid-column:1/-1"><p>Set your Linemate token above to enable prop monitoring.</p></div>
+    </div>
+  </div>
+
+  <!-- Thresholds -->
+  <div class="section">
+    <div class="section-header"><span class="section-title">⚙️ ALERT THRESHOLDS</span></div>
+    <div class="threshold-grid">
+      <div class="sport-card"><div class="sport-name">SPREAD</div><div class="sport-count" style="font-size:14px;font-weight:700;color:var(--accent2)">±1.5 pts</div></div>
+      <div class="sport-card"><div class="sport-name">TOTAL</div><div class="sport-count" style="font-size:14px;font-weight:700;color:var(--accent2)">±2.0 pts</div></div>
+      <div class="sport-card"><div class="sport-name">MONEYLINE</div><div class="sport-count" style="font-size:14px;font-weight:700;color:var(--accent2)">±20¢</div></div>
+      <div class="sport-card"><div class="sport-name purple">PROP LINE</div><div class="sport-count" style="font-size:14px;font-weight:700;color:var(--purple)">±0.5 pts</div></div>
     </div>
   </div>
 
 </main>
 <footer>
-  <span id="footerStatus">Waiting for Worker connection…</span>
+  <span id="footerStatus">Waiting for connection…</span>
   <span style="color:var(--accent2)">● ntfy: dion-sharp-x9m4</span>
 </footer>
 
 <script>
 const WORKER_URL_KEY = 'lineMonitorWorkerUrl';
-let workerUrl = localStorage.getItem(WORKER_URL_KEY) || '';
+let workerUrl = localStorage.getItem(WORKER_URL_KEY) || 'https://line-monitor.dion-miller11.workers.dev';
 
-// Init
 document.getElementById('workerUrlInput').value = workerUrl;
-if (workerUrl) {
-  document.getElementById('ntfySetup').style.display = 'none';
-  loadStatus();
-}
+if (workerUrl) { document.getElementById('workerBox').style.display = 'none'; loadStatus(); }
 
 function saveWorkerUrl(val) {
   workerUrl = val.trim();
   try { localStorage.setItem(WORKER_URL_KEY, workerUrl); } catch(e) {}
-  if (workerUrl) {
-    document.getElementById('ntfySetup').style.display = 'none';
-    loadStatus();
+  if (workerUrl) { document.getElementById('workerBox').style.display = 'none'; loadStatus(); }
+}
+
+async function saveToken() {
+  const token = document.getElementById('tokenInput').value.trim();
+  if (!token) { alert('Paste a token first'); return; }
+  if (!workerUrl) { alert('Set Worker URL first'); return; }
+  try {
+    const res = await fetch(`${workerUrl}/monitor/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('tokenStatus').textContent = 'SAVED ✓';
+      document.getElementById('tokenStatus').className = 'token-status set';
+      document.getElementById('tokenInput').value = '';
+      document.getElementById('tokenWarn').style.display = 'none';
+      showFooter('Token saved — prop monitoring active');
+    }
+  } catch(e) {
+    alert('Error saving token: ' + e.message);
   }
 }
 
 async function loadStatus() {
   if (!workerUrl) return;
-  const badge = document.getElementById('lastRunBadge');
-  badge.textContent = 'Loading…';
   try {
     const res = await fetch(`${workerUrl}/monitor/status`);
     if (!res.ok) throw new Error('Worker error ' + res.status);
     const data = await res.json();
     renderStatus(data);
-    badge.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    document.getElementById('lastRunBadge').textContent = 'Updated ' + new Date().toLocaleTimeString();
     document.getElementById('pulseDot').classList.remove('inactive');
   } catch(e) {
-    badge.textContent = 'Error: ' + e.message;
+    document.getElementById('lastRunBadge').textContent = 'Error';
     document.getElementById('pulseDot').classList.add('inactive');
-    document.getElementById('footerStatus').textContent = '⚠️ Could not reach Worker — check URL';
+    showFooter('⚠️ Could not reach Worker');
   }
 }
 
 function renderStatus(data) {
-  const { lastRun, alerts } = data;
+  const { lastRun, alerts, tokenSet } = data;
 
-  // Summary cards
-  const todayAlerts = alerts.filter(a => Date.now() - a.ts < 86400000);
+  // Token status
+  document.getElementById('tokenStatus').textContent = tokenSet ? 'SET ✓' : 'NOT SET';
+  document.getElementById('tokenStatus').className = 'token-status ' + (tokenSet ? 'set' : 'missing');
+
+  // Alerts
+  const todayAlerts = (alerts||[]).filter(a => Date.now() - a.ts < 86400000);
   document.getElementById('s-alerts').textContent = todayAlerts.length;
+  document.getElementById('alertCount').textContent = (alerts||[]).length + ' total';
 
-  if (lastRun) {
-    const sports = lastRun.sports || {};
-    const sportKeys = Object.keys(sports);
-    document.getElementById('s-sports').textContent = sportKeys.length;
-    const totalGames = sportKeys.reduce((sum, k) => sum + (sports[k].gameCount || 0), 0);
-    document.getElementById('s-games').textContent = totalGames;
-
-    // Last run time → next run estimate
-    const elapsed = Math.floor((Date.now() - lastRun.ts) / 60000);
-    const next = Math.max(0, 15 - elapsed);
-    document.getElementById('s-next').textContent = next + 'm';
-
-    // Sports grid
-    const grid = document.getElementById('sportGrid');
-    if (sportKeys.length) {
-      grid.innerHTML = sportKeys.map(k => {
-        const s = sports[k];
-        const ago = Math.floor((Date.now() - s.ts) / 60000);
-        return `<div class="sport-card">
-          <div class="sport-name">${s.label}</div>
-          <div class="sport-games">${s.gameCount} game${s.gameCount !== 1 ? 's' : ''}</div>
-          <div class="sport-ts">${ago}m ago</div>
-        </div>`;
-      }).join('');
-    }
-
-    document.getElementById('sportsTs').textContent = `Last: ${new Date(lastRun.ts).toLocaleTimeString()}`;
-    document.getElementById('footerStatus').textContent = `Worker running · ${sportKeys.length} sports · ${totalGames} games`;
-  }
-
-  // Alert list
   const list = document.getElementById('alertList');
-  document.getElementById('alertCount').textContent = alerts.length + ' total';
-  if (alerts.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><p>No alerts yet.<br>Worker will notify you when lines move.</p></div>';
-    return;
+  if (!alerts || !alerts.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><p>No alerts yet.<br>Worker notifies you when lines move.</p></div>';
+  } else {
+    list.innerHTML = alerts.map(a => {
+      const isGame = !a.tags?.includes('sports_medal');
+      const icon = a.title.includes('SPREAD') ? '📊' : a.title.includes('TOTAL') ? '📈' : a.title.includes('ML') ? '💰' : '🟣';
+      return `<div class="alert-item ${a.priority === 'high' ? 'alert-priority-high' : ''}">
+        <div class="alert-icon">${icon}</div>
+        <div class="alert-content">
+          <div class="alert-title">${esc(a.title)}<span class="alert-tag ${isGame ? 'game' : 'prop'}">${isGame ? 'GAME' : 'PROP'}</span></div>
+          <div class="alert-body">${esc(a.body)}</div>
+        </div>
+        <div class="alert-time">${timeAgo(a.ts)}</div>
+      </div>`;
+    }).join('');
   }
-  list.innerHTML = alerts.map(a => {
-    const ago = timeAgo(a.ts);
-    const icon = a.title.includes('SPREAD') ? '📊' : a.title.includes('TOTAL') ? '📈' : '💰';
-    return `<div class="alert-item ${a.priority === 'high' ? 'alert-priority-high' : ''}">
-      <div class="alert-icon">${icon}</div>
-      <div class="alert-content">
-        <div class="alert-title">${esc(a.title)}</div>
-        <div class="alert-body">${esc(a.body)}</div>
-      </div>
-      <div class="alert-time">${ago}</div>
-    </div>`;
-  }).join('');
+
+  if (!lastRun) return;
+
+  // Token expired warning
+  document.getElementById('tokenWarn').style.display = lastRun.tokenExpired ? 'block' : 'none';
+
+  // Game sports
+  const sportsMeta = lastRun.sportsMeta || {};
+  const gameKeys = Object.keys(sportsMeta);
+  document.getElementById('s-sports').textContent = gameKeys.length;
+  const gameGrid = document.getElementById('gameSportGrid');
+  if (gameKeys.length) {
+    gameGrid.innerHTML = gameKeys.map(k => {
+      const s = sportsMeta[k];
+      return `<div class="sport-card"><div class="sport-name">${s.label}</div><div class="sport-count">${s.gameCount} game${s.gameCount !== 1 ? 's' : ''}</div><div class="sport-ts">${timeAgo(s.ts)}</div></div>`;
+    }).join('');
+    document.getElementById('gameSportsTs').textContent = 'Last: ' + new Date(lastRun.ts).toLocaleTimeString();
+  }
+
+  // Prop sports
+  const propsMeta = lastRun.propsMeta || {};
+  const propKeys = Object.keys(propsMeta);
+  document.getElementById('s-props').textContent = propKeys.length;
+  const propGrid = document.getElementById('propSportGrid');
+  if (propKeys.length) {
+    propGrid.innerHTML = propKeys.map(k => {
+      const s = propsMeta[k];
+      return `<div class="sport-card"><div class="sport-name purple">${s.label}</div><div class="sport-count">${s.propCount} props</div><div class="sport-ts">${timeAgo(s.ts)}</div></div>`;
+    }).join('');
+    document.getElementById('propSportsTs').textContent = 'Last: ' + new Date(lastRun.ts).toLocaleTimeString();
+  } else if (lastRun.tokenMissing) {
+    propGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Set your Linemate token above to enable prop monitoring.</p></div>';
+  }
+
+  // Next check
+  const elapsed = Math.floor((Date.now() - lastRun.ts) / 60000);
+  document.getElementById('s-next').textContent = Math.max(0, 15 - elapsed) + 'm';
+
+  showFooter(`Worker active · ${gameKeys.length} game sports · ${propKeys.length} prop sports`);
 }
 
 async function triggerRun() {
-  if (!workerUrl) { alert('Set your Worker URL first'); return; }
+  if (!workerUrl) { alert('Set Worker URL first'); return; }
   const btn = event.target;
   btn.disabled = true; btn.textContent = '⏳ Running…';
   try {
     const res = await fetch(`${workerUrl}/monitor/run`, { method: 'POST' });
     const data = await res.json();
-    btn.textContent = `✅ ${data.alerts} alerts`;
+    btn.textContent = `✅ ${data.total} alerts`;
     setTimeout(() => { btn.textContent = '▶ Run Now'; btn.disabled = false; }, 3000);
     setTimeout(loadStatus, 1500);
   } catch(e) {
@@ -238,17 +314,10 @@ async function triggerRun() {
   }
 }
 
-function timeAgo(ts) {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return diff + 's ago';
-  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
-  return Math.floor(diff/86400) + 'd ago';
-}
-
+function showFooter(msg) { document.getElementById('footerStatus').textContent = msg; }
+function timeAgo(ts) { const d = Math.floor((Date.now() - ts) / 1000); if (d < 60) return d + 's ago'; if (d < 3600) return Math.floor(d/60) + 'm ago'; if (d < 86400) return Math.floor(d/3600) + 'h ago'; return Math.floor(d/86400) + 'd ago'; }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// Auto-refresh every 2 minutes
 setInterval(loadStatus, 120000);
 </script>
 </body>
