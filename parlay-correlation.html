@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parlay Correlation Tool — Props Edge</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--purple);box-shadow:0 0 8px var(--purple);flex-shrink:0;}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--purple);}
+.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;letter-spacing:.04em;margin-right:8px;}
+.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#000;} .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-purple{background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35);}
+main{max-width:1100px;margin:0 auto;padding:18px 16px;}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;}
+.section-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);}
+.section-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+.section-body{padding:16px;}
+/* Parlay builder */
+.leg-input-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;flex-wrap:wrap;}
+.leg-input-row input, .leg-input-row select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font-family:var(--font);font-size:12px;outline:none;}
+.leg-input-row input:focus, .leg-input-row select:focus{border-color:var(--accent);}
+.leg-player{flex:2;min-width:130px;}
+.leg-team{flex:1;min-width:80px;}
+.leg-prop{flex:2;min-width:130px;}
+.leg-sport{flex:1;min-width:80px;}
+.leg-dir{flex:1;min-width:70px;}
+.leg-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 8px;line-height:1;}
+.leg-remove:hover{color:var(--miss);}
+/* Score card */
+.score-card{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+.score-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;}
+.score-val{font-size:32px;font-weight:700;font-family:var(--font);line-height:1;margin-bottom:4px;}
+.score-lbl{font-size:10px;color:var(--muted);letter-spacing:.06em;}
+/* Correlation matrix */
+.matrix-wrap{overflow-x:auto;}
+.matrix{border-collapse:collapse;font-size:11px;font-family:var(--font);}
+.matrix th{padding:6px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:10px;letter-spacing:.06em;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;}
+.matrix td{padding:8px 10px;border:1px solid var(--border);text-align:center;font-weight:700;font-size:12px;min-width:70px;}
+.corr-strong-pos{background:rgba(0,255,136,.2);color:var(--accent2);}
+.corr-pos{background:rgba(0,255,136,.08);color:var(--accent2);}
+.corr-neutral{background:transparent;color:var(--muted);}
+.corr-neg{background:rgba(255,77,109,.08);color:var(--miss);}
+.corr-strong-neg{background:rgba(255,77,109,.2);color:var(--miss);}
+.corr-self{background:var(--surface2);color:var(--muted);}
+/* Warnings / tips */
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:6px;margin-bottom:8px;font-size:12px;line-height:1.6;}
+.alert-item:last-child{margin-bottom:0;}
+.alert-item.danger{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.2);}
+.alert-item.warn{background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);}
+.alert-item.good{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.15);}
+.alert-item.info{background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.15);}
+.alert-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+/* Reference table */
+.ref-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.ref-card{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;}
+.ref-title{font-size:11px;font-weight:700;letter-spacing:.06em;margin-bottom:8px;}
+.ref-title.green{color:var(--accent2);} .ref-title.red{color:var(--miss);}
+.ref-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(30,45,69,.4);font-size:11px;}
+.ref-row:last-child{border-bottom:none;}
+.ref-badge{font-size:9px;padding:1px 5px;border-radius:3px;font-family:var(--font);font-weight:700;flex-shrink:0;}
+.ref-badge.high{background:rgba(0,255,136,.15);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+.ref-badge.medium{background:rgba(0,212,255,.12);color:var(--accent);border:1px solid rgba(0,212,255,.25);}
+.ref-badge.low{background:rgba(176,110,255,.12);color:var(--purple);border:1px solid rgba(176,110,255,.25);}
+.ref-badge.neg{background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.2);}
+.ref-badge.danger{background:rgba(255,77,109,.2);color:var(--miss);border:1px solid rgba(255,77,109,.35);}
+.empty-state{padding:28px;text-align:center;color:var(--muted);font-size:12px;}
+@media(max-width:700px){.score-card{grid-template-columns:1fr 1fr;}.ref-grid{grid-template-columns:1fr;}.leg-input-row{flex-direction:column;}.leg-player,.leg-team,.leg-prop,.leg-sport,.leg-dir{min-width:100%;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" class="home-btn">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>PARLAY <span>CORRELATION</span></h1>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" onclick="clearLegs()">↺ Clear</button>
+    <button class="btn btn-purple" onclick="analyze()">⚡ Analyze</button>
+  </div>
+</header>
+<main>
+  <!-- Leg Builder -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">🎰 PARLAY LEGS</span>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="addLeg()">+ Add Leg</button>
+    </div>
+    <div class="section-body">
+      <div style="font-size:11px;color:var(--muted);font-family:var(--font);margin-bottom:12px;line-height:1.6">Add your parlay legs below. The tool scores how correlated they are — correlated legs amplify each other, anti-correlated legs fight each other.</div>
+      <div id="legsList"></div>
+      <button class="btn btn-ghost" style="margin-top:8px;font-size:11px" onclick="addLeg()">+ Add Another Leg</button>
+    </div>
+  </div>
+
+  <!-- Score -->
+  <div class="section" id="scoreSection" style="display:none">
+    <div class="section-header"><span class="section-title">📊 CORRELATION SCORE</span></div>
+    <div class="section-body">
+      <div class="score-card">
+        <div class="score-box"><div class="score-val" id="scoreVal">—</div><div class="score-lbl">CORRELATION SCORE</div></div>
+        <div class="score-box"><div class="score-val" id="ratingVal">—</div><div class="score-lbl">RATING</div></div>
+        <div class="score-box"><div class="score-val" id="pairsVal">—</div><div class="score-lbl">LEG PAIRS</div></div>
+      </div>
+      <div id="alertsList"></div>
+    </div>
+  </div>
+
+  <!-- Matrix -->
+  <div class="section" id="matrixSection" style="display:none">
+    <div class="section-header"><span class="section-title">🔢 CORRELATION MATRIX</span></div>
+    <div class="section-body">
+      <div class="matrix-wrap" id="matrixWrap"></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:10px;font-family:var(--font);color:var(--muted)">
+        <span><span style="color:var(--accent2);font-weight:700">■</span> Strong positive</span>
+        <span><span style="color:var(--accent2);opacity:.6;font-weight:700">■</span> Positive</span>
+        <span><span style="color:var(--muted);font-weight:700">■</span> Neutral</span>
+        <span><span style="color:var(--miss);opacity:.6;font-weight:700">■</span> Negative</span>
+        <span><span style="color:var(--miss);font-weight:700">■</span> Strong negative</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reference Guide -->
+  <div class="section">
+    <div class="section-header"><span class="section-title">📚 CORRELATION REFERENCE GUIDE</span></div>
+    <div class="section-body">
+      <div class="ref-grid">
+        <div class="ref-card">
+          <div class="ref-title green">✅ PARLAY TOGETHER (positive correlation)</div>
+          <div class="ref-row"><span class="ref-badge high">HIGH</span>QB Pass Yds + WR Rec Yds (same team)</div>
+          <div class="ref-row"><span class="ref-badge high">HIGH</span>QB Pass Yds + TE Rec Yds (same team)</div>
+          <div class="ref-row"><span class="ref-badge high">HIGH</span>QB Pass TDs + WR Rec Yds (same team)</div>
+          <div class="ref-row"><span class="ref-badge high">HIGH</span>Game Total OVER + QB Pass Yds OVER</div>
+          <div class="ref-row"><span class="ref-badge high">HIGH</span>Game Total OVER + both teams' offense props</div>
+          <div class="ref-row"><span class="ref-badge medium">MED</span>RB Rush Yds + Team Total UNDER (game script)</div>
+          <div class="ref-row"><span class="ref-badge medium">MED</span>Points OVER + Assists OVER (same NBA player)</div>
+          <div class="ref-row"><span class="ref-badge medium">MED</span>Hits OVER + Total Bases OVER (same batter)</div>
+          <div class="ref-row"><span class="ref-badge medium">MED</span>Strikeouts OVER + Hits Allowed UNDER (same pitcher)</div>
+          <div class="ref-row"><span class="ref-badge low">LOW</span>Two WRs from same team (shares targets)</div>
+          <div class="ref-row"><span class="ref-badge low">LOW</span>Assists OVER + Rebounds OVER (same NBA player)</div>
+        </div>
+        <div class="ref-card">
+          <div class="ref-title red">❌ NEVER PARLAY (negative correlation)</div>
+          <div class="ref-row"><span class="ref-badge danger">HIGH</span>QB Pass Yds + RB Rush Yds (same team, game script)</div>
+          <div class="ref-row"><span class="ref-badge danger">HIGH</span>QB Pass TDs OVER + Game Total UNDER</div>
+          <div class="ref-row"><span class="ref-badge danger">HIGH</span>Two RBs from same backfield (splits carries)</div>
+          <div class="ref-row"><span class="ref-badge danger">HIGH</span>K Points OVER + Game Total UNDER</div>
+          <div class="ref-row"><span class="ref-badge neg">MED</span>WR Rec Yds + Team Total UNDER</div>
+          <div class="ref-row"><span class="ref-badge neg">MED</span>Pitcher K OVER + Game Total OVER</div>
+          <div class="ref-row"><span class="ref-badge neg">MED</span>RB Rush Yds OVER + Opp DEF props UNDER</div>
+          <div class="ref-row"><span class="ref-badge neg">MED</span>Two starting pitchers from same game (one wins, one loses)</div>
+          <div class="ref-row"><span class="ref-badge neg">MED</span>Batter Hits + opposing Pitcher Hits Allowed UNDER</div>
+          <div class="ref-row"><span class="ref-badge neg">LOW</span>NBA player Points + opposing team Defense props</div>
+          <div class="ref-row"><span class="ref-badge neg">LOW</span>NFL game total UNDER + passing props OVER</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const NFL_PROP_TYPES = {
+  'pass yds': 'qb_pass_yds', 'passing yds': 'qb_pass_yds', 'pass yards': 'qb_pass_yds',
+  'pass tds': 'qb_pass_tds', 'passing tds': 'qb_pass_tds',
+  'rush yds': 'rb_rush_yds', 'rush yards': 'rb_rush_yds', 'rushing yds': 'rb_rush_yds',
+  'rec yds': 'rec_yds', 'rec yards': 'rec_yds', 'receiving yds': 'rec_yds', 'receiving yards': 'rec_yds',
+  'receptions': 'receptions', 'catches': 'receptions',
+  'tds': 'tds', 'touchdowns': 'tds',
+  'kicking pts': 'k_pts', 'kicking points': 'k_pts', 'fg': 'k_pts',
+};
+const NBA_PROP_TYPES = {
+  'points': 'nba_pts', 'pts': 'nba_pts',
+  'rebounds': 'nba_reb', 'reb': 'nba_reb',
+  'assists': 'nba_ast', 'ast': 'nba_ast',
+  '3-pointers': 'nba_3pm', '3pm': 'nba_3pm', 'threes': 'nba_3pm',
+  'pts+reb+ast': 'nba_pra', 'pra': 'nba_pra',
+};
+const MLB_PROP_TYPES = {
+  'hits': 'mlb_hits', 'h': 'mlb_hits',
+  'total bases': 'mlb_tb', 'tb': 'mlb_tb',
+  'rbi': 'mlb_rbi',
+  'runs': 'mlb_runs',
+  'h+r+rbi': 'mlb_hrr',
+  'strikeouts': 'mlb_k', 'k': 'mlb_k',
+  'hits allowed': 'mlb_ha',
+  'earned runs': 'mlb_er',
+};
+
+// Correlation rules: [typeA, typeB, dirA, dirB, score, reason]
+// score: -2 strong neg, -1 neg, 0 neutral, 1 pos, 2 strong pos
+const CORR_RULES = [
+  // NFL positive
+  ['qb_pass_yds','rec_yds','OVER','OVER',2,'QB air yards directly feed WR receiving yards — same plays'],
+  ['qb_pass_yds','receptions','OVER','OVER',2,'QB pass volume drives WR catch count'],
+  ['qb_pass_tds','rec_yds','OVER','OVER',2,'QB TDs and WR yards come from the same passing game'],
+  ['qb_pass_yds','qb_pass_tds','OVER','OVER',2,'Pass yds and TDs both increase in high-volume passing games'],
+  // NFL negative
+  ['qb_pass_yds','rb_rush_yds','OVER','OVER',-2,'Passing-heavy game script hurts RB rush volume and vice versa'],
+  ['qb_pass_tds','tds','OVER','UNDER',-1,'QB TDs scoring more makes game total go higher, not lower'],
+  ['k_pts','tds','OVER','OVER',-1,'More TDs = fewer FG attempts for kicker'],
+  ['rb_rush_yds','rec_yds','OVER','OVER',-1,'Run-heavy game script limits passing game volume'],
+  // NBA positive
+  ['nba_pts','nba_pra','OVER','OVER',2,'Points is a component of PRA — directly correlated'],
+  ['nba_ast','nba_pra','OVER','OVER',2,'Assists is a component of PRA — directly correlated'],
+  ['nba_reb','nba_pra','OVER','OVER',2,'Rebounds is a component of PRA — directly correlated'],
+  ['nba_pts','nba_ast','OVER','OVER',1,'High-usage players tend to score and assist in tandem'],
+  // MLB positive
+  ['mlb_hits','mlb_tb','OVER','OVER',2,'Hits are included in total bases — directly correlated'],
+  ['mlb_hits','mlb_hrr','OVER','OVER',2,'Hits feed H+R+RBI composite — directly correlated'],
+  ['mlb_k','mlb_ha','OVER','UNDER',2,'More Ks = fewer balls in play = fewer hits allowed'],
+  ['mlb_hits','mlb_runs','OVER','OVER',1,'More hits often leads to more runs scored'],
+  // MLB negative
+  ['mlb_hits','mlb_ha','OVER','UNDER',-2,'Batter getting hits conflicts with pitcher allowing fewer hits'],
+  ['mlb_k','mlb_tb','OVER','OVER',-1,'High-K pitcher limits batter total bases opportunities'],
+];
+
+let legs = [];
+
+function addLeg(preset){
+  const id = Date.now() + Math.random();
+  legs.push({id, player:'', team:'', prop:'', sport:'NFL', dir:'OVER'});
+  renderLegs();
+  // Focus new player input
+  setTimeout(()=>{const inputs=document.querySelectorAll('.leg-player-input');if(inputs.length)inputs[inputs.length-1].focus();},50);
+}
+
+function removeLeg(id){legs=legs.filter(l=>l.id!==id);renderLegs();if(legs.length<2)hideResults();}
+function updateLeg(id,field,val){const l=legs.find(x=>x.id===id);if(l)l[field]=val;}
+function clearLegs(){legs=[];renderLegs();hideResults();}
+function hideResults(){document.getElementById('scoreSection').style.display='none';document.getElementById('matrixSection').style.display='none';}
+
+function renderLegs(){
+  const el=document.getElementById('legsList');
+  if(!legs.length){
+    el.innerHTML='<div class="empty-state">No legs added yet. Click + Add Leg to start.</div>';
+    return;
+  }
+  el.innerHTML=legs.map((l,i)=>`
+    <div class="leg-input-row">
+      <input class="leg-player leg-player-input" placeholder="Player name" value="${esc(l.player)}" oninput="updateLeg(${l.id},'player',this.value)" />
+      <input class="leg-team" placeholder="Team" value="${esc(l.team)}" oninput="updateLeg(${l.id},'team',this.value)" style="max-width:80px" />
+      <input class="leg-prop" placeholder="Prop type (e.g. Pass Yds, Points, Hits)" value="${esc(l.prop)}" oninput="updateLeg(${l.id},'prop',this.value)" />
+      <select class="leg-sport" oninput="updateLeg(${l.id},'sport',this.value)">
+        ${['NFL','NBA','MLB','WNBA','NCAAFB'].map(s=>`<option ${l.sport===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <select class="leg-dir" oninput="updateLeg(${l.id},'dir',this.value)">
+        <option ${l.dir==='OVER'?'selected':''}>OVER</option>
+        <option ${l.dir==='UNDER'?'selected':''}>UNDER</option>
+      </select>
+      <button class="leg-remove" onclick="removeLeg(${l.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+function classifyProp(prop, sport){
+  const p = prop.toLowerCase().trim();
+  if(sport==='NFL'||sport==='NCAAFB'){for(const[k,v]of Object.entries(NFL_PROP_TYPES)){if(p.includes(k))return v;}return 'nfl_other';}
+  if(sport==='NBA'||sport==='WNBA'){for(const[k,v]of Object.entries(NBA_PROP_TYPES)){if(p.includes(k))return v;}return 'nba_other';}
+  if(sport==='MLB'){for(const[k,v]of Object.entries(MLB_PROP_TYPES)){if(p.includes(k))return v;}return 'mlb_other';}
+  return 'other';
+}
+
+function getCorrelation(legA, legB){
+  const tA=classifyProp(legA.prop,legA.sport);
+  const tB=classifyProp(legB.prop,legB.sport);
+  const sameTeam=legA.team&&legB.team&&legA.team.toLowerCase()===legB.team.toLowerCase();
+  const samePlayer=legA.player&&legB.player&&legA.player.toLowerCase()===legB.player.toLowerCase();
+  const sameGame=legA.team&&legB.team&&legA.sport===legB.sport; // rough
+
+  // Same player — component props are always correlated
+  if(samePlayer&&legA.sport===legB.sport){
+    if(tA===tB)return{score:0,reason:'Same prop, same player — duplicate'};
+    // PRA components
+    if((tA==='nba_pra'&&['nba_pts','nba_reb','nba_ast'].includes(tB))||(tB==='nba_pra'&&['nba_pts','nba_reb','nba_ast'].includes(tA)))
+      return{score:2,reason:'Component of same PRA total — strongly correlated'};
+    if((tA==='mlb_hrr'&&['mlb_hits','mlb_runs','mlb_rbi'].includes(tB))||(tB==='mlb_hrr'&&['mlb_hits','mlb_runs','mlb_rbi'].includes(tA)))
+      return{score:2,reason:'Component of same H+R+RBI total — strongly correlated'};
+    if((tA==='mlb_hits'&&tB==='mlb_tb')||(tA==='mlb_tb'&&tB==='mlb_hits'))
+      return{score:2,reason:'Hits are included in total bases — directly correlated'};
+  }
+
+  // Check rules
+  for(const[rA,rB,dA,dB,score,reason]of CORR_RULES){
+    const dirMatch=(legA.dir===dA&&legB.dir===dB)||(legA.dir===dB&&legB.dir===dA);
+    const typeMatch=(tA===rA&&tB===rB)||(tA===rB&&tB===rA);
+    if(typeMatch){
+      // Same team rules apply stronger
+      if(sameTeam&&score>0)return{score:Math.min(2,score+0.5),reason:reason+' (same team)'};
+      if(sameTeam&&score<0)return{score:Math.max(-2,score-0.5),reason:reason+' (same team)'};
+      // Direction matters for some
+      if(dirMatch)return{score,reason};
+      // Flipped direction reverses correlation
+      if(!dirMatch&&Math.abs(score)>0)return{score:-score,reason:reason+' (direction flipped)'};
+    }
+  }
+
+  // Same sport, same team — mild positive
+  if(sameTeam&&legA.sport===legB.sport)return{score:0.5,reason:'Same team, offense tends to be correlated'};
+  // Different sport or team — neutral
+  return{score:0,reason:'No known correlation — treat as independent'};
+}
+
+function scoreLabel(score){
+  if(score>=1.5)return{label:'🔥 STRONG +',color:'var(--accent2)'};
+  if(score>=0.5)return{label:'✅ POSITIVE',color:'var(--accent2)'};
+  if(score>=-0.5)return{label:'⚪ NEUTRAL',color:'var(--muted)'};
+  if(score>=-1.5)return{label:'⚠️ NEGATIVE',color:'var(--warn)'};
+  return{label:'🚨 AVOID',color:'var(--miss)'};
+}
+
+function analyze(){
+  const valid=legs.filter(l=>l.player||l.prop);
+  if(valid.length<2){alert('Add at least 2 legs to analyze');return;}
+
+  const pairs=[];
+  for(let i=0;i<valid.length;i++){
+    for(let j=i+1;j<valid.length;j++){
+      const c=getCorrelation(valid[i],valid[j]);
+      pairs.push({a:valid[i],b:valid[j],score:c.score,reason:c.reason});
+    }
+  }
+
+  const avgScore=pairs.reduce((s,p)=>s+p.score,0)/pairs.length;
+  const sl=scoreLabel(avgScore);
+
+  document.getElementById('scoreVal').textContent=avgScore.toFixed(1);
+  document.getElementById('scoreVal').style.color=sl.color;
+  document.getElementById('ratingVal').textContent=sl.label;
+  document.getElementById('ratingVal').style.color=sl.color;
+  document.getElementById('pairsVal').textContent=pairs.length;
+
+  // Alerts
+  const alerts=[];
+  const dangerous=pairs.filter(p=>p.score<=-1.5);
+  const negative=pairs.filter(p=>p.score<-0.5&&p.score>-1.5);
+  const strong=pairs.filter(p=>p.score>=1.5);
+
+  if(dangerous.length){
+    dangerous.forEach(p=>{
+      alerts.push({type:'danger',icon:'🚨',text:`<strong>${esc(p.a.player||'Leg')} ${p.a.dir} ${esc(p.a.prop)}</strong> vs <strong>${esc(p.b.player||'Leg')} ${p.b.dir} ${esc(p.b.prop)}</strong> — ${esc(p.reason)}`});
+    });
+  }
+  if(negative.length){
+    negative.forEach(p=>{
+      alerts.push({type:'warn',icon:'⚠️',text:`<strong>${esc(p.a.player||'Leg')} ${p.a.dir} ${esc(p.a.prop)}</strong> vs <strong>${esc(p.b.player||'Leg')} ${p.b.dir} ${esc(p.b.prop)}</strong> — ${esc(p.reason)}`});
+    });
+  }
+  if(strong.length){
+    strong.forEach(p=>{
+      alerts.push({type:'good',icon:'✅',text:`<strong>${esc(p.a.player||'Leg')} ${p.a.dir} ${esc(p.a.prop)}</strong> + <strong>${esc(p.b.player||'Leg')} ${p.b.dir} ${esc(p.b.prop)}</strong> — ${esc(p.reason)}`});
+    });
+  }
+  if(!alerts.length){
+    alerts.push({type:'info',icon:'ℹ️',text:'No strong correlations or conflicts detected. This parlay has independent legs — typical parlay risk profile.'});
+  }
+
+  document.getElementById('alertsList').innerHTML=alerts.map(a=>`<div class="alert-item ${a.type}"><div class="alert-icon">${a.icon}</div><div>${a.text}</div></div>`).join('');
+  document.getElementById('scoreSection').style.display='block';
+
+  // Matrix
+  const n=valid.length;
+  let matHtml='<table class="matrix"><thead><tr><th></th>';
+  valid.forEach(l=>{ matHtml+=`<th title="${esc(l.player)} ${esc(l.prop)}">${esc((l.player||'Leg').split(' ').pop())} ${esc(l.prop).substring(0,8)}</th>`; });
+  matHtml+='</tr></thead><tbody>';
+  for(let i=0;i<n;i++){
+    matHtml+=`<tr><th style="text-align:left">${esc((valid[i].player||'Leg').split(' ').pop())} ${esc(valid[i].prop).substring(0,8)}</th>`;
+    for(let j=0;j<n;j++){
+      if(i===j){matHtml+='<td class="corr-self">—</td>';continue;}
+      const c=getCorrelation(valid[i],valid[j]);
+      const cls=c.score>=1.5?'corr-strong-pos':c.score>=0.5?'corr-pos':c.score<=-1.5?'corr-strong-neg':c.score<=-0.5?'corr-neg':'corr-neutral';
+      const label=c.score>=1.5?'++':c.score>=0.5?'+':c.score<=-1.5?'--':c.score<=-0.5?'-':'0';
+      matHtml+=`<td class="${cls}" title="${esc(c.reason)}">${label}</td>`;
+    }
+    matHtml+='</tr>';
+  }
+  matHtml+='</tbody></table>';
+  document.getElementById('matrixWrap').innerHTML=matHtml;
+  document.getElementById('matrixSection').style.display='block';
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// Start with 3 empty legs
+addLeg();addLeg();addLeg();
+</script>
+</body>
+</html>
