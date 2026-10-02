@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weather Alerts — Props Edge</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;flex-shrink:0;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--accent);}
+.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;letter-spacing:.04em;margin-right:8px;}
+.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#000;} .btn-primary:hover{background:#33ddff;}
+.btn-primary:disabled{background:var(--muted);cursor:not-allowed;}
+main{max-width:960px;margin:0 auto;padding:18px 16px;}
+.sport-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.sport-chip{padding:5px 14px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;font-weight:600;}
+.sport-chip.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.status-bar{font-family:var(--font);font-size:12px;color:var(--muted);margin-bottom:14px;min-height:18px;}
+.status-bar.running{color:var(--accent);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
+.spinner{display:inline-block;width:11px;height:11px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+/* Game weather cards */
+.games-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:20px;}
+.game-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:all .2s;}
+.game-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);}
+.game-card.flag-wind{border-left:4px solid var(--miss);}
+.game-card.flag-rain{border-left:4px solid var(--accent);}
+.game-card.flag-cold{border-left:4px solid var(--purple);}
+.game-card.flag-dome{border-left:4px solid var(--muted);opacity:.7;}
+.game-card.flag-clear{border-left:4px solid var(--accent2);}
+.game-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.game-teams{font-family:var(--sans);font-weight:700;font-size:13px;}
+.game-time{font-family:var(--font);font-size:10px;color:var(--muted);}
+.weather-body{padding:14px;}
+.weather-main{display:flex;align-items:center;gap:16px;margin-bottom:12px;}
+.weather-icon{font-size:36px;flex-shrink:0;}
+.weather-temps{flex:1;}
+.weather-temp{font-size:28px;font-weight:700;font-family:var(--font);line-height:1;}
+.weather-desc{font-size:11px;color:var(--muted);margin-top:2px;}
+.weather-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+.weather-stat{background:var(--surface2);border-radius:6px;padding:8px 10px;text-align:center;}
+.weather-stat-val{font-size:16px;font-weight:700;font-family:var(--font);line-height:1;margin-bottom:2px;}
+.weather-stat-lbl{font-size:9px;color:var(--muted);letter-spacing:.06em;}
+/* Alert flags */
+.flag-box{border-radius:6px;padding:8px 10px;font-size:12px;font-weight:600;line-height:1.5;}
+.flag-box.danger{background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.3);color:var(--miss);}
+.flag-box.warn{background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.25);color:var(--warn);}
+.flag-box.good{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);color:var(--accent2);}
+.flag-box.info{background:rgba(107,122,150,.08);border:1px solid rgba(107,122,150,.2);color:var(--muted);}
+.flag-label{font-size:10px;font-weight:700;letter-spacing:.06em;margin-bottom:3px;}
+/* Thresholds reference */
+.thresholds{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;}
+.thresholds h3{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;}
+.thresh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;}
+.thresh-row{display:flex;align-items:center;gap:8px;font-size:11px;padding:5px 8px;background:var(--surface2);border-radius:5px;}
+.thresh-icon{font-size:14px;flex-shrink:0;}
+.thresh-val{font-family:var(--font);font-weight:700;color:var(--gold);}
+.thresh-desc{color:var(--muted);}
+.empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:12px;}
+.empty-icon{font-size:28px;margin-bottom:8px;opacity:.4;}
+.dome-badge{font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(107,122,150,.15);color:var(--muted);border:1px solid rgba(107,122,150,.2);font-family:var(--font);font-weight:700;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" class="home-btn">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>WEATHER <span>ALERTS</span></h1>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="lastUpdated">—</span>
+    <button class="btn btn-primary" id="runBtn" onclick="runWeather()">⚡ CHECK WEATHER</button>
+  </div>
+</header>
+<main>
+  <div class="thresholds">
+    <h3>🌡️ BETTING THRESHOLDS</h3>
+    <div class="thresh-grid">
+      <div class="thresh-row"><span class="thresh-icon">💨</span><span class="thresh-val">15+ mph</span><span class="thresh-desc">Fade total UNDER</span></div>
+      <div class="thresh-row"><span class="thresh-icon">💨</span><span class="thresh-val">20+ mph</span><span class="thresh-desc">Strong UNDER lean</span></div>
+      <div class="thresh-row"><span class="thresh-icon">💨</span><span class="thresh-val">25+ mph</span><span class="thresh-desc">Avoid passing props</span></div>
+      <div class="thresh-row"><span class="thresh-icon">🌧️</span><span class="thresh-val">Rain</span><span class="thresh-desc">Fade OVER totals</span></div>
+      <div class="thresh-row"><span class="thresh-icon">❄️</span><span class="thresh-val">Below 32°F</span><span class="thresh-desc">Fade OVER totals</span></div>
+      <div class="thresh-row"><span class="thresh-icon">🏟️</span><span class="thresh-val">Dome</span><span class="thresh-desc">Weather neutral</span></div>
+    </div>
+  </div>
+
+  <div class="sport-tabs">
+    <button class="sport-chip active" onclick="setSport('NFL',this)">🏈 NFL</button>
+    <button class="sport-chip" onclick="setSport('NCAAFB',this)">🏈 NCAAFB</button>
+  </div>
+
+  <div class="status-bar" id="statusBar">Click ⚡ CHECK WEATHER to load today's game forecasts</div>
+  <div id="gamesGrid" class="games-grid"></div>
+</main>
+
+<script>
+// ── STADIUM DATABASE ──
+// lat/lon for all NFL outdoor + retractable stadiums
+const STADIUMS = {
+  // NFL
+  'BUF': {name:'Highmark Stadium', lat:42.774, lon:-78.787, dome:false},
+  'MIA': {name:'Hard Rock Stadium', lat:25.958, lon:-80.239, dome:false},
+  'NE':  {name:'Gillette Stadium', lat:42.091, lon:-71.264, dome:false},
+  'NYJ': {name:'MetLife Stadium', lat:40.813, lon:-74.074, dome:false},
+  'NYG': {name:'MetLife Stadium', lat:40.813, lon:-74.074, dome:false},
+  'BAL': {name:'M&T Bank Stadium', lat:39.278, lon:-76.623, dome:false},
+  'CIN': {name:'Paycor Stadium', lat:39.095, lon:-84.516, dome:false},
+  'CLE': {name:'Cleveland Browns Stadium', lat:41.506, lon:-81.699, dome:false},
+  'PIT': {name:'Acrisure Stadium', lat:40.447, lon:-80.016, dome:false},
+  'HOU': {name:'NRG Stadium', lat:29.685, lon:-95.411, dome:true},
+  'IND': {name:'Lucas Oil Stadium', lat:39.760, lon:-86.164, dome:true},
+  'JAX': {name:'EverBank Stadium', lat:30.324, lon:-81.638, dome:false},
+  'TEN': {name:'Nissan Stadium', lat:36.166, lon:-86.771, dome:false},
+  'DEN': {name:'Empower Field', lat:39.744, lon:-105.020, dome:false},
+  'KC':  {name:'Arrowhead Stadium', lat:39.049, lon:-94.484, dome:false},
+  'LV':  {name:'Allegiant Stadium', lat:36.091, lon:-115.184, dome:true},
+  'LAC': {name:'SoFi Stadium', lat:33.953, lon:-118.339, dome:true},
+  'LAR': {name:'SoFi Stadium', lat:33.953, lon:-118.339, dome:true},
+  'DAL': {name:'AT&T Stadium', lat:32.748, lon:-97.093, dome:true},
+  'NYE': {name:'MetLife Stadium', lat:40.813, lon:-74.074, dome:false},
+  'PHI': {name:'Lincoln Financial Field', lat:39.901, lon:-75.168, dome:false},
+  'WAS': {name:'Northwest Stadium', lat:38.908, lon:-76.864, dome:false},
+  'CHI': {name:'Soldier Field', lat:41.862, lon:-87.617, dome:false},
+  'DET': {name:'Ford Field', lat:42.340, lon:-83.046, dome:true},
+  'GB':  {name:'Lambeau Field', lat:44.501, lon:-88.062, dome:false},
+  'MIN': {name:'U.S. Bank Stadium', lat:44.974, lon:-93.258, dome:true},
+  'ATL': {name:'Mercedes-Benz Stadium', lat:33.755, lon:-84.401, dome:true},
+  'CAR': {name:'Bank of America Stadium', lat:35.226, lon:-80.853, dome:false},
+  'NO':  {name:'Caesars Superdome', lat:29.951, lon:-90.081, dome:true},
+  'TB':  {name:'Raymond James Stadium', lat:27.976, lon:-82.503, dome:false},
+  'ARI': {name:'State Farm Stadium', lat:33.528, lon:-112.263, dome:true},
+  'LAR2':{name:'SoFi Stadium', lat:33.953, lon:-118.339, dome:true},
+  'SEA': {name:'Lumen Field', lat:47.595, lon:-122.332, dome:false},
+  'SF':  {name:"Levi's Stadium", lat:37.403, lon:-121.970, dome:false},
+};
+
+// ESPN path per sport
+const SPORT_PATHS = {
+  NFL: 'football/nfl',
+  NCAAFB: 'football/college-football',
+};
+
+let activeSport = 'NFL';
+let weatherCache = {};
+
+function setSport(sport, el){
+  activeSport = sport;
+  document.querySelectorAll('.sport-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderGames();
+}
+
+function weatherIcon(cond, windMph){
+  if(windMph >= 25) return '🌬️';
+  if(cond.includes('thunder') || cond.includes('storm')) return '⛈️';
+  if(cond.includes('snow') || cond.includes('blizzard')) return '❄️';
+  if(cond.includes('rain') || cond.includes('drizzle') || cond.includes('shower')) return '🌧️';
+  if(cond.includes('cloud') || cond.includes('overcast')) return '☁️';
+  if(cond.includes('fog') || cond.includes('mist')) return '🌫️';
+  if(windMph >= 15) return '💨';
+  return '☀️';
+}
+
+function getFlag(weather, dome){
+  if(dome) return {type:'info', label:'🏟️ DOME', text:'Indoor stadium — weather has no impact on this game.'};
+  const wind = weather.windMph || 0;
+  const temp = weather.tempF;
+  const rain = weather.isRain;
+  const snow = weather.isSnow;
+  if(wind >= 25 || snow) return {type:'danger', label:'🚨 STRONG FADE', text:`${wind>=25?`${wind} mph winds — avoid passing props, fade total UNDER hard.`:''}${snow?' Snow expected — fade OVER totals, run game script.':''}`};
+  if(wind >= 15 || rain) return {type:'warn', label:'⚠️ FADE LEAN', text:`${wind>=15?`${wind} mph winds — lean UNDER on totals.`:''}${rain?' Rain expected — consider fading OVER totals.':''}`};
+  if(temp !== null && temp < 32) return {type:'warn', label:'🥶 COLD GAME', text:`${temp}°F — cold weather suppresses scoring, lean UNDER totals.`};
+  if(temp !== null && temp < 45) return {type:'info', label:'❄️ COOL CONDITIONS', text:`${temp}°F — mild cold, monitor for late weather changes.`};
+  return {type:'good', label:'✅ CLEAR CONDITIONS', text:'No weather concerns — bet normally.'};
+}
+
+async function fetchWeather(lat, lon){
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  if(weatherCache[key]) return weatherCache[key];
+  try {
+    // Open-Meteo — free, no key needed, CORS-friendly
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,precipitation,weather_code&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Weather API error');
+    const data = await res.json();
+    const c = data.current;
+    const wc = c.weather_code || 0;
+    // WMO weather codes
+    const isRain = wc >= 51 && wc <= 67 || wc >= 80 && wc <= 82;
+    const isSnow = wc >= 71 && wc <= 77 || wc >= 85 && wc <= 86;
+    const isThunder = wc >= 95;
+    const condMap = {
+      0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',
+      45:'Fog',48:'Icy fog',51:'Light drizzle',53:'Moderate drizzle',55:'Heavy drizzle',
+      61:'Light rain',63:'Moderate rain',65:'Heavy rain',
+      71:'Light snow',73:'Moderate snow',75:'Heavy snow',77:'Snow grains',
+      80:'Light showers',81:'Moderate showers',82:'Heavy showers',
+      85:'Snow showers',86:'Heavy snow showers',
+      95:'Thunderstorm',96:'Thunderstorm w/ hail',99:'Thunderstorm w/ heavy hail',
+    };
+    const result = {
+      tempF: Math.round(c.temperature_2m),
+      windMph: Math.round(c.wind_speed_10m),
+      precip: c.precipitation || 0,
+      condition: condMap[wc] || 'Unknown',
+      isRain, isSnow, isThunder,
+    };
+    weatherCache[key] = result;
+    return result;
+  } catch(e) { return null; }
+}
+
+async function fetchGames(sport){
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${SPORT_PATHS[sport]}/scoreboard`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('ESPN error');
+    const data = await res.json();
+    return (data.events || []).map(evt => {
+      const comp = evt.competitions?.[0];
+      const home = comp?.competitors?.find(c => c.homeAway === 'home');
+      const away = comp?.competitors?.find(c => c.homeAway === 'away');
+      const venue = comp?.venue;
+      return {
+        id: evt.id,
+        name: evt.name,
+        away: away?.team?.abbreviation || '?',
+        home: home?.team?.abbreviation || '?',
+        awayFull: away?.team?.displayName || '',
+        homeFull: home?.team?.displayName || '',
+        commence: evt.date,
+        venueName: venue?.fullName || '',
+        venueCity: venue?.address?.city || '',
+        venueState: venue?.address?.state || '',
+        status: evt.status?.type?.name || '',
+      };
+    });
+  } catch(e) { return []; }
+}
+
+function getStadiumInfo(homeTeam, venueName){
+  if(STADIUMS[homeTeam]) return STADIUMS[homeTeam];
+  // Fallback: check dome keywords in venue name
+  const dome = /dome|stadium.*roof|indoor|superdome|allegiant|sofi|nrg|lucas|ford|mercedes|u\.s\. bank|at&t/i.test(venueName);
+  return {name:venueName, lat:null, lon:null, dome};
+}
+
+let allGames = [];
+
+async function runWeather(){
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  setStatus('running', '📡 Fetching games from ESPN…');
+  weatherCache = {};
+  try {
+    allGames = await fetchGames(activeSport);
+    if(!allGames.length){setStatus('error','No games found for today');btn.disabled=false;btn.textContent='⚡ CHECK WEATHER';return;}
+    setStatus('running', `Found ${allGames.length} games — fetching weather…`);
+
+    // Fetch weather for all outdoor stadiums
+    let done = 0;
+    await Promise.all(allGames.map(async game => {
+      const info = getStadiumInfo(game.home, game.venueName);
+      if(!info.dome && info.lat){
+        game.weather = await fetchWeather(info.lat, info.lon);
+      }
+      game.stadiumInfo = info;
+      done++;
+    }));
+
+    renderGames();
+    document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    setStatus('done', `✅ ${allGames.length} games loaded — ${allGames.filter(g=>!g.stadiumInfo?.dome).length} outdoor`);
+  } catch(e){
+    setStatus('error','❌ '+e.message);
+  }
+  btn.disabled=false; btn.textContent='⚡ CHECK WEATHER';
+}
+
+function renderGames(){
+  const grid = document.getElementById('gamesGrid');
+  const games = allGames;
+  if(!games.length){grid.innerHTML='<div class="empty"><div class="empty-icon">🌤️</div><p>No games loaded yet.</p></div>';return;}
+
+  grid.innerHTML = games.map(game => {
+    const info = game.stadiumInfo || {};
+    const w = game.weather;
+    const flag = w ? getFlag(w, info.dome) : info.dome ? {type:'info',label:'🏟️ DOME',text:'Indoor stadium — no weather impact.'} : {type:'info',label:'⏳ PENDING',text:'Weather data unavailable.'};
+    const time = game.commence ? new Date(game.commence).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : '—';
+    const cardClass = info.dome ? 'flag-dome' : flag.type === 'danger' ? 'flag-wind' : flag.type === 'warn' ? (w?.isRain?'flag-rain':'flag-wind') : 'flag-clear';
+
+    let weatherHtml = '';
+    if(info.dome){
+      weatherHtml = `<div class="weather-main"><div class="weather-icon">🏟️</div><div class="weather-temps"><div class="weather-temp" style="font-size:16px;color:var(--muted)">DOME</div><div class="weather-desc">Indoor — no weather impact</div></div></div>`;
+    } else if(w){
+      const icon = weatherIcon(w.condition.toLowerCase(), w.windMph);
+      const windColor = w.windMph>=25?'var(--miss)':w.windMph>=15?'var(--warn)':'var(--accent2)';
+      const tempColor = w.tempF<32?'var(--purple)':w.tempF<45?'var(--accent)':'var(--text)';
+      const rainColor = w.isRain||w.isSnow?'var(--accent)':'var(--muted)';
+      weatherHtml = `
+        <div class="weather-main">
+          <div class="weather-icon">${icon}</div>
+          <div class="weather-temps">
+            <div class="weather-temp" style="color:${tempColor}">${w.tempF}°F</div>
+            <div class="weather-desc">${esc(w.condition)}</div>
+          </div>
+        </div>
+        <div class="weather-stats">
+          <div class="weather-stat"><div class="weather-stat-val" style="color:${windColor}">${w.windMph}</div><div class="weather-stat-lbl">WIND MPH</div></div>
+          <div class="weather-stat"><div class="weather-stat-val" style="color:${tempColor}">${w.tempF}°</div><div class="weather-stat-lbl">TEMP °F</div></div>
+          <div class="weather-stat"><div class="weather-stat-val" style="color:${rainColor}">${w.precip.toFixed(2)}"</div><div class="weather-stat-lbl">PRECIP</div></div>
+        </div>`;
+    } else {
+      weatherHtml = `<div class="weather-main"><div class="weather-icon">🌡️</div><div class="weather-temps"><div class="weather-temp" style="font-size:14px;color:var(--muted)">No data</div><div class="weather-desc">Stadium location unknown</div></div></div>`;
+    }
+
+    return `<div class="game-card ${cardClass}">
+      <div class="game-header">
+        <div>
+          <div class="game-teams">${esc(game.away)} @ ${esc(game.home)}</div>
+          <div class="game-time">${esc(info.name||game.venueName||'—')} · ${time}</div>
+        </div>
+        ${info.dome?'<span class="dome-badge">DOME</span>':''}
+      </div>
+      <div class="weather-body">
+        ${weatherHtml}
+        <div class="flag-box ${flag.type}">
+          <div class="flag-label">${flag.label}</div>
+          ${esc(flag.text)}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setStatus(cls, msg){
+  const el = document.getElementById('statusBar');
+  el.className = 'status-bar ' + cls;
+  el.innerHTML = cls==='running' ? `<span class="spinner"></span>${msg}` : msg;
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// Auto-run on load
+window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(runWeather, 500); });
+</script>
+</body>
+</html>
