@@ -43,8 +43,25 @@ main{max-width:1000px;margin:0 auto;padding:18px 16px;}
 .section-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);}
 .section-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
 .alert-list{display:flex;flex-direction:column;}
-.alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(30,45,69,.5);}
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(30,45,69,.5);border-left:3px solid transparent;}
 .alert-item:last-child{border-bottom:none;}
+.sport-nfl{border-left-color:#ff6b35;}
+.sport-ncaaf{border-left-color:#ffd700;}
+.sport-nba{border-left-color:#00d4ff;}
+.sport-mlb{border-left-color:#00ff88;}
+.sport-nhl{border-left-color:#00e5ff;}
+.sport-wnba{border-left-color:#ff69b4;}
+.sport-mma{border-left-color:#b06eff;}
+.sport-epl,.sport-ucl,.sport-mls{border-left-color:#4ade80;}
+.sport-tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;font-family:var(--font);font-weight:700;margin-left:4px;}
+.sport-tag-nfl{background:rgba(255,107,53,.15);color:#ff6b35;border:1px solid rgba(255,107,53,.3);}
+.sport-tag-ncaaf{background:rgba(255,215,0,.15);color:#ffd700;border:1px solid rgba(255,215,0,.3);}
+.sport-tag-nba{background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.3);}
+.sport-tag-mlb{background:rgba(0,255,136,.1);color:#00ff88;border:1px solid rgba(0,255,136,.25);}
+.sport-tag-nhl{background:rgba(0,229,255,.1);color:#00e5ff;border:1px solid rgba(0,229,255,.25);}
+.sport-tag-wnba{background:rgba(255,105,180,.1);color:#ff69b4;border:1px solid rgba(255,105,180,.25);}
+.sport-tag-mma{background:rgba(176,110,255,.1);color:#b06eff;border:1px solid rgba(176,110,255,.25);}
+.sport-tag-soccer{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.25);}
 .alert-icon{font-size:18px;flex-shrink:0;margin-top:2px;}
 .alert-content{flex:1;}
 .alert-title{font-weight:600;font-size:12px;color:var(--text);margin-bottom:3px;}
@@ -181,10 +198,15 @@ function renderStatus(data){
     list.innerHTML=alerts.map(a=>{
       const isRlm=a.type==='rlm',isSteam=a.type==='steam',isProp=a.type==='prop';
       const icon=isRlm?'🚨':isSteam?'💨':isProp?'🟣':a.title.includes('TOTAL')?'📈':'💰';
-      const tagClass=isRlm?'rlm':isSteam?'steam':isProp?'prop':'game';
-      const tagLabel=isRlm?'RLM':isSteam?'STEAM':isProp?'PROP':'GAME';
-      const rowClass=isRlm?'alert-rlm':isSteam?'alert-steam':'';
-      return`<div class="alert-item ${rowClass} ${a.priority==='high'?'alert-priority-high':''}"><div class="alert-icon">${icon}</div><div class="alert-content"><div class="alert-title">${esc(a.title)}<span class="alert-tag ${tagClass}">${tagLabel}</span></div><div class="alert-body">${esc(a.body)}</div></div><div class="alert-time">${timeAgo(a.ts)}</div></div>`;
+      const typeTagClass=isRlm?'rlm':isSteam?'steam':isProp?'prop':'game';
+      const typeTagLabel=isRlm?'RLM':isSteam?'STEAM':isProp?'PROP':'GAME';
+      // Extract sport from title e.g. "NFL SPREAD", "NBA PROP MOVE"
+      const titleUp=a.title.toUpperCase();
+      const sport=titleUp.includes('NFL ')?'nfl':titleUp.includes('NCAAF')?'ncaaf':titleUp.includes('NBA')?'nba':titleUp.includes('MLB')?'mlb':titleUp.includes('NHL')?'nhl':titleUp.includes('WNBA')?'wnba':titleUp.includes('MMA')?'mma':titleUp.match(/EPL|UCL|MLS|SOCCER/)?'soccer':'';
+      const sportLabel=sport.toUpperCase();
+      const sportTagClass=sport?`sport-tag-${sport==='epl'||sport==='ucl'||sport==='mls'?'soccer':sport}`:'';
+      const sportBorderClass=sport?`sport-${sport}`:'';
+      return`<div class="alert-item ${sportBorderClass} ${isRlm?'alert-rlm':''} ${isSteam?'alert-steam':''} ${a.priority==='high'?'alert-priority-high':''}"><div class="alert-icon">${icon}</div><div class="alert-content"><div class="alert-title">${esc(a.title)}${sport?`<span class="sport-tag ${sportTagClass}">${sportLabel}</span>`:''}<span class="alert-tag ${typeTagClass}" style="margin-left:4px">${typeTagLabel}</span></div><div class="alert-body">${esc(a.body)}</div></div><div class="alert-time">${timeAgo(a.ts)}</div></div>`;
     }).join('');
   }
 
