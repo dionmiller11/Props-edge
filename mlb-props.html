@@ -178,6 +178,10 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   .api-banner,.data-banner{padding:8px 12px;}
   .table-scroll::after{content:'← swipe to see more →';display:block;text-align:center;font-size:10px;color:var(--muted);padding:6px;font-family:var(--font);}
 }
+
+  .platoon-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px;font-family:var(--font);}
+  .platoon-adv{background:rgba(0,255,136,.15);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+  .platoon-dis{background:rgba(255,107,53,.1);color:var(--warn);border:1px solid rgba(255,107,53,.2);}
 </style>
 </head>
 <body>
@@ -224,7 +228,7 @@ REAL STATS via MLB Stats API · Lines &amp; odds from Linemate (20+ books) when 
 <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
 <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;max-width:90px;"><option value="all">All</option></select></div>
 <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
-<div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button> <button class="chip" onclick="resetFilters()">↺ RESET</button></div>
+<div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button> <button class="chip" id="platoonChip" onclick="togglePlatoon(this)">PLATOON ADV</button> <button class="chip" onclick="resetFilters()">↺ RESET</button></div>
 </div>
 <div style="font-size:11px;color:var(--muted);font-family:var(--font);padding:6px 4px 2px;letter-spacing:.03em;">
 <span style="color:var(--gold)">⚡ CONSENSUS</span> = 80%+ hit rate · 2+ game streak · odds -130 or better &nbsp;·&nbsp; click any row to copy pick
@@ -350,8 +354,10 @@ awayAbbr: g.teams.away.team.abbreviation, homeAbbr: g.teams.home.team.abbreviati
 awayPitcher: g.teams.away.probablePitcher?.fullName || '',
 homePitcher: g.teams.home.probablePitcher?.fullName || '',
 awayPitcherId: g.teams.away.probablePitcher?.id || null,
-homePitcherId: g.teams.home.probablePitcher?.id || null,
-gameTime: gt,
+            homePitcherId: g.teams.home.probablePitcher?.id || null,
+            awayPitcherHand: g.teams.away.probablePitcher?.pitchHand?.code || null,
+            homePitcherHand: g.teams.home.probablePitcher?.pitchHand?.code || null,
+            gameTime: gt,
 };
 });
 }
@@ -359,7 +365,7 @@ async function getRoster(teamId) {
 try {
 const data = await proxyFetch(`${MLB_API}/teams/${teamId}/roster?rosterType=active`);
 const roster = data.roster || [];
-const hitters = roster.filter(p => !['P','SP','RP','CP'].includes(p.position?.abbreviation)).slice(0, 9);
+const hitters = roster.filter(p => !['P','SP','RP','CP'].includes(p.position?.abbreviation)).slice(0, 9).map(p=>({...p, batHand: p.batSide?.code||null}));
 const pitchers = roster.filter(p => ['SP','P'].includes(p.position?.abbreviation)).slice(0, 2);
 return { hitters, pitchers };
 } catch(e) { return { hitters: [], pitchers: [] }; }
@@ -447,8 +453,8 @@ const allHitters = [], allPitchers = [];
 let done = 0;
 for (const game of games) {
 const teams = [
-{ id: game.awayId, abbr: game.awayAbbr, opp: game.homeAbbr, oppPitcher: game.homePitcher, gameTime: game.gameTime, pitcherId: game.awayPitcherId },
-{ id: game.homeId, abbr: game.homeAbbr, opp: game.awayAbbr, oppPitcher: game.awayPitcher, gameTime: game.gameTime, pitcherId: game.homePitcherId },
+{ id: game.awayId, abbr: game.awayAbbr, opp: game.homeAbbr, oppPitcher: game.homePitcher, gameTime: game.gameTime, pitcherId: game.awayPitcherId, oppPitcherHand: game.homePitcherHand },
+            { id: game.homeId, abbr: game.homeAbbr, opp: game.awayAbbr, oppPitcher: game.awayPitcher, gameTime: game.gameTime, pitcherId: game.homePitcherId, oppPitcherHand: game.awayPitcherHand },
 ];
 await Promise.all(teams.map(async team => {
 const roster = await getRoster(team.id);
@@ -464,6 +470,8 @@ if (k.toLowerCase().includes(last) && v[cfg.mkt]?.line) { oddsLine=v[cfg.mkt].li
 }
 const plays = calcBothDirections(splits, pk, cfg.line, oddsLine, minRate);
 for (const stats of plays) {
+const _ph=team.oppPitcherHand||null,_bh=player.batHand||null;
+const _platoon=_bh&&_ph?(_bh!==_ph?'adv':'dis'):null;
 allHitters.push({
 player: player.person.fullName, team: team.abbr, propKey: pk,
 prop: `${cfg.label.replace(/^[^ ]+ /,'')} ${stats.direction==='OVER'?'O':'U'}${stats.line}`,
@@ -471,6 +479,7 @@ line: stats.line, direction: stats.direction, ...stats,
 matchupGrade: stats.rate>=90?'A':stats.rate>=80?'B':'C',
 matchupNote: `vs ${team.opp}`,
 opposingPitcher: team.oppPitcher || `${team.opp} starter`,
+oppPitcherHand: _ph, batHand: _bh, platoon: _platoon,
 gameTime: team.gameTime||'', note: `${stats.rate}% L${stats.games}`, realData: true,
 });
 }
@@ -514,7 +523,7 @@ seen[k] = p.rate; return true;
 hitterData = dedup(allHitters);
 pitcherData = dedup(allPitchers);
 hideProgress();
-saveLines([...hitterData,...pitcherData]);if(window.savePropsSnapshot) window.savePropsSnapshot([...hitterData,...pitcherData], 'MLB');
+saveLines([...hitterData,...pitcherData]);
 await prefetchInjuries([...hitterData,...pitcherData]);
 renderTable(); updateSummary();
 document.getElementById('summary').style.display='grid';
@@ -526,6 +535,7 @@ document.getElementById('oddsRefreshBtn').style.display='inline-block';
 setStatus('done', `✅ ${hitterData.length} hitter + ${pitcherData.length} pitcher REAL edges — ${new Date().toLocaleTimeString()}`);
 document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
 try{localStorage.setItem('mlbPropsLastRun',today.toDateString());}catch(e){}
+    if(window.savePropsSnapshot) window.savePropsSnapshot([...hitterData,...pitcherData],'MLB');
 } catch(err) {
 hideProgress();
 showError('Scan failed: ' + err.message);
@@ -614,6 +624,8 @@ for(const[k,v]of Object.entries(liveOdds)){if(k.toLowerCase().includes(last)&&v[
 return null;
 }
 // ── FILTERS ──
+let platoonOnly=false;
+function togglePlatoon(el){platoonOnly=!platoonOnly;el.classList.toggle('active',platoonOnly);renderTable();}
 function resetFilters(){
 document.getElementById('sortBy').value='rate';
 document.getElementById('dirFilter').value='all';
@@ -802,6 +814,27 @@ return INJURY_CACHE[key];
 }
 function getInjuryBadge(playerName){const status=INJURY_CACHE[playerName.toLowerCase()];if(!status)return'';return`<span class="injury-banner ${status.type}">${status.label}</span>`;}
 async function prefetchInjuries(players){const unique=[...new Set(players.map(p=>p.player))].slice(0,30);for(let i=0;i<unique.length;i+=5){await Promise.all(unique.slice(i,i+5).map(name=>fetchInjuryStatus(name)));await new Promise(r=>setTimeout(r,300));}}
+
+function platoonBadge(p){
+  if(!p.platoon) return '';
+  var hand=p.oppPitcherHand||'?';
+  if(p.platoon==='adv') return '<span class="platoon-badge platoon-adv">ADV vs '+hand+'HP</span>';
+  return '<span class="platoon-badge platoon-dis">DIS vs '+hand+'HP</span>';
+}
+window.savePropsSnapshot=function(plays,sport){
+  var ds=new Date().toISOString().split('T')[0];
+  var key='propsSnapshot_'+ds;
+  var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
+  var cur=ex||{date:ds,plays:[]};
+  var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
+  plays.filter(function(p){return (p.rate||0)>=80;}).forEach(function(p){
+    var k=p.player+'|'+p.prop;
+    if(!seen.has(k)){cur.plays.push(Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()}));seen.add(k);}
+  });
+  cur.updatedAt=Date.now();
+  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){};
+};
+
 </script>
 </body>
 </html>
