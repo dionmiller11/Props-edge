@@ -103,6 +103,9 @@
     .api-banner{grid-template-columns:1fr;}
     .table-scroll::after{content:'← swipe to see more →';display:block;text-align:center;font-size:10px;color:var(--muted);padding:6px;font-family:var(--font);}
   }
+
+  .b2b-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(255,107,53,.15);color:var(--warn);border:1px solid rgba(255,107,53,.35);margin-left:4px;font-family:var(--font);}
+  .b2b-fade{background:rgba(255,107,53,.04);}
 </style>
 </head>
 <body>
@@ -138,6 +141,7 @@
     <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
+      <button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
       <button class="chip" id="upcomingChip" onclick="toggleUpcoming(this)" style="margin-left:4px">⏰ UPCOMING ONLY</button>
       <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
     </div>
@@ -195,10 +199,31 @@ function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['all','scoring','rebounds','assists','defense','combos'][i]===tab);});document.getElementById('tableTitle').textContent={all:'🏀 ALL WNBA PROPS',scoring:'🏀 SCORING',rebounds:'💪 REBOUNDS',assists:'🎯 ASSISTS',defense:'🛡️ DEFENSE',combos:'📊 COMBO STATS'}[tab]+' — TODAY';renderTable();}
 function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
 function toggleUpcoming(el){upcomingOnly=!upcomingOnly;el.classList.toggle('active',upcomingOnly);renderTable();}
-function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=70;edgeOnly=false;upcomingOnly=false;document.getElementById('edgeChip').classList.remove('active');document.getElementById('upcomingChip')?.classList.remove('active');renderTable();}
+function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=70;edgeOnly=false;upcomingOnly=false;document.getElementById('edgeChip').classList.remove('active');b2bOnly=false;document.getElementById('b2bChip')?.classList.remove('active');document.getElementById('upcomingChip')?.classList.remove('active');renderTable();}
 function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
 function hideProgress(){document.getElementById('progressWrap').style.display='none';}
 function populateTeamFilter(){const sel=document.getElementById('teamFilter');const cur=sel.value;const teams=[...new Set(allData.map(p=>p.team).filter(Boolean))].sort();sel.innerHTML='<option value="all">All</option>'+teams.map(t=>'<option value="'+t+'">'+t+'</option>').join('');if(teams.includes(cur))sel.value=cur;}
+
+// ── BACK-TO-BACK DETECTION ──
+async function getB2BTeams(espnPath) {
+  try {
+    const y = new Date(); y.setDate(y.getDate()-1);
+    const ds = y.toISOString().split('T')[0].replace(/-/g,'');
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?dates=${ds}`);
+    if (!res.ok) return new Set();
+    const data = await res.json();
+    const teams = new Set();
+    for (const evt of (data.events||[])) {
+      for (const c of (evt.competitions?.[0]?.competitors||[])) {
+        if (c.team?.abbreviation) teams.add(c.team.abbreviation.toUpperCase());
+      }
+    }
+    return teams;
+  } catch(e) { return new Set(); }
+}
+let b2bTeams = new Set();
+let b2bOnly = false;
+function toggleB2B(el){b2bOnly=!b2bOnly;el.classList.toggle('active',b2bOnly);renderTable();}
 async function runScan(){
   const token=getStored('lmToken');if(!token){showError('Paste your Linemate JWT token above first.');return;}
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
@@ -206,6 +231,7 @@ async function runScan(){
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';document.getElementById('tokenBox').style.display='none';
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
   setStatus('running','📡 Fetching WNBA props from Linemate…');setLoadingRow();
+  b2bTeams = await getB2BTeams('basketball/wnba');
   try{
     setProgress(30,'Fetching player props…');
     const headers={'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};
@@ -231,7 +257,7 @@ async function runScan(){
         const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote=h2h?h2h.description:('vs '+opp);
         const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
-        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
+        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
       }catch(e){console.warn(e);}
     }
     setProgress(95,'Sorting…');
@@ -251,7 +277,7 @@ function renderTable(){
   let data=allData.filter(p=>{
     if(activeTab!=='all'&&p.category!==activeTab)return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&(p.streak||0)<2)return false;
     if(upcomingOnly&&p.gameTime){const t=p.gameTime;const h=parseInt(t);const pm=t.toLowerCase().includes('pm');const hr=(pm&&h!==12)?h+12:(!pm&&h===12?0:h);const min=parseInt(t.split(':')[1]||0);const gd=new Date();gd.setHours(hr,min,0,0);if(gd<=now)return false;}
-    if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;return true;
+    if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(b2bOnly&&!p.b2b)return false;return true;
   });
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
@@ -264,8 +290,8 @@ function renderTable(){
     const moveBadge=lineMoveBadge(p);
     const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const gtColor=gameTimeColor(p.gameTime),timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
-    return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
-      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+    return `<tr class="copy-row ${p.b2b?'b2b-fade':''}" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
+      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
