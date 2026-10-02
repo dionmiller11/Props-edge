@@ -835,6 +835,24 @@ window.savePropsSnapshot=function(plays,sport){
   try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){};
 };
 
+
+// ── AUTO-RUN ON PAGE OPEN ──
+(function(){
+  function autoRun(){
+    // Small delay so page renders first
+    setTimeout(function(){
+      if(document.getElementById('runBtn') && !document.getElementById('runBtn').disabled){
+        runScan();
+      }
+    }, 800);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', autoRun);
+  } else {
+    autoRun();
+  }
+})();
+
 </script>
 </body>
 </html>

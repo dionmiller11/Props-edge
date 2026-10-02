@@ -514,7 +514,7 @@ async function runScan(){
 
     hideProgress();
     populateTeamFilter();
-    saveLines(allData);if(window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NFL');
+    saveLines(allData);
     await prefetchInjuries(allData);
     renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
@@ -832,6 +832,24 @@ async function prefetchInjuries(players){
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
 
 if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
+
+// ── AUTO-RUN ON PAGE OPEN ──
+(function(){
+  function autoRun(){
+    // Small delay so page renders first
+    setTimeout(function(){
+      if(document.getElementById('runBtn') && !document.getElementById('runBtn').disabled){
+        runScan();
+      }
+    }, 800);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', autoRun);
+  } else {
+    autoRun();
+  }
+})();
+
 </script>
 </body>
 </html>

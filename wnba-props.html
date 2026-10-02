@@ -338,6 +338,24 @@ function getInjuryBadge(n){const s=INJURY_CACHE[n.toLowerCase()];if(!s)return'';
 async function prefetchInjuries(players){const unique=[...new Set(players.map(p=>p.player))].slice(0,30);for(let i=0;i<unique.length;i+=5){await Promise.all(unique.slice(i,i+5).map(n=>fetchInjuryStatus(n)));await new Promise(r=>setTimeout(r,300));}}
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return'';}}
 if(getStored('lmToken'))setTimeout(()=>runScan(),900);
+
+// ── AUTO-RUN ON PAGE OPEN ──
+(function(){
+  function autoRun(){
+    // Small delay so page renders first
+    setTimeout(function(){
+      if(document.getElementById('runBtn') && !document.getElementById('runBtn').disabled){
+        runScan();
+      }
+    }, 800);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', autoRun);
+  } else {
+    autoRun();
+  }
+})();
+
 </script>
 </body>
 </html>
