@@ -258,7 +258,7 @@ async function loadLines(){
     const res=await fetch(`${workerUrl}/monitor/lines`);
     if(!res.ok)throw new Error('Worker error');
     const data=await res.json();
-    const lines=(data.lines||[]).filter(g=>g.opener);
+    const lines=(data.lines||[]).filter(g=>g.opener||g.current?.spread!=null);
     if(!lines.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📐</div><p>No opener data yet — lines are saved on the first monitor run each day.</p></div>';return;}
     const sportColors={nfl:'#ff6b35',ncaaf:'#ffd700',nba:'#00d4ff',mlb:'#00ff88',nhl:'#00e5ff',wnba:'#ff69b4'};
     el.innerHTML=`<div style="overflow-x:auto"><table class="lines-table">
@@ -273,9 +273,9 @@ async function loadLines(){
         return`<tr class="${bigMove?'big-move':''}">
           <td><div class="game-label">${esc(g.away)} @ ${esc(g.home)}</div></td>
           <td><span style="font-size:10px;font-weight:700;color:${sc}">${(g.sport||'').toUpperCase()}</span></td>
-          <td style="font-family:var(--font);font-size:11px">${fmtSpread(g.opener?.spread)} → <strong>${fmtSpread(g.current?.spread)}</strong></td>
+          <td style="font-family:var(--font);font-size:11px">${fmtSpread(g.opener?.spread)} → <strong>${g.current?.spread!=null?fmtSpread(g.current.spread):'<span style="color:var(--muted)">no ESPN odds</span>'}</strong></td>
           <td>${fmtMove(sm)}</td>
-          <td style="font-family:var(--font);font-size:11px">${g.opener?.total??'—'} → <strong>${g.current?.total??'—'}</strong></td>
+          <td style="font-family:var(--font);font-size:11px">${g.opener?.total??'—'} → <strong>${g.current?.total!=null?g.current.total:'<span style="color:var(--muted)">—</span>'}</strong></td>
           <td>${fmtMove(tm)}</td>
           <td style="color:var(--muted);font-size:11px">${time}</td>
         </tr>`;
