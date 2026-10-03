@@ -316,7 +316,7 @@
         <thead><tr>
           <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
           <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 5</th>
-          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th>
+          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
         </tr></thead>
         <tbody id="tableBody"><tr class="loading-row"><td colspan="10">
           <div class="empty"><div class="empty-icon">🏈</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div>
@@ -623,7 +623,7 @@ function isConsensus(p) {
 }
 
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching NFL props from Linemate…</td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching NFL props from Linemate…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -849,6 +849,21 @@ if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
     autoRun();
   }
 })();
+
+
+// ── LOG BET TO TRACKER ──
+function logBet(p){
+  const params = new URLSearchParams({
+    player: p.player||'',
+    prop: p.prop||'',
+    propType: p.propType||p.propKey||p.category||'',
+    sport: p.sport||'',
+    odds: p.bestOdds||p.odds||'-110',
+    rate: p.rate||'',
+    direction: p.direction||'OVER',
+  });
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
 
 </script>
 </body>

@@ -284,7 +284,7 @@ REAL STATS via MLB Stats API · Lines &amp; odds from Linemate (20+ books) when 
 <thead id="tableHead"><tr>
 <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
 <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th>
-<th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th>
+<th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
 </tr></thead>
 <tbody id="tableBody"><tr class="loading-row"><td colspan="10">
 <div class="empty"><div class="empty-icon">⚾</div><p>Hit ⚡ RUN SCAN to load real MLB prop trends.</p></div>
@@ -337,7 +337,7 @@ const lmsk=getStored('lmToken'); if(lmsk){document.getElementById('lmToken').val
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}if(k==='oddsApiKey')setApiStatus(!!v.trim());if(k==='lmToken')setLmStatus(!!v.trim());}
 function setApiStatus(ok){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
 function setLmStatus(ok){const el=document.getElementById('lmStatus');if(!el)return;el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
-function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',Object.keys(TABS)[i]===tab);});const cfg=TABS[tab];const ip=cfg.type==='pitcher';document.getElementById('tableTitle').textContent=cfg.label+' — TODAY\'S GAMES';document.getElementById('tableHead').innerHTML=`<tr><th>${ip?'PITCHER':'PLAYER'}</th><th class="hide-mobile">TEAM</th><th>PROP</th><th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th><th class="hide-mobile-sm">${ip?'OPP':'MATCHUP'}</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th></tr>`;renderTable();}
+function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',Object.keys(TABS)[i]===tab);});const cfg=TABS[tab];const ip=cfg.type==='pitcher';document.getElementById('tableTitle').textContent=cfg.label+' — TODAY\'S GAMES';document.getElementById('tableHead').innerHTML=`<tr><th>${ip?'PITCHER':'PLAYER'}</th><th class="hide-mobile">TEAM</th><th>PROP</th><th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th><th class="hide-mobile-sm">${ip?'OPP':'MATCHUP'}</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th></tr>`;renderTable();}
 function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
 function toggleUpcoming(el){upcomingOnly=!upcomingOnly;el.classList.toggle('active',upcomingOnly);renderTable();}
 function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
@@ -735,7 +735,7 @@ const goodOdds = !odds || (p.direction==='OVER' ? odds>=-130 : odds>=-130);
 return rate>=80 && streak>=2 && goodOdds;
 }
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching real MLB stats via proxy…</td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching real MLB stats via proxy…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -852,6 +852,21 @@ window.savePropsSnapshot=function(plays,sport){
     autoRun();
   }
 })();
+
+
+// ── LOG BET TO TRACKER ──
+function logBet(p){
+  const params = new URLSearchParams({
+    player: p.player||'',
+    prop: p.prop||'',
+    propType: p.propType||p.propKey||p.category||'',
+    sport: p.sport||'',
+    odds: p.bestOdds||p.odds||'-110',
+    rate: p.rate||'',
+    direction: p.direction||'OVER',
+  });
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
 
 </script>
 </body>

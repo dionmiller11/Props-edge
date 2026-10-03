@@ -172,7 +172,7 @@
         <thead><tr>
           <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
           <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 5</th>
-          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th>
+          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
         </tr></thead>
         <tbody id="tableBody"><tr class="loading-row"><td colspan="10"><div class="empty"><div class="empty-icon">🏀</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
       </table>
@@ -317,7 +317,7 @@ function exportCSV(){const rows=allData;const csv=['Player,Team,Pos,Prop,Directi
 function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏀 Player Props\n\n| Player | Pos | Team | Prop | Dir | Rate | Opp | Game | Streak |\n|--------|-----|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.position} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}W |`).join('\n')}\n`;const md=`---\ntags: [props, wnba, betting, linemate]\ndate: ${todayStr}\nsport: WNBA\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏀 WNBA Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`WNBA Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
 function copyPlay(p){const dir=p.direction||'OVER';const arrow=dir==='OVER'?'▲':'▼';const txt=`${p.player} (${p.team}) · ${arrow} ${dir} ${p.prop.split(' ').slice(-1)[0]} · ${p.rate}% L${p.games} · ${p.bestOdds?(p.bestOdds>0?'+':'')+p.bestOdds:'—'}`;navigator.clipboard.writeText(txt).then(()=>{const t=document.getElementById('copyToast');t.textContent='📋 Copied: '+p.player;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}).catch(()=>showToast('Copy failed'));}
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching WNBA props from Linemate…</td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching WNBA props from Linemate…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -355,6 +355,21 @@ if(getStored('lmToken'))setTimeout(()=>runScan(),900);
     autoRun();
   }
 })();
+
+
+// ── LOG BET TO TRACKER ──
+function logBet(p){
+  const params = new URLSearchParams({
+    player: p.player||'',
+    prop: p.prop||'',
+    propType: p.propType||p.propKey||p.category||'',
+    sport: p.sport||'',
+    odds: p.bestOdds||p.odds||'-110',
+    rate: p.rate||'',
+    direction: p.direction||'OVER',
+  });
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
 
 </script>
 </body>

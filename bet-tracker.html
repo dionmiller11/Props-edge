@@ -436,6 +436,45 @@ function exportCSV(){
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 renderBets();updateStats();
+
+// ── PREFILL FROM URL PARAMS (auto-import from props tools) ──
+(function(){
+  const p = new URLSearchParams(window.location.search);
+  if(!p.get('player') && !p.get('prop')) return;
+  // Wait for DOM
+  function fill(){
+    if(p.get('player')) document.getElementById('f-player').value = p.get('player');
+    if(p.get('prop')){
+      // Strip direction prefix if present (e.g. "Points O22.5" -> show as-is)
+      document.getElementById('f-prop').value = p.get('prop');
+    }
+    if(p.get('propType')){
+      // Try to match select option
+      const sel = document.getElementById('f-proptype');
+      const opts = Array.from(sel.options);
+      const match = opts.find(o => o.value.toLowerCase() === (p.get('propType')||'').toLowerCase() || o.text.toLowerCase().includes((p.get('propType')||'').toLowerCase()));
+      if(match) sel.value = match.value;
+    }
+    if(p.get('sport')){
+      const sel = document.getElementById('f-sport');
+      const opts = Array.from(sel.options);
+      const match = opts.find(o => o.value === p.get('sport'));
+      if(match) sel.value = match.value;
+    }
+    if(p.get('odds')) document.getElementById('f-odds').value = p.get('odds');
+    if(p.get('rate')) document.getElementById('f-rate').value = p.get('rate');
+    // Flash the form to show it was prefilled
+    const panel = document.querySelector('.add-bet-panel');
+    if(panel){ panel.style.borderColor='var(--accent2)'; setTimeout(()=>panel.style.borderColor='',2000); }
+    // Show a toast
+    showToast('📋 Pre-filled from Props Edge!');
+    // Clean URL without reload
+    window.history.replaceState({},'',window.location.pathname);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',fill);
+  else fill();
+})();
+
 </script>
 </body>
 </html>
