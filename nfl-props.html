@@ -180,6 +180,10 @@
       font-family:var(--font);
     }
   }
+
+  .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
+  .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
+  .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
 </style>
 </head>
 <body>
@@ -564,7 +568,7 @@ async function runScan(){
 
     hideProgress();
     populateTeamFilter();
-    saveLines(allData);
+    saveLines(allData);saveLineHistory(allData);
     await prefetchInjuries(allData);
     renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
@@ -622,7 +626,7 @@ function renderTable(){
     const st=(p.streak||0)>=2?`<span class="streak-badge hot">🔥${p.streak}W</span>`:'<span class="streak-badge cold">—</span>';
     const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
     const op=p.bestOdds;
-    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const bookCountLabel=p.bookCount?`<span style="font-size:9px;color:var(--muted);margin-left:4px">${p.bookCount} books</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}${bookCountLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const bookCountLabel=p.bookCount?`<span style="font-size:9px;color:var(--muted);margin-left:4px">${p.bookCount} books</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}${bookCountLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const gtColor=gameTimeColor(p.gameTime); const timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
       <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
@@ -922,6 +926,57 @@ function logBet(p){
     direction: p.direction||'OVER',
   });
   window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+
+// ── LINE HISTORY SPARKLINE ──
+const LH_KEY = 'lineHistory_' + window.location.pathname.split('/').pop().replace('.html','');
+const MAX_LH_SNAPSHOTS = 6;
+
+function saveLineHistory(data){
+  const ds = new Date().toISOString().split('T')[0];
+  let hist;
+  try{ hist = JSON.parse(localStorage.getItem(LH_KEY)||'{}'); }catch(e){ hist={}; }
+  if(hist.date !== ds){ hist = {date:ds, snaps:[]}; }
+  // Build snapshot of current lines
+  const snap = {ts: Date.now(), lines:{}};
+  data.forEach(p=>{
+    const k = p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');
+    snap.lines[k] = parseFloat(p.line)||0;
+  });
+  hist.snaps.push(snap);
+  if(hist.snaps.length > MAX_LH_SNAPSHOTS) hist.snaps = hist.snaps.slice(-MAX_LH_SNAPSHOTS);
+  try{ localStorage.setItem(LH_KEY, JSON.stringify(hist)); }catch(e){}
+}
+
+function getLineHistory(p){
+  try{
+    const hist = JSON.parse(localStorage.getItem(LH_KEY)||'{}');
+    if(!hist.snaps || hist.snaps.length < 2) return null;
+    const ds = new Date().toISOString().split('T')[0];
+    if(hist.date !== ds) return null;
+    const k = p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');
+    const vals = hist.snaps.map(s=>s.lines[k]).filter(v=>v!=null&&v>0);
+    if(vals.length < 2) return null;
+    return vals;
+  }catch(e){ return null; }
+}
+
+function lineSparkHtml(p){
+  const vals = getLineHistory(p);
+  if(!vals || vals.length < 2) return '';
+  const mn=Math.min(...vals), mx=Math.max(...vals), range=mx-mn;
+  if(range < 0.5) return ''; // no meaningful movement
+  const first=vals[0], last=vals[vals.length-1];
+  const moved = last - first;
+  const color = moved > 0 ? 'var(--miss)' : moved < 0 ? 'var(--accent2)' : 'var(--muted)';
+  const arrow = moved > 0 ? '▲' : moved < 0 ? '▼' : '';
+  const bars = vals.map(v=>{
+    const h = range > 0 ? Math.max(2, Math.round(((v-mn)/range)*14)+2) : 8;
+    const bc = v===mx?'var(--miss)':v===mn?'var(--accent2)':'var(--muted)';
+    return `<div class="line-spark-bar" style="height:${h}px;background:${bc}"></div>`;
+  }).join('');
+  return `<span class="line-spark" title="Line history: ${vals.join(' → ')}">${bars}</span><span class="line-spark-label" style="color:${color}">${arrow}${Math.abs(moved).toFixed(1)}</span>`;
 }
 
 </script>

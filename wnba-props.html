@@ -106,6 +106,10 @@
 
   .b2b-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(255,107,53,.15);color:var(--warn);border:1px solid rgba(255,107,53,.35);margin-left:4px;font-family:var(--font);}
   .b2b-fade{background:rgba(255,107,53,.04);}
+
+  .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
+  .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
+  .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
 </style>
 </head>
 <body>
@@ -313,6 +317,7 @@ async function runScan(){
     document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
     setStatus('done',`✅ ${allData.length} WNBA prop edges — ${new Date().toLocaleTimeString()}`);
     document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
+    saveLineHistory(allData);
   }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);document.getElementById('tokenBox').style.display='block';}
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
@@ -425,6 +430,57 @@ function logBet(p){
     direction: p.direction||'OVER',
   });
   window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+
+// ── LINE HISTORY SPARKLINE ──
+const LH_KEY = 'lineHistory_' + window.location.pathname.split('/').pop().replace('.html','');
+const MAX_LH_SNAPSHOTS = 6;
+
+function saveLineHistory(data){
+  const ds = new Date().toISOString().split('T')[0];
+  let hist;
+  try{ hist = JSON.parse(localStorage.getItem(LH_KEY)||'{}'); }catch(e){ hist={}; }
+  if(hist.date !== ds){ hist = {date:ds, snaps:[]}; }
+  // Build snapshot of current lines
+  const snap = {ts: Date.now(), lines:{}};
+  data.forEach(p=>{
+    const k = p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');
+    snap.lines[k] = parseFloat(p.line)||0;
+  });
+  hist.snaps.push(snap);
+  if(hist.snaps.length > MAX_LH_SNAPSHOTS) hist.snaps = hist.snaps.slice(-MAX_LH_SNAPSHOTS);
+  try{ localStorage.setItem(LH_KEY, JSON.stringify(hist)); }catch(e){}
+}
+
+function getLineHistory(p){
+  try{
+    const hist = JSON.parse(localStorage.getItem(LH_KEY)||'{}');
+    if(!hist.snaps || hist.snaps.length < 2) return null;
+    const ds = new Date().toISOString().split('T')[0];
+    if(hist.date !== ds) return null;
+    const k = p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');
+    const vals = hist.snaps.map(s=>s.lines[k]).filter(v=>v!=null&&v>0);
+    if(vals.length < 2) return null;
+    return vals;
+  }catch(e){ return null; }
+}
+
+function lineSparkHtml(p){
+  const vals = getLineHistory(p);
+  if(!vals || vals.length < 2) return '';
+  const mn=Math.min(...vals), mx=Math.max(...vals), range=mx-mn;
+  if(range < 0.5) return ''; // no meaningful movement
+  const first=vals[0], last=vals[vals.length-1];
+  const moved = last - first;
+  const color = moved > 0 ? 'var(--miss)' : moved < 0 ? 'var(--accent2)' : 'var(--muted)';
+  const arrow = moved > 0 ? '▲' : moved < 0 ? '▼' : '';
+  const bars = vals.map(v=>{
+    const h = range > 0 ? Math.max(2, Math.round(((v-mn)/range)*14)+2) : 8;
+    const bc = v===mx?'var(--miss)':v===mn?'var(--accent2)':'var(--muted)';
+    return `<div class="line-spark-bar" style="height:${h}px;background:${bc}"></div>`;
+  }).join('');
+  return `<span class="line-spark" title="Line history: ${vals.join(' → ')}">${bars}</span><span class="line-spark-label" style="color:${color}">${arrow}${Math.abs(moved).toFixed(1)}</span>`;
 }
 
 </script>
