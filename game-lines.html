@@ -204,7 +204,7 @@ const ESPN_SPORTS = {
 };
 
 let allGames = [], activeSports = new Set(['NFL']), activePage = 'lines', parlayLegs = [];
-let openerData = {}, alertLog = [];
+let openerData = {}, alertLog = [], publicPctData = {};
 
 // ── SPORT TOGGLES ──
 function toggleSport(sport, el){
@@ -271,10 +271,13 @@ async function fetchESPNGames(sport){
 // ── FETCH ACTION NETWORK PUBLIC % ──
 async function fetchPublicPct(anKey, dateStr){
   try{
-    const res = await fetch(`https://api.actionnetwork.com/web/v1/scoreboard/${anKey}?period=game&bookIds=15,30,69,76,123&date=${dateStr}`,
-      {headers:{'User-Agent':'Mozilla/5.0','Referer':'https://www.actionnetwork.com/'}});
+    // Route through line monitor Worker which already has ActionNetwork access
+    const anUrl = `https://api.actionnetwork.com/web/v1/scoreboard/${anKey}?period=game&bookIds=15,30,69,76,123&date=${dateStr}`;
+    const proxyUrl = `https://sports-proxy.dion-miller11.workers.dev?url=${encodeURIComponent(anUrl)}`;
+    const res = await fetch(proxyUrl);
     if(!res.ok) return {};
     const data = await res.json();
+    if(data.error) return {}; // proxy returned error
     const splits = {};
     for(const game of (data.games||[])){
       const teams = game.teams||[];
@@ -315,17 +318,35 @@ async function loadAll(){
     });
   }));
 
-  allGames = results.flat();
+  allGames = results.flat().map(g=>{
+    // Supplement with Worker's stored public %
+    const key = `${g.away}@${g.home}`.toLowerCase();
+    if(!g.public && publicPctData[key]) g.public = publicPctData[key];
+    return g;
+  });
 
-  // Load opener data and alert log from Worker
+  // Load opener data, alert log, and public % from Worker
   try{
     const [statusRes, linesRes] = await Promise.all([
       fetch(`${WORKER_URL}/monitor/status`),
       fetch(`${WORKER_URL}/monitor/lines`),
     ]);
-    if(statusRes.ok){ const d=await statusRes.json(); alertLog=d.alerts||[]; }
+    if(statusRes.ok){ 
+      const d=await statusRes.json(); 
+      alertLog=d.alerts||[];
+      // Extract public % from last run sportsMeta
+      if(d.lastRun?.sportsMeta){
+        Object.values(d.lastRun.sportsMeta).forEach(s=>{
+          if(s.splits) Object.assign(publicPctData, s.splits);
+        });
+      }
+    }
     if(linesRes.ok){ const d=await linesRes.json(); 
-      (d.lines||[]).forEach(l=>{ openerData[l.id]={opener:l.opener,spreadMove:l.spreadMove,totalMove:l.totalMove}; });
+      (d.lines||[]).forEach(l=>{ 
+        openerData[l.id]={opener:l.opener,spreadMove:l.spreadMove,totalMove:l.totalMove};
+        // Use public % from lines endpoint if available
+        if(l.publicPct) publicPctData[`${l.away}@${l.home}`.toLowerCase()] = l.publicPct;
+      });
     }
   }catch(e){ console.warn('Worker data unavailable:', e.message); }
 
