@@ -80,6 +80,41 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
   .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
   .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
+
+  /* ── MOBILE CARD LAYOUT ── */
+  @media(max-width:480px){
+    .summary{grid-template-columns:repeat(2,1fr);}
+    .filters{flex-direction:row;flex-wrap:wrap;gap:6px;padding:10px 12px;}
+    .filter-label{display:none;}
+    .filter-group{gap:4px;}
+    header{padding:10px 12px;gap:6px;}
+    .header-right{gap:6px;}
+    .btn{padding:6px 10px;font-size:11px;}
+    .api-banner{grid-template-columns:1fr;gap:6px;padding:8px 12px;}
+    .api-row span:first-child{font-size:10px;}
+    main{padding:12px 10px;}
+    /* Hide table on mobile, show cards instead */
+    .table-wrap table{display:none;}
+    .mobile-cards{display:flex;flex-direction:column;gap:8px;padding:10px;}
+    /* Each card */
+    .prop-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:background .1s;}
+    .prop-card:active{background:#1e2d45;}
+    .prop-card.b2b-fade{border-left:3px solid var(--warn);}
+    .prop-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+    .prop-card-player{font-family:var(--sans);font-weight:700;font-size:13px;flex:1;min-width:0;}
+    .prop-card-rate{font-family:var(--font);font-weight:700;font-size:16px;}
+    .prop-card-mid{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+    .prop-card-prop{font-size:11px;color:var(--accent);font-family:var(--font);}
+    .prop-card-line{font-size:11px;font-weight:700;}
+    .prop-card-bot{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+    .prop-card-meta{font-size:10px;color:var(--muted);font-family:var(--font);}
+    .prop-card-actions{display:flex;gap:6px;}
+    .prop-card-btn{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:var(--font);}
+    .prop-card-btn.green{background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25);}
+  }
+  @media(min-width:481px){
+    .mobile-cards{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -295,7 +330,7 @@ function renderTable(){
   let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(b2bOnly&&!p.b2b)return false;return true;});
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
-  tbody.innerHTML=data.map(p=>{
+  renderMobileCards(data);tbody.innerHTML=data.map(p=>{
     const rate=p.rate||0,ip=p.isPitcher,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok';
     const _cs=(()=>{const streak=p.streak||0,odds=p.bestOdds,goodOdds=!odds||odds>=-130,bookSignal=!p.bookCount||p.bookCount>=8,bookAgree=!p.bookAgreePct||p.bookAgreePct>=60;if(rate>=80&&streak>=2&&goodOdds&&bookSignal&&bookAgree){return(p.bookCount>=15&&p.bookAgreePct>=75)||rate>=90?'sharp':'standard';}return null;})();
     const el=_cs==='sharp'?'🔥 SHARP':_cs==='standard'?'⚡ CONSENSUS':rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
@@ -410,6 +445,45 @@ function lineSparkHtml(p){
   return `<span class="line-spark" title="Line history: ${vals.join(' → ')}">${bars}</span><span class="line-spark-label" style="color:${color}">${arrow}${Math.abs(moved).toFixed(1)}</span>`;
 }
 
+
+// ── MOBILE CARD RENDERER ──
+function renderMobileCards(data){
+  const wrap = document.getElementById('mobileCards');
+  if(!wrap) return;
+  if(!data.length){wrap.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No props found</div>';return;}
+  wrap.innerHTML = data.map(p=>{
+    const rate=p.rate||0;
+    const rateColor=rate>=90?'var(--gold)':rate>=80?'var(--accent2)':'var(--accent)';
+    const dir=p.direction||'OVER';
+    const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
+    const dirArrow=dir==='OVER'?'▲':'▼';
+    const badge=isConsensus&&isConsensus(p)?(()=>{const cs=typeof consensusStrength==='function'?consensusStrength(p):null;return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);font-size:9px">🔥 SHARP</span>':'<span class="edge-badge consensus" style="font-size:9px">⚡ CONS</span>';})():rate>=90?'<span class="edge-badge fire" style="font-size:9px">🔥 ELITE</span>':rate>=80?'<span class="edge-badge strong" style="font-size:9px">✅ STR</span>':'';
+    const b2b=p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':'';
+    const streak=(p.streak||0)>=3?`<span class="streak-badge hot" style="font-size:9px">🔥${p.streak}G</span>`:'';
+    const bookStr=p.bookCount?`<span style="font-size:9px;color:var(--muted)">${p.bookCount}bks</span>`:'';
+    const odds=p.bestOdds;const oddsStr=odds?(odds>0?'+':'')+odds:'';
+    const opp=p.opposingTeam||p.opp||'';
+    const gameTime=p.gameTime||'';
+    return`<div class="prop-card ${p.b2b?'b2b-fade':''}" onclick="navigator.clipboard&&navigator.clipboard.writeText('${(p.player+'|'+p.prop+'|'+dir).replace(/'/g,'')}')" >
+      <div class="prop-card-top">
+        <div class="prop-card-player">${esc(p.player)}${b2b}</div>
+        <div class="prop-card-rate" style="color:${rateColor}">${rate}%</div>
+      </div>
+      <div class="prop-card-mid">
+        <span class="prop-card-prop">${esc(p.prop)}</span>
+        <span class="prop-card-line" style="color:${dc}">${dirArrow} ${esc(p.line)} ${oddsStr}</span>
+        ${bookStr}${streak}${badge}
+      </div>
+      <div class="prop-card-bot">
+        <div class="prop-card-meta">${opp?`vs ${esc(opp)}`:''}${gameTime?' · '+esc(gameTime):''} · ${p.hits||0}/${p.games||10} ${dir}</div>
+        <div class="prop-card-actions">
+          <button class="prop-card-btn" onclick="event.stopPropagation();addToParlay({player:'${esc(p.player)}',team:'${esc(p.team||'')}',prop:'${esc(p.prop)}',line:'${esc(p.line)}',direction:'${dir}',rate:${rate},sport:'${esc(p.sport||'')}'})" >+</button>
+          <button class="prop-card-btn green" onclick="event.stopPropagation();logBet(${JSON.stringify(p).replace(/'/g,'&#39;').replace(/"/g,'&quot;')})">📋</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 </script>
 </body>
 </html>
