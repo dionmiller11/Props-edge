@@ -186,6 +186,51 @@ async function getB2BTeams(espnPath) {
 let b2bTeams = new Set();
 let b2bOnly = false;
 function toggleB2B(el){b2bOnly=!b2bOnly;el.classList.toggle('active',b2bOnly);renderTable();}
+
+// ── NBA DEFENSIVE MATCHUP GRADES ──
+let defRankings = {};
+async function fetchNBADefense(){
+  try{
+    // Use ESPN scoreboard which has team abbreviations we can match
+    // Ball Don't Lie API for season averages — free, no key
+    const res = await fetch('https://api.balldontlie.io/v1/teams/stats?season=2025&per_page=30',{headers:{'Authorization':''}});
+    // Fallback: ESPN team defense via scoreboard already fetched
+    // Simple approach: use the opposingTeam already in results, 
+    // fetch a known public NBA defense endpoint
+    const r2 = await fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams?limit=30');
+    if(!r2.ok) return;
+    const data = await r2.json();
+    const teams=[];
+    for(const entry of (data.sports?.[0]?.leagues?.[0]?.teams||[])){
+      const t=entry.team;
+      if(!t) continue;
+      // Use win percentage as proxy (bad teams = easy defense)
+      const wins=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='wins')?.value||0);
+      const losses=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='losses')?.value||0);
+      const total=wins+losses;
+      if(total<5) continue;
+      teams.push({abbr:t.abbreviation?.toUpperCase(), winPct: total?wins/total:0.5});
+    }
+    // Sort by win pct ascending = worst teams = easiest defense for scorers
+    teams.sort((a,b)=>a.winPct-b.winPct);
+    const n=teams.length;
+    teams.forEach((t,i)=>{
+      const pct=i/n;
+      defRankings[t.abbr]={
+        grade:pct<0.25?'D':pct<0.5?'C':pct<0.75?'B':'A',
+        label:pct<0.25?'TOUGH':pct<0.5?'AVG':pct<0.75?'SOFT':'EASY',
+        color:pct<0.25?'var(--miss)':pct<0.5?'var(--muted)':pct<0.75?'var(--accent2)':'var(--gold)',
+        rank:i+1,total:n
+      };
+    });
+  }catch(e){console.warn('Def rankings failed:',e.message);}
+}
+function defBadge(opp){
+  const d=defRankings[(opp||'').toUpperCase()];
+  if(!d) return '';
+  return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Defense rank ${d.rank}/${d.total}">${d.label}</span>`;
+}
+
 async function runScan(){
   const token=getStored('lmToken');if(!token){showError('Paste your Linemate JWT token above first.');return;}
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
@@ -194,6 +239,7 @@ async function runScan(){
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
   setStatus('running','📡 Fetching NBA props from Linemate…');setLoadingRow();
   b2bTeams = await getB2BTeams('basketball/nba');
+  await fetchNBADefense();
   try{
     setProgress(20,'Fetching Linemate NBA trends…');
     const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
@@ -252,7 +298,7 @@ function renderTable(){
     const dir=p.direction||'OVER',dc=dir==='OVER'?'var(--accent2)':'var(--miss)',op=p.bestOdds;
     const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span><br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
-    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ec}">${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
+    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ec}">${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
   }).join('');
 }
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-pitchers').textContent=q.filter(p=>p.propKey==='pointsReboundsAssists').length;}

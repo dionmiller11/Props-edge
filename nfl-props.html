@@ -414,6 +414,44 @@ function populateTeamFilter(){
   if(teams.includes(cur))sel.value=cur;
 }
 
+
+// ── NFL DEFENSIVE MATCHUP GRADES ──
+let defRankings = {};
+async function fetchNFLDefense(){
+  try{
+    // ESPN NFL teams with stats
+    const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=32');
+    if(!res.ok) return;
+    const data = await res.json();
+    const teams=[];
+    for(const entry of (data.sports?.[0]?.leagues?.[0]?.teams||[])){
+      const t=entry.team;
+      if(!t) continue;
+      const wins=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='wins')?.value||0);
+      const losses=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='losses')?.value||0);
+      const total=wins+losses;
+      teams.push({abbr:t.abbreviation?.toUpperCase(), winPct:total?wins/total:0.5, total});
+    }
+    // Sort ascending by win pct = worst teams = softest defense
+    teams.sort((a,b)=>a.winPct-b.winPct);
+    const n=teams.length;
+    teams.forEach((t,i)=>{
+      const pct=i/n;
+      defRankings[t.abbr]={
+        grade:pct<0.25?'D':pct<0.5?'C':pct<0.75?'B':'A',
+        label:pct<0.25?'TOUGH':pct<0.5?'AVG':pct<0.75?'SOFT':'EASY',
+        color:pct<0.25?'var(--miss)':pct<0.5?'var(--muted)':pct<0.75?'var(--accent2)':'var(--gold)',
+        rank:i+1,total:n
+      };
+    });
+  }catch(e){console.warn('NFL def rankings failed:',e.message);}
+}
+function defBadge(opp){
+  const d=defRankings[(opp||'').toUpperCase()];
+  if(!d) return '';
+  return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Defense rank ${d.rank}/${d.total}">${d.label}</span>`;
+}
+
 async function runScan(){
   const token = getStored('lmToken');
   if(!token){showError('Paste your Linemate JWT token above first.');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
@@ -581,7 +619,7 @@ function renderTable(){
       <td>${lineHtml}</td>
       <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits||''}/${p.games||5} ${dir}</span></td>
       <td>${spark}</td>
-      <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}</span></td>
+      <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>
       <td class="hide-mobile-sm">${isConsensus(p)?'<span class="edge-badge consensus">⚡ CONSENSUS</span>':'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
       <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button></td>
