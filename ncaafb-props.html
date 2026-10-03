@@ -236,18 +236,45 @@ function monteCarloSim(avg, stdDev, line, direction, n=MC_SIMULATIONS){
 
 // ── FETCH PRIZEPICKS NCAAFB ──
 async function fetchPrizePicks(){
-  // Try via proxy first to avoid CORS, then direct
+  // Try proxy first (sports-proxy allowlist needs partner-api.prizepicks.com)
+  const proxyUrl = `${PROXY}?url=${encodeURIComponent(PP_URL)}`;
   try {
-    const res = await fetch(`${PROXY}?url=${encodeURIComponent(PP_URL)}`);
+    const res = await fetch(proxyUrl);
     if(res.ok){
-      const data = await res.json();
-      if(data.data) return data;
+      const text = await res.text();
+      // Check if proxy returned an error page or JSON
+      if(text.startsWith('{')||text.startsWith('[')){
+        const data = JSON.parse(text);
+        if(data.data) return data;
+      }
     }
-  } catch(e){}
-  // Direct fetch
-  const res = await fetch(PP_URL, {headers:{'User-Agent':'Mozilla/5.0'}});
-  if(!res.ok) throw new Error('PrizePicks API error: ' + res.status);
-  return res.json();
+  } catch(e){ console.warn('Proxy failed:', e.message); }
+  
+  // Try alternate PrizePicks endpoints
+  const endpoints = [
+    'https://partner-api.prizepicks.com/projections?league_id=182&per_page=250&single_stat=true',
+    'https://api.prizepicks.com/projections?league_id=182&per_page=250&single_stat=true',
+  ];
+  
+  for(const url of endpoints){
+    try {
+      const res = await fetch(url, {
+        headers:{
+          'Accept':'application/json',
+          'Accept-Language':'en-US,en;q=0.9',
+          'Origin':'https://app.prizepicks.com',
+          'Referer':'https://app.prizepicks.com/',
+        },
+        mode:'cors',
+      });
+      if(res.ok){
+        const data = await res.json();
+        if(data.data) return data;
+      }
+    } catch(e){ console.warn('Direct fetch failed:', e.message); }
+  }
+  
+  throw new Error('PrizePicks API blocked by browser CORS policy. Add partner-api.prizepicks.com to your Cloudflare proxy allowlist.');
 }
 
 // ── FETCH PLAYER STATS FROM ESPN CFB ──
