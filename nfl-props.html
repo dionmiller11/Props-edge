@@ -417,34 +417,40 @@ function populateTeamFilter(){
 
 // ── NFL DEFENSIVE MATCHUP GRADES ──
 let defRankings = {};
+
+function buildDefRankings(teamMap){
+  const teams=Object.entries(teamMap).map(([abbr,v])=>({abbr,...v}));
+  // Sort ascending = worst teams = softest defense for opposing scorers
+  teams.sort((a,b)=>a.winPct-b.winPct);
+  const n=teams.length;
+  teams.forEach((t,i)=>{
+    const pct=i/n;
+    defRankings[t.abbr]={
+      label:pct<0.25?'TOUGH':pct<0.5?'AVG':pct<0.75?'SOFT':'EASY',
+      color:pct<0.25?'var(--miss)':pct<0.5?'var(--muted)':pct<0.75?'var(--accent2)':'var(--gold)',
+      rank:i+1,total:n
+    };
+  });
+}
 async function fetchNFLDefense(){
   try{
-    // ESPN NFL teams with stats
-    const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=32');
+    const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
     if(!res.ok) return;
-    const data = await res.json();
-    const teams=[];
-    for(const entry of (data.sports?.[0]?.leagues?.[0]?.teams||[])){
-      const t=entry.team;
-      if(!t) continue;
-      const wins=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='wins')?.value||0);
-      const losses=parseInt(t.record?.items?.[0]?.stats?.find(s=>s.name==='losses')?.value||0);
-      const total=wins+losses;
-      teams.push({abbr:t.abbreviation?.toUpperCase(), winPct:total?wins/total:0.5, total});
+    const data=await res.json();
+    const teamMap={};
+    for(const evt of (data.events||[])){
+      for(const comp of (evt.competitions||[])){
+        for(const c of (comp.competitors||[])){
+          const abbr=(c.team?.abbreviation||'').toUpperCase();
+          const w=parseInt(c.records?.[0]?.summary?.split('-')[0]||0);
+          const l=parseInt(c.records?.[0]?.summary?.split('-')[1]||0);
+          if(abbr&&(w+l)>0) teamMap[abbr]={winPct:w/(w+l)};
+        }
+      }
     }
-    // Sort ascending by win pct = worst teams = softest defense
-    teams.sort((a,b)=>a.winPct-b.winPct);
-    const n=teams.length;
-    teams.forEach((t,i)=>{
-      const pct=i/n;
-      defRankings[t.abbr]={
-        grade:pct<0.25?'D':pct<0.5?'C':pct<0.75?'B':'A',
-        label:pct<0.25?'TOUGH':pct<0.5?'AVG':pct<0.75?'SOFT':'EASY',
-        color:pct<0.25?'var(--miss)':pct<0.5?'var(--muted)':pct<0.75?'var(--accent2)':'var(--gold)',
-        rank:i+1,total:n
-      };
-    });
-  }catch(e){console.warn('NFL def rankings failed:',e.message);}
+    buildDefRankings(teamMap);
+    console.log('NFL def loaded:',Object.keys(defRankings).length,'teams');
+  }catch(e){console.warn('NFL def failed:',e.message);}
 }
 // Normalize abbreviations between Linemate and ESPN
 const ABBR_MAP={'JAC':'JAX','WSH':'WAS','GBP':'GB','NOR':'NO','SFO':'SF','TBB':'TB','NEP':'NE','KCC':'KC','LVR':'LV','LAR':'LAR','LAC':'LAC','ARZ':'ARI','HST':'HOU','CLV':'CLE','PIT':'PIT','CIN':'CIN','BLT':'BAL','IND':'IND','TEN':'TEN','JAX':'JAX'};
