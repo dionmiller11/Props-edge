@@ -112,7 +112,7 @@
   .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
 
   /* ── MOBILE CARD LAYOUT ── */
-  @media(max-width:480px){
+  @media(max-width:768px){
     .summary{grid-template-columns:repeat(2,1fr);}
     .filters{flex-direction:row;flex-wrap:wrap;gap:6px;padding:10px 12px;}
     .filter-label{display:none;}
@@ -142,8 +142,11 @@
     .prop-card-btn{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:var(--font);}
     .prop-card-btn.green{background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25);}
   }
-  @media(min-width:481px){
+  @media(min-width:769px){
     .mobile-cards{display:none;}
+  }
+  @media(max-width:768px){
+    .table-scroll{display:none;}
   }
 </style>
 </head>
