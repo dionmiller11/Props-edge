@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monitor Settings — Props Edge</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);flex-shrink:0;}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--accent);}
+.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;}
+.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#000;} .btn-primary:hover{background:#33ddff;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-red{background:rgba(255,77,109,.12);color:var(--miss);border:1px solid rgba(255,77,109,.3);}
+main{max-width:760px;margin:0 auto;padding:18px 16px;}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;}
+.section-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.section-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+.section-body{padding:16px;}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(30,45,69,.4);gap:16px;}
+.setting-row:last-child{border-bottom:none;}
+.setting-label{flex:1;}
+.setting-name{font-size:12px;font-weight:600;color:var(--text);}
+.setting-desc{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:2px;}
+.setting-control{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.num-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;width:72px;text-align:center;outline:none;}
+.num-input:focus{border-color:var(--accent);}
+.unit{font-size:11px;color:var(--muted);font-family:var(--font);}
+/* Toggle switch */
+.toggle{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:22px;transition:.2s;}
+.toggle-slider:before{position:absolute;content:'';height:16px;width:16px;left:3px;bottom:3px;background:var(--muted);border-radius:50%;transition:.2s;}
+input:checked + .toggle-slider{background:var(--accent2);}
+input:checked + .toggle-slider:before{transform:translateX(18px);background:#000;}
+/* Priority select */
+.priority-select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-family:var(--font);font-size:11px;outline:none;cursor:pointer;}
+/* Sport grid */
+.sport-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:14px 16px;}
+.sport-toggle-card{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;}
+.sport-toggle-name{font-size:11px;font-weight:700;letter-spacing:.06em;}
+/* Status */
+.status-bar{font-family:var(--font);font-size:11px;padding:8px 16px;border-top:1px solid var(--border);color:var(--muted);}
+.status-bar.saved{color:var(--accent2);}
+.status-bar.error{color:var(--miss);}
+/* Reset box */
+.reset-box{background:rgba(255,77,109,.05);border:1px solid rgba(255,77,109,.15);border-radius:8px;padding:14px 16px;margin-bottom:16px;}
+.reset-box h3{font-size:11px;font-weight:700;color:var(--miss);letter-spacing:.06em;margin-bottom:6px;}
+.reset-box p{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+.toast.show{transform:translateY(0);opacity:1;}
+@media(max-width:600px){header,main{padding-left:12px;padding-right:12px;}.sport-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/line-monitor.html" class="home-btn">← Monitor</a>
+    <div class="logo-dot"></div>
+    <h1>MONITOR <span>SETTINGS</span></h1>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" onclick="loadSettings()">↻ Reload</button>
+    <button class="btn btn-primary" onclick="saveSettings()">💾 Save</button>
+  </div>
+</header>
+<main>
+  <div class="section">
+    <div class="section-header"><span class="section-title">📐 LINE MOVEMENT THRESHOLDS</span></div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">Spread Move</div><div class="setting-desc">Alert when spread moves this many points</div></div>
+        <div class="setting-control"><input class="num-input" id="t-spread" type="number" step="0.5" min="0.5" max="5" value="1.5"><span class="unit">pts</span></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">Total Move</div><div class="setting-desc">Alert when over/under moves this many points</div></div>
+        <div class="setting-control"><input class="num-input" id="t-total" type="number" step="0.5" min="0.5" max="5" value="2.0"><span class="unit">pts</span></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">Moneyline Move</div><div class="setting-desc">Alert when ML moves this many cents</div></div>
+        <div class="setting-control"><input class="num-input" id="t-ml" type="number" step="5" min="5" max="100" value="20"><span class="unit">¢</span></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">Prop Line Move</div><div class="setting-desc">Alert when a prop line moves this amount</div></div>
+        <div class="setting-control"><input class="num-input" id="t-prop" type="number" step="0.5" min="0.5" max="3" value="0.5"><span class="unit">pts</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span class="section-title">🚨 SHARP MONEY THRESHOLDS</span></div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">RLM Public % Trigger</div><div class="setting-desc">Fire RLM alert when this % of public is on one side but line moves opposite</div></div>
+        <div class="setting-control"><input class="num-input" id="t-rlm" type="number" step="5" min="50" max="90" value="60"><span class="unit">%</span></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">Steam Move Threshold</div><div class="setting-desc">Flag as steam when line moves this much in one 15-min check</div></div>
+        <div class="setting-control"><input class="num-input" id="t-steam" type="number" step="0.5" min="1" max="5" value="2.0"><span class="unit">pts</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span class="section-title">🔔 ALERT PRIORITIES</span><span style="font-size:10px;color:var(--muted);font-family:var(--font)">High = urgent ntfy ping</span></div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">🚨 RLM Alerts</div><div class="setting-desc">Reverse line movement — sharp vs public</div></div>
+        <div class="setting-control"><select class="priority-select" id="p-rlm"><option value="high">High (urgent)</option><option value="default">Default</option><option value="low">Low (quiet)</option></select></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">💨 Steam Moves</div><div class="setting-desc">Fast large line move in one check</div></div>
+        <div class="setting-control"><select class="priority-select" id="p-steam"><option value="high">High (urgent)</option><option value="default">Default</option><option value="low">Low (quiet)</option></select></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">🟣 Prop Moves</div><div class="setting-desc">Prop line movement alerts</div></div>
+        <div class="setting-control"><select class="priority-select" id="p-prop"><option value="high">High (urgent)</option><option value="default">Default</option><option value="low">Low (quiet)</option></select></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><div class="setting-name">📊 Game Line Moves</div><div class="setting-desc">Standard spread/total/ML movement</div></div>
+        <div class="setting-control"><select class="priority-select" id="p-move"><option value="high">High (urgent)</option><option value="default">Default</option><option value="low">Low (quiet)</option></select></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span class="section-title">📡 SPORT TOGGLES</span><span style="font-size:10px;color:var(--muted);font-family:var(--font)">Disable sports you don't want alerts for</span></div>
+    <div class="sport-grid" id="sportGrid">
+      <!-- populated by JS -->
+    </div>
+    <div class="status-bar" id="statusBar">Loading settings…</div>
+  </div>
+
+  <div class="reset-box">
+    <h3>⚠️ RESET TO DEFAULTS</h3>
+    <p>Resets all thresholds, priorities, and sport toggles back to the original values.</p>
+    <button class="btn btn-red" onclick="resetDefaults()">Reset All Settings</button>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const WORKER_URL_KEY = 'lineMonitorWorkerUrl';
+const workerUrl = localStorage.getItem(WORKER_URL_KEY) || 'https://line-monitor.dion-miller11.workers.dev';
+
+const SPORTS = [
+  {key:'nfl',label:'🏈 NFL',color:'#ff6b35'},
+  {key:'ncaaf',label:'🏈 NCAAFB',color:'#ffd700'},
+  {key:'nba',label:'🏀 NBA',color:'#00d4ff'},
+  {key:'wnba',label:'🏀 WNBA',color:'#ff69b4'},
+  {key:'mlb',label:'⚾ MLB',color:'#00ff88'},
+  {key:'nhl',label:'🏒 NHL',color:'#00e5ff'},
+  {key:'mma',label:'🥊 MMA',color:'#b06eff'},
+  {key:'epl',label:'⚽ EPL',color:'#4ade80'},
+  {key:'ucl',label:'⚽ UCL',color:'#4ade80'},
+  {key:'mls',label:'⚽ MLS',color:'#4ade80'},
+];
+
+const DEFAULTS = {
+  thresholds: {spread:1.5,total:2.0,ml:20,prop:0.5,rlm_public:60,steam:2.0},
+  sportToggles: {nfl:true,ncaaf:true,nba:true,wnba:true,mlb:true,nhl:true,mma:false,epl:false,ucl:false,mls:false},
+  alertPriorities: {rlm:'high',steam:'high',prop:'default',move:'default'},
+};
+
+function buildSportGrid(toggles){
+  const grid = document.getElementById('sportGrid');
+  grid.innerHTML = SPORTS.map(s => `
+    <div class="sport-toggle-card">
+      <div class="sport-toggle-name" style="color:${s.color}">${s.label}</div>
+      <label class="toggle">
+        <input type="checkbox" id="sport-${s.key}" ${toggles[s.key]!==false?'checked':''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  `).join('');
+}
+
+function applySettings(s){
+  const t = s.thresholds || DEFAULTS.thresholds;
+  const p = s.alertPriorities || DEFAULTS.alertPriorities;
+  document.getElementById('t-spread').value = t.spread ?? 1.5;
+  document.getElementById('t-total').value  = t.total  ?? 2.0;
+  document.getElementById('t-ml').value     = t.ml     ?? 20;
+  document.getElementById('t-prop').value   = t.prop   ?? 0.5;
+  document.getElementById('t-rlm').value    = t.rlm_public ?? 60;
+  document.getElementById('t-steam').value  = t.steam  ?? 2.0;
+  document.getElementById('p-rlm').value   = p.rlm   || 'high';
+  document.getElementById('p-steam').value = p.steam || 'high';
+  document.getElementById('p-prop').value  = p.prop  || 'default';
+  document.getElementById('p-move').value  = p.move  || 'default';
+  buildSportGrid(s.sportToggles || DEFAULTS.sportToggles);
+}
+
+async function loadSettings(){
+  setStatus('Loading settings from Worker…','');
+  try{
+    const res = await fetch(`${workerUrl}/monitor/settings`);
+    if(!res.ok) throw new Error('Worker error '+res.status);
+    const s = await res.json();
+    applySettings(s);
+    setStatus('Settings loaded ✓','saved');
+  }catch(e){
+    // Fall back to defaults
+    applySettings(DEFAULTS);
+    setStatus('Could not reach Worker — showing defaults','error');
+  }
+}
+
+async function saveSettings(){
+  const toggles = {};
+  SPORTS.forEach(s=>{ toggles[s.key] = document.getElementById('sport-'+s.key)?.checked ?? true; });
+  const settings = {
+    thresholds: {
+      spread:     parseFloat(document.getElementById('t-spread').value)||1.5,
+      total:      parseFloat(document.getElementById('t-total').value)||2.0,
+      ml:         parseInt(document.getElementById('t-ml').value)||20,
+      prop:       parseFloat(document.getElementById('t-prop').value)||0.5,
+      rlm_public: parseInt(document.getElementById('t-rlm').value)||60,
+      steam:      parseFloat(document.getElementById('t-steam').value)||2.0,
+    },
+    sportToggles: toggles,
+    alertPriorities: {
+      rlm:   document.getElementById('p-rlm').value,
+      steam: document.getElementById('p-steam').value,
+      prop:  document.getElementById('p-prop').value,
+      move:  document.getElementById('p-move').value,
+    },
+  };
+  try{
+    const res = await fetch(`${workerUrl}/monitor/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
+    if(!res.ok) throw new Error('Save failed '+res.status);
+    setStatus('✅ Settings saved — active on next monitor run','saved');
+    showToast('✅ Settings saved!');
+  }catch(e){
+    setStatus('❌ Save failed: '+e.message,'error');
+    showToast('❌ '+e.message);
+  }
+}
+
+async function resetDefaults(){
+  if(!confirm('Reset all settings to defaults?')) return;
+  applySettings(DEFAULTS);
+  try{
+    await fetch(`${workerUrl}/monitor/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(DEFAULTS)});
+    setStatus('✅ Reset to defaults','saved');
+    showToast('✅ Reset to defaults');
+  }catch(e){ setStatus('Reset locally — Worker unreachable','error'); }
+}
+
+function setStatus(msg, cls){
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar ' + (cls||'');
+}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+loadSettings();
+</script>
+</body>
+</html>
