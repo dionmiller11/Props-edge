@@ -511,13 +511,14 @@ async function runScan(){
 
         const books = item.market?.books||{};
         let bestLine=null, bestOverOdds=null, bestUnderOdds=null, bestOverBook=null, bestUnderBook=null;
+        let bookOverCount=0, bookUnderCount=0;
         for(const bk of Object.keys(books)){
           const b=books[bk];
           const ol=b?.over?.current?.value;
           const oo=b?.over?.current?.odds?.american;
           const uo=b?.under?.current?.odds?.american;
           if(ol&&!bestLine)bestLine=ol;
-          if(oo&&(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))){bestOverOdds=oo;bestOverBook=bk;}
+          if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}
           if(uo&&(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))){bestUnderOdds=uo;bestUnderBook=bk;}
         }
         if(!bestLine) continue;
@@ -621,7 +622,7 @@ function renderTable(){
     const st=(p.streak||0)>=2?`<span class="streak-badge hot">🔥${p.streak}W</span>`:'<span class="streak-badge cold">—</span>';
     const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss)';
     const op=p.bestOdds;
-    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const bookCountLabel=p.bookCount?`<span style="font-size:9px;color:var(--muted);margin-left:4px">${p.bookCount} books</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}${bookCountLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const gtColor=gameTimeColor(p.gameTime); const timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
       <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
@@ -632,7 +633,7 @@ function renderTable(){
       <td>${spark}</td>
       <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>
-      <td class="hide-mobile-sm">${isConsensus(p)?'<span class="edge-badge consensus">⚡ CONSENSUS</span>':'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
+      <td class="hide-mobile-sm">${isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
       <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button></td>
     </tr>`;
   }).join('');
@@ -667,8 +668,17 @@ function isConsensus(p) {
   const rate = p.rate||0;
   const odds = p.bestOdds;
   const streak = p.streak||0;
-  const goodOdds = !odds || (p.direction==='OVER' ? odds>=-130 : odds>=-130);
-  return rate>=80 && streak>=2 && goodOdds;
+  const goodOdds = !odds || odds>=-130;
+  const bookSignal = !p.bookCount || p.bookCount >= 8; // 8+ books covering = real market
+  const bookAgree = !p.bookAgreePct || p.bookAgreePct >= 60; // 60%+ books on same side
+  return rate>=80 && streak>=2 && goodOdds && bookSignal && bookAgree;
+}
+function consensusStrength(p){
+  // Returns 'sharp' if very strong, 'standard' if normal consensus
+  if(!isConsensus(p)) return null;
+  const bookStrong = p.bookCount>=15 && p.bookAgreePct>=75;
+  const rateStrong = (p.rate||0)>=90;
+  return (bookStrong || rateStrong) ? 'sharp' : 'standard';
 }
 
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}

@@ -730,7 +730,7 @@ return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player
 <td>${spark}</td>
 <td class="hide-mobile-sm">${mc}</td>
 <td class="hide-mobile-sm">${st}</td>
-<td class="hide-mobile-sm">${isConsensus(p)?'<span class="edge-badge consensus">⚡ CONSENSUS</span>':`<span class="edge-badge ${ec2}">${el}</span>`}</td>
+<td class="hide-mobile-sm">${isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():`<span class="edge-badge ${ec2}">${el}</span>`}</td>
 <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"MLB"})})'>+</button></td>
 </tr>`;
 }).join('');
@@ -759,10 +759,16 @@ t.classList.add('show');
 setTimeout(()=>t.classList.remove('show'),2000);
 }).catch(()=>showToast('Copy failed'));
 }
-function isConsensus(p) {
-const rate = p.rate||0; const odds = p.bestOdds; const streak = p.streak||0;
-const goodOdds = !odds || (p.direction==='OVER' ? odds>=-130 : odds>=-130);
-return rate>=80 && streak>=2 && goodOdds;
+function isConsensus(p){
+  const rate=p.rate||0,odds=p.bestOdds,streak=p.streak||0;
+  const goodOdds=!odds||odds>=-130;
+  const bookSignal=!p.bookCount||p.bookCount>=8;
+  const bookAgree=!p.bookAgreePct||p.bookAgreePct>=60;
+  return rate>=80&&streak>=2&&goodOdds&&bookSignal&&bookAgree;
+}
+function consensusStrength(p){
+  if(!isConsensus(p)) return null;
+  return (p.bookCount>=15&&p.bookAgreePct>=75)||(p.rate||0)>=90?'sharp':'standard';
 }
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
 function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching real MLB stats via proxy…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}

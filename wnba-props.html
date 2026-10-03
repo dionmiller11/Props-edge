@@ -291,7 +291,7 @@ async function runScan(){
         const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
         const direction=(item.outcome||'over').toUpperCase();
         const books=item.market?.books||{};let bestLine=null,bestOverOdds=null,bestUnderOdds=null,bestOverBook=null,bestUnderBook=null;
-        for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo&&(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))){bestOverOdds=oo;bestOverBook=bk;}if(uo&&(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))){bestUnderOdds=uo;bestUnderBook=bk;}}
+        for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}if(uo&&(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))){bestUnderOdds=uo;bestUnderBook=bk;}}
         if(!bestLine)continue;
         const signals=item.signals||[],recentForm=signals.find(s=>s.type==='RECENT_FORM');if(!recentForm)continue;
         const hitRate=parseInt((recentForm.annotation||'0').replace('%',''))||0;if(hitRate<minRate)continue;
@@ -302,7 +302,7 @@ async function runScan(){
         const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote=h2h?h2h.description:('vs '+opp);
         const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
-        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
+        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),bookCount:bookOverCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookOverCount/(bookOverCount+bookUnderCount)*100):null,bookCount:bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookUnderCount/(bookOverCount+bookUnderCount)*100):null,source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
       }catch(e){console.warn(e);}
     }
     setProgress(95,'Sorting…');
@@ -344,13 +344,24 @@ function renderTable(){
       <td>${spark}</td>
       <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>
-      <td class="hide-mobile-sm">${isConsensus(p)?'<span class="edge-badge consensus">⚡ CONSENSUS</span>':'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
+      <td class="hide-mobile-sm">${isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
       <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"WNBA"})})'>+</button></td>
     </tr>`;
   }).join('');
 }
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-streak').textContent=q.filter(p=>(p.streak||0)>=2).length;}
-function isConsensus(p){const rate=p.rate||0,odds=p.bestOdds,streak=p.streak||0,goodOdds=!odds||(odds>=-130);return rate>=80&&streak>=2&&goodOdds;}
+function isConsensus(p){
+  const rate=p.rate||0,odds=p.bestOdds,streak=p.streak||0;
+  const goodOdds=!odds||odds>=-130;
+  const bookSignal=!p.bookCount||p.bookCount>=8;
+  const bookAgree=!p.bookAgreePct||p.bookAgreePct>=60;
+  return rate>=80&&streak>=2&&goodOdds&&bookSignal&&bookAgree;
+}
+function consensusStrength(p){
+  if(!isConsensus(p)) return null;
+  return (p.bookCount>=15&&p.bookAgreePct>=75)||(p.rate||0)>=90?'sharp':'standard';
+}
+function _old_isConsensus(p){const rate=p.rate||0,odds=p.bestOdds,streak=p.streak||0,goodOdds=!odds||(odds>=-130);return rate>=80&&streak>=2&&goodOdds;}
 function toggleParlay(){const p=document.getElementById('parlayPanel');p.classList.toggle('open');document.getElementById('parlayBtn').textContent=p.classList.contains('open')?'🎰 Hide':'🎰 Parlay';}
 function addToParlay(play){if(parlayLegs.find(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in parlay');return;}if(parlayLegs.length>=10){showToast('Max 10 legs');return;}parlayLegs.push(play);const b=document.getElementById('pb-'+esc(play.player+play.prop));if(b){b.textContent='✓';b.classList.add('added');b.disabled=true;}renderParlay();if(!document.getElementById('parlayPanel').classList.contains('open'))toggleParlay();}
 function removeFromParlay(i){const l=parlayLegs[i];parlayLegs.splice(i,1);const b=document.getElementById('pb-'+esc(l.player+l.prop));if(b){b.textContent='+';b.classList.remove('added');b.disabled=false;}renderParlay();}
