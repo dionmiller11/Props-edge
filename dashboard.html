@@ -331,6 +331,7 @@
       <span class="recap-plays-title" id="recapPlaysTitle">FLAGGED PLAYS</span>
       <div style="display:flex;gap:6px;align-items:center;">
         <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="recapPlayCount"></span>
+        <button id="autoGradeBtn" onclick="autoGrade()" style="font-size:10px;padding:3px 9px;border-radius:4px;background:rgba(0,255,136,.08);color:var(--accent2);border:1px solid rgba(0,255,136,.2);cursor:pointer;font-family:var(--font);font-weight:700;">⚡ Auto-Grade</button>
         <button onclick="gradeAllFromTracker()" style="font-size:10px;padding:3px 9px;border-radius:4px;background:rgba(0,212,255,.08);color:var(--accent);border:1px solid rgba(0,212,255,.2);cursor:pointer;font-family:var(--font);">↺ Sync Bet Tracker</button>
       </div>
     </div>
@@ -395,12 +396,158 @@ function renderRecapTable(graded){
     const sportBadgeColor={MLB:'var(--accent2)',NFL:'var(--nfl)',NCAAFB:'var(--ncaafb)',WNBA:'#ff69b4',NBA:'var(--nba)'}[p.sport]||'var(--muted)';
     let resultHtml;
     if(p.result==='pending'){resultHtml=`<div class="grade-btns"><button class="grade-btn w" onclick="gradePlay('${recapDate}','${k}','win',this)">W</button><button class="grade-btn l" onclick="gradePlay('${recapDate}','${k}','loss',this)">L</button><button class="grade-btn p" onclick="gradePlay('${recapDate}','${k}','push',this)">P</button></div>`;}
-    else{const badge=p.result==='win'?'✅ WIN':p.result==='loss'?'❌ LOSS':'🟡 PUSH';const src=p.fromTracker?'<span class="source-badge" style="margin-left:4px">tracker</span>':'';resultHtml=`<span class="result-badge ${p.result}">${badge}</span>${src}`;}
+    else{const badge=p.result==='win'?'✅ WIN':p.result==='loss'?'❌ LOSS':'🟡 PUSH';const src=p.fromTracker?'<span class="source-badge" style="margin-left:4px">tracker</span>':'';const actual=p.actual!=null?`<div style="font-size:10px;color:var(--muted);font-family:var(--font);margin-top:2px">${p.actual} vs ${p.dir==='OVER'?'O':'U'}${p.line}</div>`:'';resultHtml=`<span class="result-badge ${p.result}">${badge}</span>${src}${actual}`;}
     return`<tr><td><div style="font-family:var(--sans);font-weight:600;font-size:12px">${esc(p.player)}</div><div style="font-size:10px;color:var(--muted);margin-top:1px">${esc(p.team||'')} vs ${esc(p.opposingTeam||'—')}</div></td><td style="color:var(--accent);font-size:11px">${esc(p.prop)}</td><td class="hide-mobile"><span style="font-size:10px;font-weight:700;color:${sportBadgeColor}">${esc(p.sport||'—')}</span></td><td class="hide-mobile" style="font-weight:700;color:${rate>=90?'var(--gold)':rate>=80?'var(--accent2)':'var(--accent)'}">${rate}%</td><td class="hide-mobile"><span class="edge-badge ${ec}">${el}</span></td><td>${resultHtml}</td><td style="font-size:10px;color:var(--muted)">${p.result==='pending'?'—':p.result==='win'?'<span style="color:var(--accent2)">+1u</span>':'<span style="color:var(--miss)">-1u</span>'}</td></tr>`;
   }).join('');
 }
 function gradePlay(date,key,result,btn){recapGrades[date+'|'+key]=result;try{localStorage.setItem('recapGrades',JSON.stringify(recapGrades));}catch(e){}loadRecap();showToast(result==='win'?'✅ Graded WIN':result==='loss'?'❌ Graded LOSS':'🟡 Push');}
 function gradeAllFromTracker(){loadRecap();showToast('↺ Synced with Bet Tracker');}
+
+// ── AUTO-GRADER ──
+const STAT_MAP={
+  // NFL
+  'rush yds':'rushingYards','rush yards':'rushingYards','rushing yds':'rushingYards',
+  'rec yds':'receivingYards','rec yards':'receivingYards','receiving yds':'receivingYards','receiving yards':'receivingYards',
+  'pass yds':'passingYards','pass yards':'passingYards','passing yds':'passingYards',
+  'receptions':'receptions','catches':'receptions',
+  'pass tds':'passingTouchdowns','pass td':'passingTouchdowns',
+  'rush tds':'rushingTouchdowns',
+  'kicking pts':'kickingPoints','kicking points':'kickingPoints',
+  // NBA/WNBA
+  'points':'points','pts':'points',
+  'rebounds':'rebounds','reb':'rebounds',
+  'assists':'assists','ast':'assists',
+  'pts+reb+ast':'pointsReboundsAssists','pra':'pointsReboundsAssists',
+  '3-pointers':'threePointFieldGoalsMade','3pm':'threePointFieldGoalsMade','threes':'threePointFieldGoalsMade',
+  'steals':'steals','blocks':'blocks','turnovers':'turnovers',
+  // MLB
+  'hits':'hits','total bases':'totalBases','tb':'totalBases',
+  'rbi':'rbi','runs':'runs','strikeouts':'strikeOuts','k':'strikeOuts',
+  'hits allowed':'hits','earned runs':'earnedRuns',
+};
+
+function extractLine(prop){const m=(prop||'').match(/[OU](\d+\.?\d*)/i);return m?parseFloat(m[1]):null;}
+function extractDirection(prop){return /\bU\d|\bunder/i.test(prop)?'UNDER':'OVER';}
+function extractStatKey(prop){const p=prop.toLowerCase();for(const[k,v]of Object.entries(STAT_MAP)){if(p.includes(k))return v;}return null;}
+
+async function fetchBoxScores(date, sport){
+  try{
+    const ds=date.replace(/-/g,'');
+    const paths={NFL:'football/nfl',NBA:'basketball/nba',WNBA:'basketball/wnba',MLB:'baseball/mlb',NCAAFB:'football/college-football'};
+    const path=paths[sport];if(!path)return{};
+    const res=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${ds}`);
+    if(!res.ok)return{};
+    const data=await res.json();
+    const playerStats={};
+    for(const evt of (data.events||[])){
+      // Try to get box score via event ID
+      try{
+        const bsRes=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/summary?event=${evt.id}`);
+        if(!bsRes.ok)continue;
+        const bs=await bsRes.json();
+        for(const team of (bs.boxscore?.players||[])){
+          for(const cat of (team.statistics||[])){
+            const labels=cat.labels||[];
+            for(const athlete of (cat.athletes||[])){
+              const name=(athlete.athlete?.displayName||'').toLowerCase();
+              const stats={};
+              (athlete.stats||[]).forEach((v,i)=>{if(labels[i])stats[labels[i].toLowerCase()]=parseFloat(v)||0;});
+              if(!playerStats[name])playerStats[name]={};
+              Object.assign(playerStats[name],stats);
+            }
+          }
+        }
+      }catch(e){}
+    }
+    return playerStats;
+  }catch(e){return{};}
+}
+
+function gradeFromStats(play, playerStats){
+  const name=play.player.toLowerCase();
+  const line=extractLine(play.prop);
+  const dir=play.direction||extractDirection(play.prop);
+  const statKey=extractStatKey(play.prop);
+  if(!line||!statKey)return null;
+  // Try exact name match first, then partial
+  let stats=playerStats[name];
+  if(!stats){
+    const keys=Object.keys(playerStats);
+    const match=keys.find(k=>k.includes(name.split(' ').pop())||name.includes(k.split(' ').pop()));
+    if(match)stats=playerStats[match];
+  }
+  if(!stats)return null;
+  // Find the stat value — try multiple label formats
+  const aliases={
+    rushingYards:['rushing yards','rush yds','ryds','rushing'],
+    receivingYards:['receiving yards','rec yds','recyds','receiving'],
+    passingYards:['passing yards','pass yds','passyds','passing'],
+    receptions:['receptions','rec','catches'],
+    passingTouchdowns:['passing touchdowns','pass td','passtd'],
+    points:['pts','points'],
+    rebounds:['reb','rebounds','total rebounds','totreb'],
+    assists:['ast','assists'],
+    threePointFieldGoalsMade:['3pt','3pm','threes made'],
+    steals:['stl','steals'],
+    blocks:['blk','blocks'],
+    turnovers:['to','turnovers'],
+    hits:['h','hits'],
+    totalBases:['tb','total bases'],
+    rbi:['rbi','rbis'],
+    runs:['r','runs'],
+    strikeOuts:['so','k','strikeouts'],
+    earnedRuns:['er','earned runs'],
+    pointsReboundsAssists:['pts+reb+ast','pra'],
+  };
+  const tryKeys=[statKey.toLowerCase(),...(aliases[statKey]||[])];
+  let actual=null;
+  for(const k of tryKeys){
+    if(stats[k]!==undefined){actual=stats[k];break;}
+  }
+  // PRA special case
+  if(statKey==='pointsReboundsAssists'&&actual===null){
+    const p=stats['pts']??stats['points']??0;
+    const r=stats['reb']??stats['rebounds']??0;
+    const a=stats['ast']??stats['assists']??0;
+    if(p||r||a)actual=p+r+a;
+  }
+  if(actual===null)return null;
+  const result=dir==='OVER'?(actual>line?'win':actual===line?'push':'loss'):(actual<line?'win':actual===line?'push':'loss');
+  return{result,actual,line,dir,statKey};
+}
+
+async function autoGrade(){
+  const btn=document.getElementById('autoGradeBtn');
+  if(!btn)return;
+  btn.disabled=true;btn.textContent='⏳ Grading…';
+  const snapshot=getSnapshot(recapDate);
+  if(!snapshot||!snapshot.plays||!snapshot.plays.length){showToast('No plays to grade');btn.disabled=false;btn.textContent='⚡ Auto-Grade';return;}
+  const pending=snapshot.plays.filter(p=>{const k=matchKey(p);return!(recapGrades[recapDate+'|'+k]);});
+  if(!pending.length){showToast('All plays already graded');btn.disabled=false;btn.textContent='⚡ Auto-Grade';return;}
+  // Group by sport and fetch box scores
+  const sports=[...new Set(pending.map(p=>p.sport).filter(Boolean))];
+  const allStats={};
+  for(const sport of sports){
+    btn.textContent=`⏳ ${sport} scores…`;
+    const stats=await fetchBoxScores(recapDate,sport);
+    allStats[sport]=stats;
+  }
+  // Grade each pending play
+  let graded=0,failed=0;
+  for(const play of pending){
+    const stats=allStats[play.sport]||{};
+    const result=gradeFromStats(play,stats);
+    if(result){
+      const k=matchKey(play);
+      recapGrades[recapDate+'|'+k]=result.result;
+      graded++;
+    } else { failed++; }
+  }
+  try{localStorage.setItem('recapGrades',JSON.stringify(recapGrades));}catch(e){}
+  loadRecap();
+  btn.disabled=false;btn.textContent='⚡ Auto-Grade';
+  showToast(`⚡ Auto-graded ${graded} play${graded!==1?'s':''}${failed?` · ${failed} not found`:''}`,4000);
+}
 function renderRecapStats(graded){const settled=graded.filter(p=>p.result!=='pending');const wins=graded.filter(p=>p.result==='win').length;const losses=graded.filter(p=>p.result==='loss').length;const winRate=settled.length?Math.round(wins/settled.length*100):null;const netUnits=wins-losses;setRecapStats(graded.length,settled.length,winRate,netUnits);}
 function setRecapStats(flagged,graded,winRate,netUnits){document.getElementById('r-flagged').textContent=flagged||'—';document.getElementById('r-graded').textContent=graded||'—';const wr=document.getElementById('r-winrate');wr.textContent=winRate!==null?winRate+'%':'—';wr.style.color=winRate===null?'var(--muted)':winRate>=60?'var(--accent2)':winRate>=50?'var(--gold)':'var(--miss)';const nu=document.getElementById('r-units');nu.textContent=netUnits!==null?(netUnits>=0?'+':'')+netUnits+'u':'—';nu.style.color=netUnits===null?'var(--muted)':netUnits>0?'var(--accent2)':netUnits<0?'var(--miss)':'var(--muted)';}
 function renderBreakdowns(graded){
