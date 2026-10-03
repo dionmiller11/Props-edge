@@ -267,7 +267,7 @@ REAL STATS via MLB Stats API · Lines &amp; odds from Linemate (20+ books) when 
 <span class="parlay-count" id="parlayCount">0 legs</span>
 <span class="parlay-odds" id="parlayOdds">—</span>
 <div class="parlay-actions">
-<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button><button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="logParlay()">📋 Log All</button>
+<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button><button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="logParlay()">📋 Log All</button><button class="btn btn-purple" style="padding:4px 10px;font-size:11px" onclick="correlateParlay()">🔗 Correlate</button>
 <button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
 <button class="btn btn-obsidian" style="padding:4px 10px;font-size:11px" onclick="exportObsidian()">🟣 Obsidian</button>
 </div>
@@ -975,6 +975,20 @@ function logParlay(){
   });
   params.set('count', parlayLegs.length);
   window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+function correlateParlay(){
+  if(!parlayLegs.length){showToast('No legs in parlay');return;}
+  const params = new URLSearchParams();
+  parlayLegs.forEach((l,i)=>{
+    params.set('p'+i+'_player', l.player||'');
+    params.set('p'+i+'_team', l.team||'');
+    params.set('p'+i+'_prop', l.prop||'');
+    params.set('p'+i+'_sport', l.sport||'');
+    params.set('p'+i+'_dir', l.direction||'OVER');
+  });
+  params.set('count', parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
 }
 </script>
 </body>

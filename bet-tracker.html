@@ -165,6 +165,8 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <button class="filter-chip win" onclick="setFilter('win',this)">✅ Wins</button>
       <button class="filter-chip loss" onclick="setFilter('loss',this)">❌ Losses</button>
       <button class="filter-chip" onclick="setFilter('pending',this)">⏳ Pending</button>
+      <button class="filter-chip" id="selectModeChip" onclick="toggleSelectMode(this)" style="margin-left:auto">☑️ Select</button>
+      <button class="btn" id="correlateSelectedBtn" onclick="correlateSelected()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35);border-radius:4px;cursor:pointer;font-family:var(--sans);font-weight:700">🔗 Correlate Selected</button>
       <button class="filter-chip" onclick="setFilter('MLB',this)">⚾ MLB</button>
       <button class="filter-chip" onclick="setFilter('NFL',this)">🏈 NFL</button>
       <button class="filter-chip" onclick="setFilter('NBA',this)">🏀 NBA</button>
@@ -177,6 +179,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       </div>
       <table>
         <thead><tr>
+          <th id="chkHeader" style="display:none;width:28px"></th>
           <th>DATE</th><th>PLAYER</th><th>PROP</th><th class="hide-mobile">SPORT</th>
           <th>ODDS</th><th class="hide-mobile">RATE</th><th class="hide-mobile">BOOK</th>
           <th>UNITS</th><th>RESULT</th><th>P/L</th><th></th>
@@ -272,9 +275,11 @@ function renderBets(){
   if(!filtered.length){body.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">📋</div><p>No bets yet. Log your first play above.</p></div></td></tr>`;return;}
   body.innerHTML=filtered.map(b=>{
     const pl=calcPL(b);
+    const chkCell=selectMode?`<td><input type="checkbox" id="chk-${b.id}" ${selectedIds.has(b.id)?'checked':''} onchange="toggleSelect(${b.id})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--purple)"></td>`:'<td style="display:none"></td>';
     const plColor=pl>0?'var(--accent2)':pl<0?'var(--miss)':'var(--muted)';
     const plStr=pl>0?'+'+pl.toFixed(2)+'u':pl<0?pl.toFixed(2)+'u':'0u';
     return`<tr>
+      ${chkCell}
       <td style="color:var(--muted);font-size:11px">${b.date||'—'}</td>
       <td><div class="player-name">${esc(b.player)}</div><div class="sub-text">${esc(b.propType)||''}</div></td>
       <td style="color:var(--accent);font-size:11px">${esc(b.prop)}</td>
@@ -432,6 +437,35 @@ function exportCSV(){
   })].join('\n');
   const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='bet-tracker.csv';a.click();URL.revokeObjectURL(url);
+}
+// ── SELECT + CORRELATE ──
+let selectMode=false,selectedIds=new Set();
+function toggleSelectMode(el){
+  selectMode=!selectMode;selectedIds.clear();
+  el.classList.toggle('active',selectMode);
+  el.textContent=selectMode?'✕ Cancel':'☑️ Select';
+  document.getElementById('correlateSelectedBtn').style.display=selectMode?'inline-block':'none';
+  document.getElementById('chkHeader').style.display=selectMode?'table-cell':'none';
+  renderBets();
+}
+function toggleSelect(id){
+  if(selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);
+  document.getElementById('correlateSelectedBtn').textContent=`🔗 Correlate (${selectedIds.size})`;
+  const chk=document.getElementById('chk-'+id);if(chk)chk.checked=selectedIds.has(id);
+}
+function correlateSelected(){
+  if(selectedIds.size<2){showToast('Select at least 2 bets');return;}
+  const selected=bets.filter(b=>selectedIds.has(b.id));
+  const params=new URLSearchParams();
+  selected.forEach((b,i)=>{
+    params.set('p'+i+'_player',b.player||'');
+    params.set('p'+i+'_team','');
+    params.set('p'+i+'_prop',b.propType||b.prop||'');
+    params.set('p'+i+'_sport',b.sport||'NFL');
+    params.set('p'+i+'_dir',(b.prop||'').match(/\bU\d|\bunder/i)?'UNDER':'OVER');
+  });
+  params.set('count',selected.length);
+  window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

@@ -387,8 +387,31 @@ function analyze(){
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// Start with 3 empty legs
-addLeg();addLeg();addLeg();
+// ── PREFILL FROM URL PARAMS ──
+(function(){
+  const p = new URLSearchParams(window.location.search);
+  const count = parseInt(p.get('count')||0);
+  if(count >= 2){
+    for(let i=0;i<count;i++){
+      const id = Date.now() + i;
+      legs.push({
+        id,
+        player: p.get(`p${i}_player`)||'',
+        team:   p.get(`p${i}_team`)||'',
+        prop:   p.get(`p${i}_prop`)||'',
+        sport:  p.get(`p${i}_sport`)||'NFL',
+        dir:    p.get(`p${i}_dir`)||'OVER',
+      });
+    }
+    renderLegs();
+    // Auto-analyze
+    setTimeout(analyze, 300);
+    window.history.replaceState({},'',window.location.pathname);
+  } else {
+    // Default empty legs
+    addLeg();addLeg();addLeg();
+  }
+})();
 </script>
 </body>
 </html>
