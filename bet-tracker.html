@@ -440,6 +440,38 @@ renderBets();updateStats();
 // ── PREFILL FROM URL PARAMS (auto-import from props tools) ──
 (function(){
   const p = new URLSearchParams(window.location.search);
+  // Bulk parlay import
+  if(p.get('_parlay')==='1'){
+    const count = parseInt(p.get('count')||0);
+    if(count>0){
+      let added=0;
+      for(let i=0;i<count;i++){
+        const player=p.get(`p${i}_player`)||'';
+        const prop=p.get(`p${i}_prop`)||'';
+        if(!player&&!prop) continue;
+        const bet={
+          id:Date.now()+i,
+          date:new Date().toISOString().split('T')[0],
+          player, prop,
+          propType:p.get(`p${i}_dir`)||'',
+          sport:p.get(`p${i}_sport`)||'',
+          odds:p.get(`p${i}_odds`)||'-110',
+          units:'1',
+          rate:p.get(`p${i}_rate`)||'',
+          book:'',
+          result:'pending',
+        };
+        bets.unshift(bet);
+        added++;
+      }
+      if(added>0){
+        saveBets();renderBets();updateStats();
+        showToast(`📋 ${added} parlay leg${added!==1?'s':''} imported!`);
+        window.history.replaceState({},'',window.location.pathname);
+      }
+    }
+    return;
+  }
   if(!p.get('player') && !p.get('prop')) return;
   // Wait for DOM
   function fill(){
