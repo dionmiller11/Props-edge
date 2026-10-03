@@ -446,8 +446,12 @@ async function fetchNFLDefense(){
     });
   }catch(e){console.warn('NFL def rankings failed:',e.message);}
 }
+// Normalize abbreviations between Linemate and ESPN
+const ABBR_MAP={'JAC':'JAX','WSH':'WAS','GBP':'GB','NOR':'NO','SFO':'SF','TBB':'TB','NEP':'NE','KCC':'KC','LVR':'LV','LAR':'LAR','LAC':'LAC','ARZ':'ARI','HST':'HOU','CLV':'CLE','PIT':'PIT','CIN':'CIN','BLT':'BAL','IND':'IND','TEN':'TEN','JAX':'JAX'};
 function defBadge(opp){
-  const d=defRankings[(opp||'').toUpperCase()];
+  if(!opp) return '';
+  const key = ABBR_MAP[opp.toUpperCase()] || opp.toUpperCase();
+  const d=defRankings[key];
   if(!d) return '';
   return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Defense rank ${d.rank}/${d.total}">${d.label}</span>`;
 }
@@ -464,6 +468,7 @@ async function runScan(){
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
   setStatus('running','📡 Fetching NFL props from Linemate…');
   setLoadingRow();
+  fetchNFLDefense();
 
   try {
     setProgress(20,'Fetching Linemate NFL trends…');
