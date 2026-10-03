@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Game Lines — Props Edge</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent2);box-shadow:0 0 8px var(--accent2);animation:pulse 2s infinite;flex-shrink:0;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--accent);}
+.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;}
+.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#000;} .btn-primary:hover{background:#33ddff;}
+.btn-primary:disabled{background:var(--muted);cursor:not-allowed;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+.btn-gold{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+.spinner{display:inline-block;width:11px;height:11px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+/* Page tabs */
+.page-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
+.page-tab{padding:11px 16px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+.page-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+/* Sport filter chips */
+.sport-bar{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);}
+.sport-chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.sport-chip.active{font-weight:700;}
+.sport-chip.nfl.active{background:#ff6b35;color:#fff;border-color:#ff6b35;}
+.sport-chip.nba.active{background:#00d4ff;color:#000;border-color:#00d4ff;}
+.sport-chip.mlb.active{background:#00ff88;color:#000;border-color:#00ff88;}
+.sport-chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
+.sport-chip.nhl.active{background:#00e5ff;color:#000;border-color:#00e5ff;}
+main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+.status-bar{font-family:var(--font);font-size:12px;color:var(--muted);margin-bottom:14px;min-height:18px;}
+.status-bar.running{color:var(--accent);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
+/* Game cards grid */
+.games-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-bottom:20px;}
+.game-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:all .2s;}
+.game-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);}
+.game-card.rlm{border-left:4px solid var(--miss);}
+.game-card.steam{border-left:4px solid var(--gold);}
+.game-card.sharp{border-left:4px solid var(--purple);}
+.game-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.game-teams{font-family:var(--sans);font-weight:700;font-size:13px;}
+.game-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.game-time{font-family:var(--font);font-size:10px;color:var(--muted);}
+.sport-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sport-dot.NFL{background:#ff6b35;} .sport-dot.NBA{background:#00d4ff;} .sport-dot.MLB{background:#00ff88;} .sport-dot.NCAAFB{background:#ffd700;} .sport-dot.NHL{background:#00e5ff;}
+.game-body{padding:12px 14px;}
+.lines-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.line-box{background:var(--surface2);border-radius:6px;padding:8px 10px;text-align:center;}
+.line-label{font-size:9px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;margin-bottom:3px;}
+.line-val{font-size:15px;font-weight:700;font-family:var(--font);color:var(--text);}
+.line-move{font-size:10px;font-family:var(--font);margin-top:2px;}
+.line-move.up{color:var(--miss);} .line-move.down{color:var(--accent2);} .line-move.none{color:var(--muted);}
+/* Public % bars */
+.public-row{margin-bottom:10px;}
+.public-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-bottom:4px;}
+.public-bar-wrap{display:flex;align-items:center;gap:6px;}
+.public-bar{height:6px;border-radius:3px;overflow:hidden;flex:1;background:var(--border);display:flex;}
+.public-away{height:100%;border-radius:3px 0 0 3px;transition:width .5s;}
+.public-home{height:100%;border-radius:0 3px 3px 0;transition:width .5s;}
+.public-pct{font-size:10px;font-family:var(--font);font-weight:700;white-space:nowrap;}
+/* Alert badges */
+.alert-badges{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;}
+.alert-badge{padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--font);}
+.alert-badge.rlm{background:rgba(255,77,109,.15);color:var(--miss);border:1px solid rgba(255,77,109,.3);}
+.alert-badge.steam{background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+.alert-badge.weather{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+.alert-badge.value{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+/* Game card actions */
+.game-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.pick-btn{font-size:10px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:var(--font);font-weight:700;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;}
+.pick-btn:hover{border-color:var(--accent);color:var(--accent);}
+.pick-btn.selected{background:var(--accent);color:#000;border-color:var(--accent);}
+/* Sharp screener */
+.sharp-list{display:flex;flex-direction:column;gap:10px;}
+.sharp-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;}
+.sharp-item.rlm{border-left:4px solid var(--miss);}
+.sharp-item.steam{border-left:4px solid var(--gold);}
+.sharp-score{font-size:28px;font-weight:700;font-family:var(--font);color:var(--gold);min-width:48px;text-align:center;line-height:1;}
+.sharp-score-lbl{font-size:9px;color:var(--muted);text-align:center;font-family:var(--font);}
+.sharp-content{flex:1;}
+.sharp-game{font-weight:700;font-size:13px;margin-bottom:4px;}
+.sharp-detail{font-family:var(--font);font-size:11px;color:var(--muted);line-height:1.7;}
+.sharp-detail strong{color:var(--text);}
+.sharp-actions{display:flex;gap:6px;margin-top:8px;}
+/* Parlay builder */
+.parlay-section{background:var(--surface);border:1px solid rgba(0,212,255,.3);border-radius:10px;padding:16px 18px;margin-bottom:16px;}
+.parlay-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.parlay-legs-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.parlay-leg{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);}
+.parlay-leg-info{flex:1;}
+.parlay-leg-game{font-weight:600;font-size:12px;}
+.parlay-leg-pick{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:1px;}
+.parlay-leg-corr{font-size:9px;padding:1px 5px;border-radius:3px;font-family:var(--font);font-weight:700;}
+.parlay-leg-corr.pos{color:var(--accent2);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2);}
+.parlay-leg-corr.neg{color:var(--miss);background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.2);}
+.parlay-leg-corr.neutral{color:var(--muted);background:rgba(107,122,150,.1);border:1px solid rgba(107,122,150,.2);}
+.remove-leg{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;}
+.parlay-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.parlay-stat{background:var(--surface2);border-radius:6px;padding:10px;text-align:center;}
+.parlay-stat-val{font-size:20px;font-weight:700;font-family:var(--font);color:var(--gold);}
+.parlay-stat-lbl{font-size:10px;color:var(--muted);font-family:var(--font);}
+.ev-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px;}
+.ev-fill{height:100%;border-radius:3px;}
+.ev-pos{background:var(--accent2);} .ev-neg{background:var(--miss);}
+.corr-warning{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.2);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--miss);margin-bottom:10px;}
+.corr-good{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.15);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--accent2);margin-bottom:10px;}
+.empty{padding:40px 20px;text-align:center;color:var(--muted);}
+.empty-icon{font-size:28px;margin-bottom:8px;opacity:.4;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+.toast.show{transform:translateY(0);opacity:1;}
+@media(max-width:700px){.games-grid{grid-template-columns:1fr;}.parlay-summary{grid-template-columns:repeat(2,1fr);}header,main{padding-left:12px;padding-right:12px;}.sport-bar{padding:10px 12px;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" class="home-btn">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>GAME <span>LINES</span></h1>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="lastUpdated">—</span>
+    <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+    <button class="btn btn-primary" id="runBtn" onclick="loadAll()">⚡ LOAD LINES</button>
+  </div>
+</header>
+<div class="page-tabs">
+  <button class="page-tab active" id="tab-lines" onclick="showTab('lines')">📊 LINES</button>
+  <button class="page-tab" id="tab-sharp" onclick="showTab('sharp')">🚨 SHARP PLAYS</button>
+  <button class="page-tab" id="tab-parlay" onclick="showTab('parlay')">🎰 PARLAY BUILDER</button>
+</div>
+<div class="sport-bar" id="sportBar">
+  <span style="font-size:10px;color:var(--muted);font-family:var(--font);align-self:center">SPORT:</span>
+  <button class="sport-chip nfl active" onclick="toggleSport('NFL',this)">🏈 NFL</button>
+  <button class="sport-chip ncaafb" onclick="toggleSport('NCAAFB',this)">🏈 NCAAFB</button>
+  <button class="sport-chip nba" onclick="toggleSport('NBA',this)">🏀 NBA</button>
+  <button class="sport-chip mlb" onclick="toggleSport('MLB',this)">⚾ MLB</button>
+  <button class="sport-chip nhl" onclick="toggleSport('NHL',this)">🏒 NHL</button>
+</div>
+<main>
+  <div class="status-bar" id="statusBar">Click ⚡ LOAD LINES to fetch today's games</div>
+
+  <!-- LINES TAB -->
+  <div id="page-lines">
+    <div class="games-grid" id="gamesGrid">
+      <div class="empty"><div class="empty-icon">📊</div><p>Click ⚡ LOAD LINES to fetch today's games</p></div>
+    </div>
+  </div>
+
+  <!-- SHARP TAB -->
+  <div id="page-sharp" style="display:none">
+    <div style="background:rgba(255,77,109,.05);border:1px solid rgba(255,77,109,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.7;">
+      <strong style="color:var(--miss)">🚨 RLM</strong> = Reverse Line Movement — 60%+ public on one side but line moved opposite · sharp money signal<br>
+      <strong style="color:var(--gold)">💨 STEAM</strong> = Line moved 1.5+ points from opener · coordinated sharp action<br>
+      <strong style="color:var(--accent)">SHARP SCORE</strong> = composite rating (0-100) based on line movement size, public %, and timing
+    </div>
+    <div class="sharp-list" id="sharpList">
+      <div class="empty"><div class="empty-icon">🚨</div><p>Load lines first to see sharp plays</p></div>
+    </div>
+  </div>
+
+  <!-- PARLAY TAB -->
+  <div id="page-parlay" style="display:none">
+    <div class="parlay-section">
+      <div class="parlay-title">
+        <span>🎰 GAME LINE PARLAY BUILDER</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button>
+          <button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
+          <button class="btn btn-gold" style="padding:4px 10px;font-size:11px" onclick="logParlayToTracker()">📒 Log All</button>
+        </div>
+      </div>
+      <div id="parlayLegsEl"><div class="empty" style="padding:20px"><div class="empty-icon">🎰</div><p>Add picks from the LINES tab using the spread/total/ML buttons on each game</p></div></div>
+      <div class="parlay-summary" id="parlaySummary" style="display:none">
+        <div class="parlay-stat"><div class="parlay-stat-val" id="p-legs">0</div><div class="parlay-stat-lbl">LEGS</div></div>
+        <div class="parlay-stat"><div class="parlay-stat-val" id="p-odds">—</div><div class="parlay-stat-lbl">COMBINED ODDS</div></div>
+        <div class="parlay-stat"><div class="parlay-stat-val" id="p-ev" style="color:var(--accent2)">—</div><div class="parlay-stat-lbl">EV (1u bet)</div></div>
+      </div>
+      <div id="corrWarnings"></div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--font);line-height:1.7;margin-top:8px;">
+        💡 <strong style="color:var(--text)">Correlation rules:</strong> Same-game spread + total = correlated (game script). Teaser legs = always correlated. Cross-sport = independent. Avoid parlaying a team's spread with their total (same game script).
+      </div>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const WORKER_URL = localStorage.getItem('lineMonitorWorkerUrl') || 'https://line-monitor.dion-miller11.workers.dev';
+const ESPN_SPORTS = {
+  NFL:    {path:'football/nfl',           an:'nfl',   color:'#ff6b35'},
+  NCAAFB: {path:'football/college-football', an:'ncaaf', color:'#ffd700'},
+  NBA:    {path:'basketball/nba',         an:'nba',   color:'#00d4ff'},
+  MLB:    {path:'baseball/mlb',           an:'mlb',   color:'#00ff88'},
+  NHL:    {path:'hockey/nhl',             an:'nhl',   color:'#00e5ff'},
+};
+
+let allGames = [], activeSports = new Set(['NFL']), activePage = 'lines', parlayLegs = [];
+let openerData = {}, alertLog = [];
+
+// ── SPORT TOGGLES ──
+function toggleSport(sport, el){
+  if(activeSports.has(sport)&&activeSports.size===1) return; // keep at least one
+  if(activeSports.has(sport)) activeSports.delete(sport);
+  else activeSports.add(sport);
+  el.classList.toggle('active', activeSports.has(sport));
+  renderCurrentTab();
+}
+
+// ── TAB SWITCHING ──
+function showTab(tab){
+  activePage = tab;
+  ['lines','sharp','parlay'].forEach(t=>{
+    document.getElementById('page-'+t).style.display = t===tab?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  renderCurrentTab();
+}
+
+function renderCurrentTab(){
+  if(activePage==='lines') renderLines();
+  else if(activePage==='sharp') renderSharp();
+  else if(activePage==='parlay') renderParlay();
+}
+
+// ── FETCH ESPN GAMES ──
+async function fetchESPNGames(sport){
+  try{
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard`);
+    if(!res.ok) return [];
+    const data = await res.json();
+    return (data.events||[]).map(evt=>{
+      const comp = evt.competitions?.[0];
+      const home = comp?.competitors?.find(c=>c.homeAway==='home');
+      const away = comp?.competitors?.find(c=>c.homeAway==='away');
+      const odds = comp?.odds?.[0];
+      const venue = comp?.venue;
+      const isOutdoor = !/(dome|stadium.*roof|indoor|superdome|allegiant|sofi|nrg|lucas|ford|mercedes|u\.s\. bank|at&t)/i.test(venue?.fullName||'');
+      return {
+        id: evt.id,
+        sport: sport.key||'',
+        sportColor: sport.color,
+        away: away?.team?.abbreviation||'?',
+        home: home?.team?.abbreviation||'?',
+        awayFull: away?.team?.displayName||'',
+        homeFull: home?.team?.displayName||'',
+        awayRecord: away?.records?.[0]?.summary||'',
+        homeRecord: home?.records?.[0]?.summary||'',
+        commence: evt.date,
+        gameTime: evt.date?new Date(evt.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'',
+        spread: odds?.spread!=null?parseFloat(odds.spread):null,
+        total: odds?.overUnder!=null?parseFloat(odds.overUnder):null,
+        ml_home: odds?.homeTeamOdds?.moneyLine!=null?parseInt(odds.homeTeamOdds.moneyLine):null,
+        ml_away: odds?.awayTeamOdds?.moneyLine!=null?parseInt(odds.awayTeamOdds.moneyLine):null,
+        venue: venue?.fullName||'',
+        isOutdoor,
+        status: evt.status?.type?.shortDetail||'',
+      };
+    });
+  }catch(e){ return []; }
+}
+
+// ── FETCH ACTION NETWORK PUBLIC % ──
+async function fetchPublicPct(anKey, dateStr){
+  try{
+    const res = await fetch(`https://api.actionnetwork.com/web/v1/scoreboard/${anKey}?period=game&bookIds=15,30,69,76,123&date=${dateStr}`,
+      {headers:{'User-Agent':'Mozilla/5.0','Referer':'https://www.actionnetwork.com/'}});
+    if(!res.ok) return {};
+    const data = await res.json();
+    const splits = {};
+    for(const game of (data.games||[])){
+      const teams = game.teams||[];
+      const awayT = teams.find(t=>t.id===game.away_team_id);
+      const homeT = teams.find(t=>t.id===game.home_team_id);
+      if(!awayT||!homeT) continue;
+      const key = `${awayT.abbr}@${homeT.abbr}`.toLowerCase();
+      const lines = game.bookmakers?.[0]?.lines?.[0];
+      splits[key] = {
+        spread_away: lines?.spread?.away?.bets_pct||null,
+        spread_home: lines?.spread?.home?.bets_pct||null,
+        total_over:  lines?.total?.over?.bets_pct||null,
+        total_under: lines?.total?.under?.bets_pct||null,
+        ml_away:     lines?.ml?.away?.bets_pct||null,
+        ml_home:     lines?.ml?.home?.bets_pct||null,
+      };
+    }
+    return splits;
+  }catch(e){ return {}; }
+}
+
+// ── LOAD ALL ──
+async function loadAll(){
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  setStatus('running','📡 Fetching game lines…');
+  allGames = [];
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Fetch all selected sports in parallel
+  const sportEntries = Object.entries(ESPN_SPORTS).filter(([k])=>activeSports.has(k));
+  const results = await Promise.all(sportEntries.map(async([key,sport])=>{
+    const games = await fetchESPNGames({...sport,key});
+    const splits = sport.an ? await fetchPublicPct(sport.an, todayStr) : {};
+    return games.map(g=>{
+      const splitKey = `${g.away}@${g.home}`.toLowerCase();
+      return {...g, public: splits[splitKey]||null};
+    });
+  }));
+
+  allGames = results.flat();
+
+  // Load opener data and alert log from Worker
+  try{
+    const [statusRes, linesRes] = await Promise.all([
+      fetch(`${WORKER_URL}/monitor/status`),
+      fetch(`${WORKER_URL}/monitor/lines`),
+    ]);
+    if(statusRes.ok){ const d=await statusRes.json(); alertLog=d.alerts||[]; }
+    if(linesRes.ok){ const d=await linesRes.json(); 
+      (d.lines||[]).forEach(l=>{ openerData[l.id]={opener:l.opener,spreadMove:l.spreadMove,totalMove:l.totalMove}; });
+    }
+  }catch(e){ console.warn('Worker data unavailable:', e.message); }
+
+  // Flag RLM and steam on games
+  allGames = allGames.map(g=>{
+    const od = openerData[g.id];
+    const pub = g.public;
+    let rlm = false, steam = false, sharpScore = 0;
+    if(od){
+      const sm = Math.abs(od.spreadMove||0);
+      const tm = Math.abs(od.totalMove||0);
+      if(sm>=1.5||tm>=2.0) steam = true;
+      if(steam) sharpScore += 40;
+      // RLM: public on one side but line moved opposite
+      if(pub&&sm>=0.5){
+        const awayPub = pub.spread_away||0, homePub = pub.spread_home||0;
+        if((awayPub>=60&&(od.spreadMove||0)>0)||(homePub>=60&&(od.spreadMove||0)<0)) rlm=true;
+      }
+      if(rlm) sharpScore += 50;
+      sharpScore += Math.min(30, (sm+tm)*5);
+    }
+    // Boost from alert log
+    const gameAlerts = alertLog.filter(a=>(a.title||'').includes(g.away)||((a.title||'').includes(g.home)));
+    if(gameAlerts.length) sharpScore += gameAlerts.length * 10;
+    return {...g, od, rlm, steam, sharpScore:Math.min(100,Math.round(sharpScore))};
+  });
+
+  renderCurrentTab();
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  setStatus('done', `✅ ${allGames.length} games loaded · ${allGames.filter(g=>g.rlm).length} RLM · ${allGames.filter(g=>g.steam).length} steam moves`);
+  btn.disabled = false; btn.textContent = '⚡ LOAD LINES';
+}
+
+// ── RENDER LINES TAB ──
+function renderLines(){
+  const grid = document.getElementById('gamesGrid');
+  const games = allGames.filter(g=>activeSports.has(g.sport));
+  if(!games.length){grid.innerHTML='<div class="empty"><div class="empty-icon">📊</div><p>No games found. Click ⚡ LOAD LINES or enable more sports above.</p></div>';return;}
+
+  grid.innerHTML = games.map(g=>{
+    const sc = g.sportColor||'var(--muted)';
+    const od = g.od;
+    const pub = g.public;
+    const cardClass = g.rlm?'rlm':g.steam?'steam':'';
+
+    // Spread
+    const spread = g.spread!=null ? (g.spread>0?'+':'')+g.spread : '—';
+    const spreadMove = od?.spreadMove!=null&&Math.abs(od.spreadMove)>=0.5 ? `<div class="line-move ${od.spreadMove>0?'up':'down'}">${od.spreadMove>0?'▲':'▼'}${Math.abs(od.spreadMove)} from ${od.opener?.spread!=null?(od.opener.spread>0?'+':'')+od.opener.spread:'open'}</div>` : '<div class="line-move none">no move</div>';
+    // Total
+    const total = g.total!=null ? g.total : '—';
+    const totalMove = od?.totalMove!=null&&Math.abs(od.totalMove)>=0.5 ? `<div class="line-move ${od.totalMove>0?'up':'down'}">${od.totalMove>0?'▲':'▼'}${Math.abs(od.totalMove)}</div>` : '<div class="line-move none">no move</div>';
+    // ML
+    const mlA = g.ml_away!=null?(g.ml_away>0?'+':'')+g.ml_away:'—';
+    const mlH = g.ml_home!=null?(g.ml_home>0?'+':'')+g.ml_home:'—';
+
+    // Public bars
+    let publicHtml = '';
+    if(pub?.spread_away!=null){
+      const aw=pub.spread_away,hw=pub.spread_home||100-aw;
+      const awColor=aw>=60?'var(--miss)':aw<=40?'var(--accent2)':'var(--muted)';
+      const hwColor=hw>=60?'var(--miss)':hw<=40?'var(--accent2)':'var(--muted)';
+      publicHtml=`<div class="public-row">
+        <div class="public-label">PUBLIC SPREAD %</div>
+        <div class="public-bar-wrap">
+          <span class="public-pct" style="color:${awColor}">${aw}%</span>
+          <div class="public-bar"><div class="public-away" style="width:${aw}%;background:${awColor}"></div><div class="public-home" style="width:${hw}%;background:${hwColor}"></div></div>
+          <span class="public-pct" style="color:${hwColor}">${hw}%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);font-family:var(--font);margin-top:2px"><span>${esc(g.away)}</span><span>${esc(g.home)}</span></div>
+      </div>`;
+    }
+    if(pub?.total_over!=null){
+      const ov=pub.total_over,un=pub.total_under||100-ov;
+      publicHtml+=`<div class="public-row">
+        <div class="public-label">PUBLIC TOTAL %</div>
+        <div class="public-bar-wrap">
+          <span class="public-pct" style="color:${ov>=60?'var(--miss)':'var(--muted)'}">${ov}%O</span>
+          <div class="public-bar"><div class="public-away" style="width:${ov}%;background:${ov>=60?'var(--miss)':'var(--accent2)'}"></div><div class="public-home" style="width:${un}%;background:${un>=60?'var(--miss)':'var(--accent)'}"></div></div>
+          <span class="public-pct" style="color:${un>=60?'var(--miss)':'var(--muted)'}">${un}%U</span>
+        </div>
+      </div>`;
+    }
+
+    // Alert badges
+    let badges = '';
+    if(g.rlm) badges += '<span class="alert-badge rlm">🚨 RLM</span>';
+    if(g.steam) badges += '<span class="alert-badge steam">💨 STEAM</span>';
+    if(g.isOutdoor&&['NFL','NCAAFB'].includes(g.sport)) badges += '<span class="alert-badge weather">🌤️ OUTDOOR</span>';
+    if(g.sharpScore>=70) badges += '<span class="alert-badge value">⚡ SHARP</span>';
+
+    const gameId = JSON.stringify({id:g.id,away:g.away,home:g.home,sport:g.sport,spread:g.spread,total:g.total,ml_away:g.ml_away,ml_home:g.ml_home}).replace(/"/g,"'");
+
+    return `<div class="game-card ${cardClass}">
+      <div class="game-header">
+        <div>
+          <div class="game-teams">${esc(g.away)} @ ${esc(g.home)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(g.awayRecord)} / ${esc(g.homeRecord)}</div>
+        </div>
+        <div class="game-meta">
+          <div class="sport-dot ${g.sport}"></div>
+          <div class="game-time">${esc(g.sport)} · ${esc(g.gameTime)}</div>
+        </div>
+      </div>
+      <div class="game-body">
+        ${badges?`<div class="alert-badges">${badges}</div>`:''}
+        <div class="lines-row">
+          <div class="line-box">
+            <div class="line-label">SPREAD (${esc(g.away)})</div>
+            <div class="line-val">${spread}</div>
+            ${spreadMove}
+          </div>
+          <div class="line-box">
+            <div class="line-label">TOTAL O/U</div>
+            <div class="line-val">${total}</div>
+            ${totalMove}
+          </div>
+          <div class="line-box">
+            <div class="line-label">MONEYLINE</div>
+            <div class="line-val" style="font-size:11px">${mlA}<br>${mlH}</div>
+          </div>
+        </div>
+        ${publicHtml}
+        <div class="game-actions">
+          <button class="pick-btn" onclick="addLeg(${gameId},'spread','away')">ATS ${esc(g.away)}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'spread','home')">ATS ${esc(g.home)}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'total','over')">O ${total}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'total','under')">U ${total}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'ml','away')">ML ${esc(g.away)}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'ml','home')">ML ${esc(g.home)}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER SHARP TAB ──
+function renderSharp(){
+  const list = document.getElementById('sharpList');
+  const sharp = allGames.filter(g=>activeSports.has(g.sport)&&(g.rlm||g.steam||g.sharpScore>=50))
+    .sort((a,b)=>b.sharpScore-a.sharpScore);
+  if(!sharp.length){list.innerHTML='<div class="empty"><div class="empty-icon">🚨</div><p>No sharp plays detected.<br>Load lines first and ensure your Line Monitor Worker is running.</p></div>';return;}
+  list.innerHTML = sharp.map(g=>{
+    const od = g.od;
+    const pub = g.public;
+    const cls = g.rlm?'rlm':g.steam?'steam':'';
+    let detail = '';
+    if(od?.spreadMove!=null&&Math.abs(od.spreadMove)>=0.5)
+      detail += `<br><strong>Spread:</strong> ${od.opener?.spread!=null?(od.opener.spread>0?'+':'')+od.opener.spread:'open'} → ${g.spread!=null?(g.spread>0?'+':'')+g.spread:'—'} (${od.spreadMove>0?'▲':'▼'}${Math.abs(od.spreadMove)})`;
+    if(od?.totalMove!=null&&Math.abs(od.totalMove)>=0.5)
+      detail += `<br><strong>Total:</strong> ${od.opener?.total||'open'} → ${g.total||'—'} (${od.totalMove>0?'▲':'▼'}${Math.abs(od.totalMove)})`;
+    if(pub?.spread_away!=null)
+      detail += `<br><strong>Public:</strong> ${g.away} ${pub.spread_away}% / ${g.home} ${pub.spread_home||100-pub.spread_away}%`;
+    if(g.rlm) detail += `<br><span style="color:var(--miss)">🚨 REVERSE LINE MOVEMENT — public heavy on one side but line moved opposite</span>`;
+    if(g.steam) detail += `<br><span style="color:var(--gold)">💨 STEAM MOVE — significant line move from opener</span>`;
+
+    const gameId = JSON.stringify({id:g.id,away:g.away,home:g.home,sport:g.sport,spread:g.spread,total:g.total,ml_away:g.ml_away,ml_home:g.ml_home}).replace(/"/g,"'");
+
+    return `<div class="sharp-item ${cls}">
+      <div>
+        <div class="sharp-score">${g.sharpScore}</div>
+        <div class="sharp-score-lbl">SHARP<br>SCORE</div>
+      </div>
+      <div class="sharp-content">
+        <div class="sharp-game">${esc(g.away)} @ ${esc(g.home)} <span style="font-size:10px;color:var(--muted)">${esc(g.sport)} · ${esc(g.gameTime)}</span></div>
+        <div class="sharp-detail">${detail}</div>
+        <div class="sharp-actions">
+          <button class="pick-btn" onclick="addLeg(${gameId},'spread','away');showTab('parlay')">ATS ${esc(g.away)}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'spread','home');showTab('parlay')">ATS ${esc(g.home)}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'total','over');showTab('parlay')">O ${g.total||'—'}</button>
+          <button class="pick-btn" onclick="addLeg(${gameId},'total','under');showTab('parlay')">U ${g.total||'—'}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── PARLAY BUILDER ──
+function addLeg(gameData, betType, side){
+  const g = typeof gameData==='string' ? JSON.parse(gameData.replace(/'/g,'"')) : gameData;
+  let pick='',odds=null,label='';
+  if(betType==='spread'){
+    if(side==='away'){pick=`${g.away} ${g.spread>0?'+':''}${g.spread}`;odds=-110;}
+    else{pick=`${g.home} ${g.spread<=0?'+':''}${-g.spread}`;odds=-110;}
+    label=`${g.away} @ ${g.home} — Spread`;
+  } else if(betType==='total'){
+    if(side==='over'){pick=`OVER ${g.total}`;odds=-110;}
+    else{pick=`UNDER ${g.total}`;odds=-110;}
+    label=`${g.away} @ ${g.home} — Total`;
+  } else if(betType==='ml'){
+    if(side==='away'){pick=`${g.away} ML`;odds=g.ml_away;}
+    else{pick=`${g.home} ML`;odds=g.ml_home;}
+    label=`${g.away} @ ${g.home} — Moneyline`;
+  }
+  if(parlayLegs.find(l=>l.gameId===g.id&&l.betType===betType)){showToast('Already have a '+betType+' pick for this game');return;}
+  parlayLegs.push({gameId:g.id,away:g.away,home:g.home,sport:g.sport,betType,side,pick,label,odds,game:g});
+  showToast('Added: '+pick);
+  if(activePage==='parlay') renderParlay();
+}
+
+function removeLeg(i){parlayLegs.splice(i,1);renderParlay();}
+function clearParlay(){parlayLegs=[];renderParlay();showToast('Parlay cleared');}
+
+function calcOdds(legs){
+  let d=1;
+  legs.forEach(l=>{const o=l.odds||(-110);d*=o>0?(o/100+1):(1+100/Math.abs(o));});
+  const a=d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));
+  return(a>0?'+':'')+a;
+}
+
+function calcEV(legs, stake=1){
+  let d=1;
+  legs.forEach(l=>{const o=l.odds||(-110);d*=o>0?(o/100+1):(1+100/Math.abs(o));});
+  const impliedWinProb=legs.reduce((p,l)=>{const o=l.odds||(-110);return p*(o>0?100/(o+100):Math.abs(o)/(Math.abs(o)+100));},1);
+  const ev=(d-1)*impliedWinProb*stake - stake*(1-impliedWinProb);
+  return ev.toFixed(2);
+}
+
+function checkCorrelation(legs){
+  const warnings=[], positives=[];
+  for(let i=0;i<legs.length;i++){
+    for(let j=i+1;j<legs.length;j++){
+      const a=legs[i],b=legs[j];
+      if(a.gameId===b.gameId){
+        // Same game
+        if(a.betType==='spread'&&b.betType==='total'){
+          const sameDir=(a.side==='away'&&b.side==='under')||(a.side==='home'&&b.side==='over');
+          if(sameDir) positives.push(`✅ ${a.away}@${a.home}: Spread + Total same game script — correlated`);
+          else warnings.push(`⚠️ ${a.away}@${a.home}: Spread + Total opposite game scripts — weak parlay`);
+        }
+        if(a.betType==='ml'&&b.betType==='spread')
+          warnings.push(`⚠️ ${a.away}@${a.home}: ML + Spread same game — redundant, not true 2-leg parlay`);
+      }
+    }
+  }
+  return{warnings,positives};
+}
+
+function renderParlay(){
+  const el=document.getElementById('parlayLegsEl');
+  const sumEl=document.getElementById('parlaySummary');
+  const warnEl=document.getElementById('corrWarnings');
+  if(!parlayLegs.length){
+    el.innerHTML='<div class="empty" style="padding:20px"><div class="empty-icon">🎰</div><p>Add picks from the LINES tab using the spread/total/ML buttons on each game</p></div>';
+    sumEl.style.display='none';warnEl.innerHTML='';return;
+  }
+  el.innerHTML=parlayLegs.map((l,i)=>
+    `<div class="parlay-leg">
+      <div class="parlay-leg-info">
+        <div class="parlay-leg-game">${esc(l.pick)}</div>
+        <div class="parlay-leg-pick">${esc(l.label)} · ${l.odds!=null?(l.odds>0?'+':'')+l.odds:'—'}</div>
+      </div>
+      <button class="remove-leg" onclick="removeLeg(${i})">✕</button>
+    </div>`
+  ).join('');
+  sumEl.style.display='grid';
+  document.getElementById('p-legs').textContent=parlayLegs.length;
+  document.getElementById('p-odds').textContent=calcOdds(parlayLegs);
+  const ev=calcEV(parlayLegs);
+  const evEl=document.getElementById('p-ev');
+  evEl.textContent=(ev>=0?'+':'')+ev+'u';
+  evEl.style.color=ev>=0?'var(--accent2)':'var(--miss)';
+  const{warnings,positives}=checkCorrelation(parlayLegs);
+  warnEl.innerHTML=warnings.map(w=>`<div class="corr-warning">${w}</div>`).join('')+positives.map(p=>`<div class="corr-good">${p}</div>`).join('');
+}
+
+function copyParlay(){
+  if(!parlayLegs.length){showToast('No legs');return;}
+  const text=`🎰 GAME LINE PARLAY\n${calcOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${parlayLegs.map((l,i)=>`${i+1}. ${l.pick} (${l.sport})`).join('\n')}`;
+  navigator.clipboard.writeText(text).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));
+}
+
+function logParlayToTracker(){
+  if(!parlayLegs.length){showToast('No legs');return;}
+  const params=new URLSearchParams({_parlay:'1'});
+  parlayLegs.forEach((l,i)=>{
+    params.set('p'+i+'_player',l.pick);
+    params.set('p'+i+'_prop',l.label);
+    params.set('p'+i+'_sport',l.sport||'NFL');
+    params.set('p'+i+'_odds',l.odds||'-110');
+    params.set('p'+i+'_rate','');
+    params.set('p'+i+'_dir','');
+  });
+  params.set('count',parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// Auto-load
+window.addEventListener('DOMContentLoaded',()=>setTimeout(loadAll,600));
+</script>
+</body>
+</html>
