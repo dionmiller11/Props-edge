@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quick Picks — Props Edge</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:pulse 2s infinite;flex-shrink:0;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--gold);}
+.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;}
+.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--gold);color:#000;} .btn-primary:hover{background:#ffe44d;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+/* Summary */
+.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+.stat-val{font-size:22px;font-weight:700;font-family:var(--font);line-height:1;margin-bottom:3px;}
+.stat-lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+/* Filters */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+.filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
+select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
+.chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.chip.active{font-weight:700;}
+.chip.nfl.active{background:#ff6b35;color:#fff;border-color:#ff6b35;}
+.chip.nba.active{background:#00d4ff;color:#000;border-color:#00d4ff;}
+.chip.mlb.active{background:#00ff88;color:#000;border-color:#00ff88;}
+.chip.wnba.active{background:#ff69b4;color:#fff;border-color:#ff69b4;}
+.chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
+/* Date banner */
+.date-banner{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.15);border-radius:6px;padding:8px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;font-size:11px;font-family:var(--font);}
+.date-banner-label{color:var(--gold);font-weight:700;}
+.date-banner-info{color:var(--muted);}
+/* Plays grid */
+.plays-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;}
+.play-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;transition:all .15s;position:relative;}
+.play-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,.3);}
+.play-card.nfl{border-left:3px solid #ff6b35;}
+.play-card.nba{border-left:3px solid #00d4ff;}
+.play-card.mlb{border-left:3px solid #00ff88;}
+.play-card.wnba{border-left:3px solid #ff69b4;}
+.play-card.ncaafb{border-left:3px solid #ffd700;}
+.play-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.play-player{font-family:var(--sans);font-weight:700;font-size:13px;}
+.play-rate{font-family:var(--font);font-weight:700;font-size:18px;}
+.play-rate.elite{color:var(--gold);} .play-rate.strong{color:var(--accent2);} .play-rate.solid{color:var(--accent);}
+.play-mid{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+.play-prop{font-size:11px;font-family:var(--font);color:var(--muted);}
+.play-dir{font-size:11px;font-weight:700;}
+.play-dir.over{color:var(--accent2);} .play-dir.under{color:var(--miss);}
+.play-bot{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.play-meta{font-size:10px;color:var(--muted);font-family:var(--font);}
+.play-actions{display:flex;gap:5px;}
+.play-btn{font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:var(--font);font-weight:700;border:1px solid;transition:all .15s;}
+.play-btn.parlay{background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2);}
+.play-btn.log{background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.2);}
+.play-btn.corr{background:rgba(176,110,255,.1);color:var(--purple);border-color:rgba(176,110,255,.2);}
+/* Badges */
+.badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;font-family:var(--font);margin-left:3px;}
+.badge.sharp{background:rgba(255,215,0,.2);color:var(--gold);border:1px solid rgba(255,215,0,.4);}
+.badge.consensus{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+.badge.elite{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+.badge.b2b{background:rgba(255,107,53,.15);color:var(--warn);border:1px solid rgba(255,107,53,.35);}
+.badge.sport{font-size:8px;padding:1px 4px;border-radius:2px;}
+.badge.sport.nfl{background:rgba(255,107,53,.15);color:#ff6b35;}
+.badge.sport.nba{background:rgba(0,212,255,.12);color:#00d4ff;}
+.badge.sport.mlb{background:rgba(0,255,136,.1);color:#00ff88;}
+.badge.sport.wnba{background:rgba(255,105,180,.1);color:#ff69b4;}
+.badge.sport.ncaafb{background:rgba(255,215,0,.1);color:#ffd700;}
+/* Parlay panel */
+.parlay-panel{background:var(--surface);border:1px solid rgba(0,212,255,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none;}
+.parlay-panel.open{display:block;}
+.parlay-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+.parlay-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;}
+.parlay-odds{font-family:var(--font);font-size:18px;font-weight:700;color:var(--gold);}
+.parlay-legs{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;}
+.parlay-leg{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:5px;border:1px solid var(--border);font-size:12px;}
+.parlay-leg-info{flex:1;}
+.parlay-leg-player{font-weight:600;} .parlay-leg-prop{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:1px;}
+.remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;}
+.parlay-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);}
+.empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
+.empty p{font-size:13px;line-height:1.6;}
+.no-data-links{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px;}
+.no-data-links a{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;border:1px solid var(--border);color:var(--muted);font-family:var(--sans);}
+.no-data-links a:hover{border-color:var(--accent);color:var(--accent);}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+.toast.show{transform:translateY(0);opacity:1;}
+@media(max-width:700px){.summary{grid-template-columns:repeat(3,1fr);}.plays-grid{grid-template-columns:1fr;}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" class="home-btn">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>QUICK <span>PICKS</span></h1>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="scanDate">—</span>
+    <button class="btn btn-ghost" onclick="loadPlays()">↻ Refresh</button>
+    <button class="btn btn-primary" id="parlayToggle" onclick="toggleParlay()">🎰 Parlay (0)</button>
+  </div>
+</header>
+<main>
+  <!-- Parlay Panel -->
+  <div class="parlay-panel" id="parlayPanel">
+    <div class="parlay-header">
+      <span class="parlay-title">🎰 QUICK PARLAY</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="parlayCount">0 legs</span>
+        <span class="parlay-odds" id="parlayOdds">—</span>
+        <div class="parlay-actions">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button>
+          <button class="btn" style="padding:4px 10px;font-size:11px;background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35)" onclick="correlateParlayLegs()">🔗 Correlate</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:11px" onclick="logParlayAll()">📒 Log All</button>
+        </div>
+      </div>
+    </div>
+    <div class="parlay-legs" id="parlayLegs"><div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Add plays using the + button on each card</div></div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-total">0</div><div class="stat-lbl">TOTAL PLAYS</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-elite">0</div><div class="stat-lbl">🔥 90%+ RATE</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--accent2)" id="s-strong">0</div><div class="stat-lbl">✅ 80-89%</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--miss)" id="s-b2b">0</div><div class="stat-lbl">⚠️ B2B FLAGS</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--purple)" id="s-sports">0</div><div class="stat-lbl">SPORTS</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="80" min="60" max="100" step="5" oninput="renderPlays()">%</div>
+    <div class="filter-group"><span class="filter-label">SORT</span>
+      <select id="sortBy" onchange="renderPlays()">
+        <option value="rate">Hit Rate</option>
+        <option value="sport">Sport</option>
+        <option value="direction">Direction</option>
+      </select>
+    </div>
+    <div class="filter-group"><span class="filter-label">DIRECTION</span>
+      <select id="dirFilter" onchange="renderPlays()">
+        <option value="all">All</option>
+        <option value="OVER">Over Only</option>
+        <option value="UNDER">Under Only</option>
+      </select>
+    </div>
+    <div class="filter-group" style="gap:4px;flex-wrap:wrap;">
+      <span class="filter-label">SPORT</span>
+      <button class="chip nfl active" onclick="toggleSport('NFL',this)">🏈 NFL</button>
+      <button class="chip nba active" onclick="toggleSport('NBA',this)">🏀 NBA</button>
+      <button class="chip mlb active" onclick="toggleSport('MLB',this)">⚾ MLB</button>
+      <button class="chip wnba active" onclick="toggleSport('WNBA',this)">🏀 WNBA</button>
+      <button class="chip ncaafb active" onclick="toggleSport('NCAAFB',this)">🏈 CFB</button>
+    </div>
+    <div class="filter-group" style="margin-left:auto">
+      <button class="chip" id="b2bChip" onclick="toggleB2B(this)">⚠️ B2B ONLY</button>
+      <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
+    </div>
+  </div>
+
+  <!-- Date banner -->
+  <div class="date-banner" id="dateBanner" style="display:none">
+    <span class="date-banner-label" id="dateBannerLabel">—</span>
+    <span class="date-banner-info" id="dateBannerInfo">—</span>
+  </div>
+
+  <!-- Plays -->
+  <div class="plays-grid" id="playsGrid">
+    <div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">⚡</div><p>Loading plays from your scan history…</p></div></div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const SPORTS = ['NFL','NBA','MLB','WNBA','NCAAFB'];
+const SPORT_TOOLS = {
+  NFL:    'https://dionmiller11.github.io/Props-edge/nfl-props.html',
+  NBA:    'https://dionmiller11.github.io/Props-edge/nba-props.html',
+  MLB:    'https://dionmiller11.github.io/Props-edge/mlb-props.html',
+  WNBA:   'https://dionmiller11.github.io/Props-edge/wnba-props.html',
+  NCAAFB: 'https://dionmiller11.github.io/Props-edge/ncaafb-props.html',
+};
+
+let allPlays = [], activeSports = new Set(SPORTS), b2bOnly = false, parlayLegs = [], scanDateLabel = '';
+
+function loadPlays(){
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+  let plays = [], dateUsed = '', isToday = false;
+
+  // Try today first
+  try{
+    const snap = JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null');
+    if(snap&&snap.plays&&snap.plays.length){plays=snap.plays;dateUsed=today;isToday=true;}
+  }catch(e){}
+
+  // Fall back to yesterday
+  if(!plays.length){
+    try{
+      const snap = JSON.parse(localStorage.getItem('propsSnapshot_'+yesterday)||'null');
+      if(snap&&snap.plays&&snap.plays.length){plays=snap.plays;dateUsed=yesterday;isToday=false;}
+    }catch(e){}
+  }
+
+  // Also check for plays from bet tracker to mark already-logged
+  let loggedKeys = new Set();
+  try{
+    const bets = JSON.parse(localStorage.getItem('propsBets')||'[]');
+    bets.forEach(b=>loggedKeys.add((b.player+'|'+b.prop).toLowerCase()));
+  }catch(e){}
+
+  if(!plays.length){
+    allPlays = [];
+    renderEmpty();
+    return;
+  }
+
+  // Deduplicate and mark logged
+  const seen = new Set();
+  allPlays = plays.filter(p=>{
+    const k = (p.player+'|'+p.prop+'|'+(p.direction||'OVER')).toLowerCase();
+    if(seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map(p=>({
+    ...p,
+    logged: loggedKeys.has((p.player+'|'+p.prop).toLowerCase()),
+  }));
+
+  // Date banner
+  const banner = document.getElementById('dateBanner');
+  const label = document.getElementById('dateBannerLabel');
+  const info = document.getElementById('dateBannerInfo');
+  banner.style.display = 'flex';
+  label.textContent = isToday ? '✅ TODAY\'S SCAN' : '⚠️ YESTERDAY\'S SCAN — run a scan to update';
+  info.textContent = `${allPlays.length} plays saved · ${dateUsed} · ${new Set(allPlays.map(p=>p.sport)).size} sports`;
+  document.getElementById('scanDate').textContent = dateUsed;
+
+  updateSummary();
+  renderPlays();
+}
+
+function updateSummary(){
+  const q = allPlays;
+  document.getElementById('s-total').textContent = q.length;
+  document.getElementById('s-elite').textContent = q.filter(p=>(p.rate||0)>=90).length;
+  document.getElementById('s-strong').textContent = q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;
+  document.getElementById('s-b2b').textContent = q.filter(p=>p.b2b).length;
+  document.getElementById('s-sports').textContent = new Set(q.map(p=>p.sport).filter(Boolean)).size;
+}
+
+function toggleSport(sport, el){
+  if(activeSports.has(sport)&&activeSports.size===1) return;
+  if(activeSports.has(sport)) activeSports.delete(sport);
+  else activeSports.add(sport);
+  el.classList.toggle('active', activeSports.has(sport));
+  renderPlays();
+}
+
+function toggleB2B(el){b2bOnly=!b2bOnly;el.classList.toggle('active',b2bOnly);renderPlays();}
+
+function resetFilters(){
+  document.getElementById('minRate').value=80;
+  document.getElementById('sortBy').value='rate';
+  document.getElementById('dirFilter').value='all';
+  b2bOnly=false;
+  document.getElementById('b2bChip').classList.remove('active');
+  activeSports=new Set(SPORTS);
+  document.querySelectorAll('.chip[onclick*="toggleSport"]').forEach(c=>c.classList.add('active'));
+  renderPlays();
+}
+
+function renderPlays(){
+  const grid = document.getElementById('playsGrid');
+  const minRate = parseInt(document.getElementById('minRate').value)||80;
+  const sortBy = document.getElementById('sortBy').value;
+  const dirFilter = document.getElementById('dirFilter').value;
+
+  let data = allPlays.filter(p=>{
+    if(!activeSports.has(p.sport)) return false;
+    if((p.rate||0)<minRate) return false;
+    if(dirFilter!=='all'&&(p.direction||'OVER')!==dirFilter) return false;
+    if(b2bOnly&&!p.b2b) return false;
+    return true;
+  });
+
+  data = [...data].sort((a,b)=>{
+    if(sortBy==='sport') return (a.sport||'').localeCompare(b.sport||'');
+    if(sortBy==='direction') return (a.direction||'OVER').localeCompare(b.direction||'OVER');
+    return (b.rate||0)-(a.rate||0);
+  });
+
+  if(!data.length){
+    grid.innerHTML = '<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🔍</div><p>No plays match your filters.<br>Try lowering the min rate or enabling more sports.</p></div></div>';
+    return;
+  }
+
+  grid.innerHTML = data.map(p=>{
+    const rate = p.rate||0;
+    const rc = rate>=90?'elite':rate>=80?'strong':'solid';
+    const sport = (p.sport||'nfl').toLowerCase();
+    const dir = p.direction||'OVER';
+    const dc = dir==='OVER'?'over':'under';
+    const dirArrow = dir==='OVER'?'▲':'▼';
+    const opp = p.opposingTeam||p.opp||'';
+    const gameTime = p.gameTime||'';
+
+    // Badges
+    let badges = '';
+    if(rate>=90) badges += '<span class="badge elite">🔥 ELITE</span>';
+    if(p.b2b) badges += '<span class="badge b2b">⚠️ B2B</span>';
+    if(p.bookCount>=15) badges += '<span class="badge sharp">🔥 SHARP</span>';
+    else if(p.streak>=2&&rate>=80) badges += '<span class="badge consensus">⚡ CONS</span>';
+    badges += `<span class="badge sport ${sport}">${esc(p.sport||'')}</span>`;
+
+    const inParlay = parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop);
+    const pData = JSON.stringify({player:p.player,team:p.team||'',prop:p.prop,line:p.line,direction:dir,rate,sport:p.sport||''}).replace(/"/g,"'");
+
+    return `<div class="play-card ${sport}">
+      <div class="play-card-top">
+        <div>
+          <div class="play-player">${esc(p.player)} ${badges}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(p.team||'')}${opp?' vs '+esc(opp):''}${gameTime?' · '+esc(gameTime):''}</div>
+        </div>
+        <div class="play-rate ${rc}">${rate}%</div>
+      </div>
+      <div class="play-mid">
+        <span class="play-prop">${esc(p.prop)}</span>
+        <span class="play-dir ${dc}">${dirArrow} ${dir}</span>
+        ${p.bestOdds?`<span style="font-size:10px;color:var(--muted);font-family:var(--font)">${p.bestOdds>0?'+':''}${p.bestOdds}</span>`:''}
+      </div>
+      <div class="play-bot">
+        <div class="play-meta">${p.hits||0}/${p.games||10} ${dir}${p.streak>=2?' · '+p.streak+'G streak':''}</div>
+        <div class="play-actions">
+          <button class="play-btn parlay ${inParlay?'active':''}" onclick="addToParlay(${pData})" style="${inParlay?'background:rgba(0,212,255,.3);color:#000':''}">
+            ${inParlay?'✓':'+'}
+          </button>
+          <button class="play-btn log" onclick="logBet(${pData})">📋</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderEmpty(){
+  document.getElementById('playsGrid').innerHTML = `<div style="grid-column:1/-1"><div class="empty">
+    <div class="empty-icon">📭</div>
+    <p>No scan data found for today or yesterday.<br>Run a scan on any props tool to populate this page.</p>
+    <div class="no-data-links">
+      ${Object.entries(SPORT_TOOLS).map(([s,url])=>`<a href="${url}">Run ${s}</a>`).join('')}
+    </div>
+  </div></div>`;
+  document.getElementById('dateBanner').style.display='none';
+}
+
+// ── PARLAY ──
+function addToParlay(play){
+  if(parlayLegs.some(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in parlay');return;}
+  if(parlayLegs.length>=10){showToast('Max 10 legs');return;}
+  parlayLegs.push(play);
+  updateParlayPanel();
+  renderPlays();
+  if(!document.getElementById('parlayPanel').classList.contains('open')) toggleParlay();
+}
+
+function removeFromParlay(i){
+  parlayLegs.splice(i,1);
+  updateParlayPanel();
+  renderPlays();
+}
+
+function clearParlay(){parlayLegs=[];updateParlayPanel();renderPlays();}
+
+function toggleParlay(){
+  const panel = document.getElementById('parlayPanel');
+  panel.classList.toggle('open');
+  updateParlayBtn();
+}
+
+function updateParlayBtn(){
+  document.getElementById('parlayToggle').textContent = `🎰 Parlay (${parlayLegs.length})`;
+}
+
+function calcOdds(legs){
+  let d=1;
+  legs.forEach(l=>{const o=parseInt(l.bestOdds)||(-110);d*=o>0?(o/100+1):(1+100/Math.abs(o));});
+  const a=d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));
+  return(a>0?'+':'')+a;
+}
+
+function updateParlayPanel(){
+  const el = document.getElementById('parlayLegs');
+  document.getElementById('parlayCount').textContent = parlayLegs.length+(parlayLegs.length===1?' leg':' legs');
+  document.getElementById('parlayOdds').textContent = parlayLegs.length>=2?calcOdds(parlayLegs):'—';
+  updateParlayBtn();
+  if(!parlayLegs.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Add plays using the + button on each card</div>';
+    return;
+  }
+  el.innerHTML = parlayLegs.map((l,i)=>`
+    <div class="parlay-leg">
+      <div class="parlay-leg-info">
+        <div class="parlay-leg-player">${esc(l.player)} <span class="badge sport ${(l.sport||'').toLowerCase()}">${esc(l.sport||'')}</span></div>
+        <div class="parlay-leg-prop">${esc(l.prop)} ${l.direction==='UNDER'?'▼ UNDER':'▲ OVER'} · ${l.rate}%</div>
+      </div>
+      <button class="remove-btn" onclick="removeFromParlay(${i})">✕</button>
+    </div>`).join('');
+}
+
+function copyParlay(){
+  if(!parlayLegs.length){showToast('No legs');return;}
+  const text = `🎰 QUICK PICKS PARLAY\n${calcOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n`+
+    parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.sport}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');
+  navigator.clipboard.writeText(text).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));
+}
+
+function logParlayAll(){
+  if(!parlayLegs.length){showToast('No legs');return;}
+  const params = new URLSearchParams({_parlay:'1'});
+  parlayLegs.forEach((l,i)=>{
+    params.set('p'+i+'_player',l.player||'');
+    params.set('p'+i+'_prop',l.prop||'');
+    params.set('p'+i+'_sport',l.sport||'');
+    params.set('p'+i+'_odds',l.bestOdds||'-110');
+    params.set('p'+i+'_rate',l.rate||'');
+    params.set('p'+i+'_dir',l.direction||'OVER');
+  });
+  params.set('count',parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+function correlateParlayLegs(){
+  if(parlayLegs.length<2){showToast('Add at least 2 legs first');return;}
+  const params = new URLSearchParams();
+  parlayLegs.forEach((l,i)=>{
+    params.set('p'+i+'_player',l.player||'');
+    params.set('p'+i+'_team',l.team||'');
+    params.set('p'+i+'_prop',l.prop||'');
+    params.set('p'+i+'_sport',l.sport||'NFL');
+    params.set('p'+i+'_dir',l.direction||'OVER');
+  });
+  params.set('count',parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
+}
+
+function logBet(play){
+  const params = new URLSearchParams({
+    player:play.player||'',prop:play.prop||'',
+    sport:play.sport||'',odds:play.bestOdds||'-110',
+    rate:play.rate||'',direction:play.direction||'OVER',
+  });
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// Auto-load
+window.addEventListener('DOMContentLoaded',()=>loadPlays());
+</script>
+</body>
+</html>
