@@ -110,6 +110,12 @@
   .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
   .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
   .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
+
+  .search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+  .search-input:focus{border-color:var(--accent);}
+  .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+  .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
 </style>
 </head>
 <body>
@@ -143,6 +149,11 @@
     <div class="filter-group"><span class="filter-label">SORT</span><select id="sortBy" onchange="renderTable()"><option value="rate">Hit Rate</option><option value="streak">Streak</option><option value="edge">Edge</option><option value="time">Game Time</option></select></div>
     <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
     <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
       <button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
@@ -329,7 +340,7 @@ function renderTable(){
   let data=allData.filter(p=>{
     if(activeTab!=='all'&&p.category!==activeTab)return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&(p.streak||0)<2)return false;
     if(upcomingOnly&&p.gameTime){const t=p.gameTime;const h=parseInt(t);const pm=t.toLowerCase().includes('pm');const hr=(pm&&h!==12)?h+12:(!pm&&h===12?0:h);const min=parseInt(t.split(':')[1]||0);const gd=new Date();gd.setHours(hr,min,0,0);if(gd<=now)return false;}
-    if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(b2bOnly&&!p.b2b)return false;return true;
+    if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(b2bOnly&&!p.b2b)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery))return false;return true;
   });
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
@@ -528,6 +539,19 @@ function correlateParlay(){
   });
   params.set('count', parlayLegs.length);
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
+}
+
+let searchQuery = '';
+function onSearch(val){
+  searchQuery = val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display = val ? 'block' : 'none';
+  renderTable();
+}
+function clearSearch(){
+  searchQuery='';
+  document.getElementById('playerSearch').value='';
+  document.getElementById('searchClear').style.display='none';
+  renderTable();
 }
 </script>
 </body>

@@ -80,6 +80,12 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
   .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
   .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
+
+  .search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+  .search-input:focus{border-color:var(--accent);}
+  .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+  .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
 </style>
 </head>
 <body>
@@ -116,6 +122,11 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
     <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
     <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button><button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
       <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button></div>
   </div>
@@ -165,7 +176,8 @@ function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStat
 function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',Object.keys(TAB_PROPS)[i]===tab);});document.getElementById('tableTitle').textContent=(TAB_TITLES[tab]||tab)+' — TODAY';renderTable();}
 function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
-function resetFilters(){['sortBy','dirFilter','teamFilter','timeFilter'].forEach(id=>document.getElementById(id).value=id==='sortBy'?'rate':'all');document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');b2bOnly=false;document.getElementById('b2bChip')?.classList.remove('active');renderTable();}
+function resetFilters(){['sortBy','dirFilter','teamFilter','timeFilter'].forEach(id=>document.getElementById(id).value=id==='sortBy'?'rate':'all');document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');b2bOnly=false;document.getElementById('b2bChip')?.classList.remove('active');
+    searchQuery='';if(document.getElementById('playerSearch'))document.getElementById('playerSearch').value='';if(document.getElementById('searchClear'))document.getElementById('searchClear').style.display='none';renderTable();}
 function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
 function hideProgress(){document.getElementById('progressWrap').style.display='none';}
 function populateTeamFilter(){const sel=document.getElementById('teamFilter');const cur=sel.value;const teams=[...new Set(allData.map(p=>p.team).filter(Boolean))].sort();sel.innerHTML='<option value="all">All</option>'+teams.map(t=>'<option value="'+t+'">'+t+'</option>').join('');if(teams.includes(cur))sel.value=cur;}
@@ -293,7 +305,7 @@ function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.t
 function renderTable(){
   const tbody=document.getElementById('tableBody');const minRate=parseInt(document.getElementById('minRate').value)||70;const sortBy=document.getElementById('sortBy')?.value||'rate';const dirFilter=document.getElementById('dirFilter')?.value||'all';const teamFilter=document.getElementById('teamFilter')?.value||'all';const timeFilter=document.getElementById('timeFilter')?.value||'all';
   const allowedProps=TAB_PROPS[activeTab];
-  let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(b2bOnly&&!p.b2b)return false;return true;});
+  let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(b2bOnly&&!p.b2b)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery))return false;return true;});
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
   tbody.innerHTML=data.map(p=>{
@@ -440,6 +452,19 @@ function correlateParlay(){
   });
   params.set('count', parlayLegs.length);
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
+}
+
+let searchQuery = '';
+function onSearch(val){
+  searchQuery = val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display = val ? 'block' : 'none';
+  renderTable();
+}
+function clearSearch(){
+  searchQuery='';
+  document.getElementById('playerSearch').value='';
+  document.getElementById('searchClear').style.display='none';
+  renderTable();
 }
 </script>
 </body>

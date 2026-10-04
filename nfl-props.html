@@ -184,6 +184,12 @@
   .line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
   .line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
   .line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
+
+  .search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+  .search-input:focus{border-color:var(--accent);}
+  .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+  .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
 </style>
 </head>
 <body>
@@ -245,6 +251,11 @@
     </div>
     <div class="filter-group"><span class="filter-label">TEAM</span>
       <select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
@@ -1024,6 +1035,19 @@ function correlateParlay(){
   });
   params.set('count', parlayLegs.length);
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
+}
+
+let searchQuery = '';
+function onSearch(val){
+  searchQuery = val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display = val ? 'block' : 'none';
+  renderTable();
+}
+function clearSearch(){
+  searchQuery='';
+  document.getElementById('playerSearch').value='';
+  document.getElementById('searchClear').style.display='none';
+  renderTable();
 }
 </script>
 </body>

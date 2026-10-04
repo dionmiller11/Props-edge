@@ -94,6 +94,11 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .no-data-links{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px;}
 .no-data-links a{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;border:1px solid var(--border);color:var(--muted);font-family:var(--sans);}
 .no-data-links a:hover{border-color:var(--accent);color:var(--accent);}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:300px;}
+.search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+.search-input:focus{border-color:var(--gold);}
+.search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
 .toast.show{transform:translateY(0);opacity:1;}
 @media(max-width:700px){.summary{grid-template-columns:repeat(3,1fr);}.plays-grid{grid-template-columns:1fr;}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}}
@@ -164,6 +169,11 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
       <button class="chip mlb active" onclick="toggleSport('MLB',this)">⚾ MLB</button>
       <button class="chip wnba active" onclick="toggleSport('WNBA',this)">🏀 WNBA</button>
       <button class="chip ncaafb active" onclick="toggleSport('NCAAFB',this)">🏈 CFB</button>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="b2bChip" onclick="toggleB2B(this)">⚠️ B2B ONLY</button>
@@ -294,6 +304,7 @@ function renderPlays(){
     if((p.rate||0)<minRate) return false;
     if(dirFilter!=='all'&&(p.direction||'OVER')!==dirFilter) return false;
     if(b2bOnly&&!p.b2b) return false;
+    if(searchQuery&&!p.player.toLowerCase().includes(searchQuery)) return false;
     return true;
   });
 
@@ -465,6 +476,9 @@ function logBet(play){
   window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
 }
 
+let searchQuery='';
+function onSearch(val){searchQuery=val.toLowerCase().trim();document.getElementById('searchClear').style.display=val?'block':'none';renderPlays();}
+function clearSearch(){searchQuery='';document.getElementById('playerSearch').value='';document.getElementById('searchClear').style.display='none';renderPlays();}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
