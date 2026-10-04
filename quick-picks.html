@@ -304,7 +304,12 @@ function renderPlays(){
     if((p.rate||0)<minRate) return false;
     if(dirFilter!=='all'&&(p.direction||'OVER')!==dirFilter) return false;
     if(b2bOnly&&!p.b2b) return false;
-    if(searchQuery&&!p.player.toLowerCase().includes(searchQuery)) return false;
+    if(searchQuery){
+      const playerMatch = p.player.toLowerCase().includes(searchQuery);
+      const teamMatch = (p.team||'').toLowerCase().includes(searchQuery);
+      const oppMatch = (p.opposingTeam||p.opp||'').toLowerCase().includes(searchQuery);
+      if(!playerMatch&&!teamMatch&&!oppMatch) return false;
+    }
     return true;
   });
 
@@ -480,14 +485,7 @@ let searchQuery='';
 function onSearch(val){
   searchQuery=val.toLowerCase().trim();
   document.getElementById('searchClear').style.display=val?'block':'none';
-  const cards=document.querySelectorAll('#playsGrid .play-card');
-  if(!searchQuery){cards.forEach(c=>c.style.display='');return;}
-  cards.forEach(c=>{
-    const player=(c.querySelector('.play-player')||{textContent:''}).textContent.toLowerCase();
-    const meta=(c.querySelector('.play-meta,.sub-text')||{textContent:''}).textContent.toLowerCase();
-    const bot=(c.querySelector('.play-bot')||{textContent:''}).textContent.toLowerCase();
-    c.style.display=(player.includes(searchQuery)||meta.includes(searchQuery)||bot.includes(searchQuery))?'':'none';
-  });
+  renderPlays();
 }
 function clearSearch(){
   searchQuery='';
