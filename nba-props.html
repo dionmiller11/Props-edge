@@ -124,7 +124,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
-      <input class="search-input" id="playerSearch" type="text" placeholder="Search player…" oninput="onSearch(this.value)">
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team (e.g. LAR, PHI)…" oninput="onSearch(this.value)">
       <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button><button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
