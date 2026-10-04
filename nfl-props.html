@@ -576,6 +576,7 @@ async function runScan(){
     document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
     setStatus('done',`✅ ${allData.length} NFL prop edges from Linemate — ${new Date().toLocaleTimeString()}`);
     document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
+    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NFL');
 
   } catch(err){
     hideProgress();
@@ -892,7 +893,22 @@ async function prefetchInjuries(players){
   }
 }
 
-function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}
+}
+// ── SNAPSHOT SAVER ──
+window.savePropsSnapshot=function(plays,sport){
+  var ds=new Date().toISOString().split('T')[0];
+  var key='propsSnapshot_'+ds;
+  var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
+  var cur=ex||{date:ds,plays:[]};
+  var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
+  plays.filter(function(p){return(p.rate||0)>=80;}).forEach(function(p){
+    var k=p.player+'|'+p.prop;
+    if(!seen.has(k)){cur.plays.push(Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()}));seen.add(k);}
+  });
+  cur.updatedAt=Date.now();
+  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
+};
 
 if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
 
