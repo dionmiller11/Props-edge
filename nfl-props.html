@@ -618,6 +618,8 @@ function renderTable(){
     }
     if(dirFilter!=='all'&&p.direction!==dirFilter)return false;
     if(teamFilter!=='all'&&p.team!==teamFilter)return false;
+    const sq=(document.getElementById('playerSearch')?.value||'').toLowerCase().trim();
+    if(sq&&!p.player.toLowerCase().includes(sq))return false;
     return true;
   });
 
@@ -921,6 +923,8 @@ window.savePropsSnapshot=function(plays,sport){
   try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
 };
 
+// Restore search query on load
+try{const sq=sessionStorage.getItem('nflSearchQuery');if(sq){searchQuery=sq;const si=document.getElementById('playerSearch');if(si)si.value=sq;}}catch(e){}
 if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
 
 // ── AUTO-RUN ON PAGE OPEN ──
@@ -1040,6 +1044,7 @@ function correlateParlay(){
 let searchQuery = '';
 function onSearch(val){
   searchQuery = val.toLowerCase().trim();
+  try{sessionStorage.setItem('nflSearchQuery',searchQuery);}catch(e){}
   document.getElementById('searchClear').style.display = val ? 'block' : 'none';
   renderTable();
 }
