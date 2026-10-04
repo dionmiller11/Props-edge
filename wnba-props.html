@@ -319,6 +319,7 @@ async function runScan(){
     setStatus('done',`✅ ${allData.length} WNBA prop edges — ${new Date().toLocaleTimeString()}`);
     document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
     saveLineHistory(allData);
+    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'WNBA');
   }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);document.getElementById('tokenBox').style.display='block';}
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
@@ -401,6 +402,20 @@ async function prefetchInjuries(players){const unique=[...new Set(players.map(p=
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return'';}}
 if(getStored('lmToken'))setTimeout(()=>runScan(),900);
 
+// ── SNAPSHOT SAVER ──
+window.savePropsSnapshot=function(plays,sport){
+  var ds=new Date().toISOString().split('T')[0];
+  var key='propsSnapshot_'+ds;
+  var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
+  var cur=ex||{date:ds,plays:[]};
+  var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
+  plays.filter(function(p){return(p.rate||0)>=80;}).forEach(function(p){
+    var k=p.player+'|'+p.prop;
+    if(!seen.has(k)){cur.plays.push(Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()}));seen.add(k);}
+  });
+  cur.updatedAt=Date.now();
+  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
+};
 // ── AUTO-RUN ON PAGE OPEN ──
 (function(){
   function autoRun(){
