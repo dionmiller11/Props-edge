@@ -172,7 +172,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
     </div>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
-      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team (e.g. LAR, PHI)…" oninput="onSearch(this.value)">
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team name (e.g. Mahomes, Rams, Eagles)…" oninput="onSearch(this.value)">
       <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
     <div class="filter-group" style="margin-left:auto">
@@ -482,7 +482,12 @@ function onSearch(val){
   document.getElementById('searchClear').style.display=val?'block':'none';
   const cards=document.querySelectorAll('#playsGrid .play-card');
   if(!searchQuery){cards.forEach(c=>c.style.display='');return;}
-  cards.forEach(c=>{c.style.display=c.textContent.toLowerCase().includes(searchQuery)?'':'none';});
+  cards.forEach(c=>{
+    const player=(c.querySelector('.play-player')||{textContent:''}).textContent.toLowerCase();
+    const meta=(c.querySelector('.play-meta,.sub-text')||{textContent:''}).textContent.toLowerCase();
+    const bot=(c.querySelector('.play-bot')||{textContent:''}).textContent.toLowerCase();
+    c.style.display=(player.includes(searchQuery)||meta.includes(searchQuery)||bot.includes(searchQuery))?'':'none';
+  });
 }
 function clearSearch(){
   searchQuery='';

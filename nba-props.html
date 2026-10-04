@@ -124,7 +124,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
-      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team (e.g. LAR, PHI)…" oninput="onSearch(this.value)">
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team name (e.g. Mahomes, Rams, Eagles)…" oninput="onSearch(this.value)">
       <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button><button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
@@ -456,11 +456,18 @@ function correlateParlay(){
 
 let searchQuery = '';
 function onSearch(val){
-  searchQuery = val.toLowerCase().trim();
-  document.getElementById('searchClear').style.display = val ? 'block' : 'none';
-  const rows = document.querySelectorAll('#tableBody tr');
-  if(!searchQuery){ rows.forEach(r=>r.style.display=''); return; }
-  rows.forEach(r=>{ const text=r.textContent.toLowerCase(); r.style.display=text.includes(searchQuery)?'':'none'; });
+  searchQuery=val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display=val?'block':'none';
+  const rows=document.querySelectorAll('#tableBody tr');
+  if(!searchQuery){rows.forEach(r=>r.style.display='');return;}
+  rows.forEach(r=>{
+    const playerCell=r.querySelector('td:first-child');
+    if(!playerCell){r.style.display='none';return;}
+    const playerName=(playerCell.querySelector('.player-name')||playerCell).textContent.toLowerCase();
+    const subText=(playerCell.querySelector('.sub-text')||{textContent:''}).textContent.toLowerCase();
+    // Match player name OR team/opponent info in sub-text
+    r.style.display=(playerName.includes(searchQuery)||subText.includes(searchQuery))?'':'none';
+  });
 }
 function clearSearch(){
   searchQuery='';
