@@ -477,8 +477,19 @@ function logBet(play){
 }
 
 let searchQuery='';
-function onSearch(val){searchQuery=val.toLowerCase().trim();document.getElementById('searchClear').style.display=val?'block':'none';renderPlays();}
-function clearSearch(){searchQuery='';document.getElementById('playerSearch').value='';document.getElementById('searchClear').style.display='none';renderPlays();}
+function onSearch(val){
+  searchQuery=val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display=val?'block':'none';
+  const cards=document.querySelectorAll('#playsGrid .play-card');
+  if(!searchQuery){cards.forEach(c=>c.style.display='');return;}
+  cards.forEach(c=>{c.style.display=c.textContent.toLowerCase().includes(searchQuery)?'':'none';});
+}
+function clearSearch(){
+  searchQuery='';
+  document.getElementById('playerSearch').value='';
+  document.getElementById('searchClear').style.display='none';
+  document.querySelectorAll('#playsGrid .play-card').forEach(c=>c.style.display='');
+}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 

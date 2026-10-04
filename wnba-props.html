@@ -545,13 +545,15 @@ let searchQuery = '';
 function onSearch(val){
   searchQuery = val.toLowerCase().trim();
   document.getElementById('searchClear').style.display = val ? 'block' : 'none';
-  renderTable();
+  const rows = document.querySelectorAll('#tableBody tr');
+  if(!searchQuery){ rows.forEach(r=>r.style.display=''); return; }
+  rows.forEach(r=>{ const text=r.textContent.toLowerCase(); r.style.display=text.includes(searchQuery)?'':'none'; });
 }
 function clearSearch(){
   searchQuery='';
   document.getElementById('playerSearch').value='';
   document.getElementById('searchClear').style.display='none';
-  renderTable();
+  document.querySelectorAll('#tableBody tr').forEach(r=>r.style.display='');
 }
 </script>
 </body>
