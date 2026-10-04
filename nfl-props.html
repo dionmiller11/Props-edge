@@ -1044,15 +1044,23 @@ function correlateParlay(){
 let searchQuery = '';
 function onSearch(val){
   searchQuery = val.toLowerCase().trim();
-  try{sessionStorage.setItem('nflSearchQuery',searchQuery);}catch(e){}
   document.getElementById('searchClear').style.display = val ? 'block' : 'none';
-  renderTable();
+  // CSS-based row filtering — works regardless of renderTable internals
+  const rows = document.querySelectorAll('#tableBody tr');
+  if(!searchQuery){
+    rows.forEach(r=>r.style.display='');
+    return;
+  }
+  rows.forEach(r=>{
+    const text = r.textContent.toLowerCase();
+    r.style.display = text.includes(searchQuery) ? '' : 'none';
+  });
 }
 function clearSearch(){
   searchQuery='';
   document.getElementById('playerSearch').value='';
   document.getElementById('searchClear').style.display='none';
-  renderTable();
+  document.querySelectorAll('#tableBody tr').forEach(r=>r.style.display='');
 }
 </script>
 </body>
