@@ -552,8 +552,8 @@ async function fetchBTBoxScores(date, sport){
         const bs=await bsRes.json();
         for(const team of (bs.boxscore?.players||[])){
           for(const cat of (team.statistics||[])){
-            const catName = (cat.name||'').toLowerCase().replace(/\s/g,'').replace('passing','passing').replace('rushing','rushing').replace('receiving','receiving').replace('general','general');
-            const labels=(cat.labels||[]).map(l=>l.toLowerCase().replace(/\s/g,'').split('/')[0]);
+            const catName = (cat.name||'').toLowerCase().trim();
+            const labels=(cat.labels||[]).map(l=>l.toLowerCase().trim().split('/')[0]);
             for(const athlete of (cat.athletes||[])){
               const name=(athlete.athlete?.displayName||'').toLowerCase();
               if(!name) continue;
@@ -561,8 +561,10 @@ async function fetchBTBoxScores(date, sport){
               (athlete.stats||[]).forEach((v,i)=>{
                 if(!labels[i]) return;
                 const val = parseFloat(v)||0;
-                playerStats[name][labels[i]] = val; // raw label
-                playerStats[name][catName+'_'+labels[i]] = val; // category-prefixed
+                // Always store category-prefixed to avoid collision
+                playerStats[name][catName+'_'+labels[i]] = val;
+                // Only store raw if not already set by a more specific category
+                if(playerStats[name][labels[i]]===undefined) playerStats[name][labels[i]] = val;
               });
             }
           }
@@ -627,22 +629,29 @@ function findBTStat(playerStats, playerName, statKey){
   // ESPN uses short labels — map our stat keys to ESPN abbreviations
   // Category-prefixed keys (catname_label) + raw label fallbacks
   const lookup = {
-    passingyards:   ['passing_yds','yds'],
-    completions:    ['passing_c','c'],
-    passingtouchdowns:['passing_td','td'],
-    rushingyards:   ['rushing_yds','rushing_car'],
-    receivingyards: ['receiving_yds'],
-    receptions:     ['receiving_rec','rec'],
-    touchdowns:     ['receiving_td','rushing_td','td'],
-    kickingpoints:  ['kicking_pts','pts'],
-    scrimmage:      null, // handled above
-    pra:            null, // handled above
-    totalyards:     null, // handled above
-    // NBA
-    points:['pts'],rebounds:['reb'],assists:['ast'],
-    threepointers:['3pt'],steals:['stl'],blocks:['blk'],
+    // NFL — ESPN category names: "passing", "rushing", "receiving"
+    // Labels: passing=[c/att,yds,avg,td,int,sacks,qbr,rtg], rushing=[car,yds,avg,td,long], receiving=[rec,yds,avg,td,long,tgts]
+    passingyards:      ['passing_yds'],
+    completions:       ['passing_c'],
+    passingtouchdowns: ['passing_td'],
+    rushingyards:      ['rushing_yds'],
+    receivingyards:    ['receiving_yds'],
+    receptions:        ['receiving_rec'],
+    touchdowns:        ['receiving_td','rushing_td','td'],
+    kickingpoints:     ['kicking_pts','pts'],
+    // NBA — ESPN category: "scoring" labels=[min,fg,3pt,ft,oreb,dreb,reb,ast,stl,blk,to,pf,pts]
+    points:    ['scoring_pts','pts'],
+    rebounds:  ['scoring_reb','reb'],
+    assists:   ['scoring_ast','ast'],
+    threepointers:['scoring_3pt','3pt'],
+    steals:    ['scoring_stl','stl'],
+    blocks:    ['scoring_blk','blk'],
     // MLB
-    hits:['h'],totalbases:['tb'],strikeouts:['so'],rbi:['rbi'],runs:['r'],
+    hits:      ['batting_h','h'],
+    totalbases:['batting_tb','tb'],
+    strikeouts:['pitching_so','batting_so','so'],
+    rbi:       ['batting_rbi','rbi'],
+    runs:      ['batting_r','r'],
   };
   const keys = lookup[statKey] || [statKey];
   for(const k of keys){
