@@ -529,8 +529,8 @@ async function fetchBTBoxScores(date, sport){
         const bs=await bsRes.json();
         for(const team of (bs.boxscore?.players||[])){
           for(const cat of (team.statistics||[])){
-            const catName = (cat.name||'').toLowerCase().replace(/\s/g,'');
-            const labels=(cat.labels||[]).map(l=>l.toLowerCase().replace(/\s|\/.*$/g,''));
+            const catName = (cat.name||'').toLowerCase().replace(/\s/g,'').replace('passing','passing').replace('rushing','rushing').replace('receiving','receiving').replace('general','general');
+            const labels=(cat.labels||[]).map(l=>l.toLowerCase().replace(/\s/g,'').split('/')[0]);
             for(const athlete of (cat.athletes||[])){
               const name=(athlete.athlete?.displayName||'').toLowerCase();
               if(!name) continue;
@@ -602,44 +602,27 @@ function findBTStat(playerStats, playerName, statKey){
   }
 
   // ESPN uses short labels — map our stat keys to ESPN abbreviations
-  const aliases = {
-    // NFL passing (labels: C/ATT, YDS, AVG, TD, INT, SACKS, QBR, RTG)
-    passingyards:['yds','passingyards','passyds'],
-    completions:['c/att','completions','comp'],
-    passingtouchdowns:['td','passingtouchdowns','passtd'],
-    // NFL rushing (labels: CAR, YDS, AVG, TD, LONG)
-    rushingyards:['yds','rushingyards','rushyds'],
-    // NFL receiving (labels: REC, YDS, AVG, TD, LONG, TGTS)
-    receivingyards:['yds','receivingyards','recyds'],
-    receptions:['rec','receptions'],
-    touchdowns:['td','touchdowns'],
-    kickingpoints:['pts','kickingpoints','fg'],
-    // NBA (labels: MIN, FG, 3PT, FT, OREB, DREB, REB, AST, STL, BLK, TO, PF, PTS)
-    points:['pts','points'],
-    rebounds:['reb','rebounds'],
-    assists:['ast','assists'],
-    threepointers:['3pt','threepointers'],
-    steals:['stl','steals'],
-    blocks:['blk','blocks'],
+  // Category-prefixed keys (catname_label) + raw label fallbacks
+  const lookup = {
+    passingyards:   ['passing_yds','yds'],
+    completions:    ['passing_c','c'],
+    passingtouchdowns:['passing_td','td'],
+    rushingyards:   ['rushing_yds','rushing_car'],
+    receivingyards: ['receiving_yds'],
+    receptions:     ['receiving_rec','rec'],
+    touchdowns:     ['receiving_td','rushing_td','td'],
+    kickingpoints:  ['kicking_pts','pts'],
+    scrimmage:      null, // handled above
+    pra:            null, // handled above
+    totalyards:     null, // handled above
+    // NBA
+    points:['pts'],rebounds:['reb'],assists:['ast'],
+    threepointers:['3pt'],steals:['stl'],blocks:['blk'],
     // MLB
-    hits:['h','hits'],
-    totalbases:['tb','totalbases'],
-    strikeouts:['so','k','strikeouts'],
-    rbi:['rbi'],
-    runs:['r','runs'],
+    hits:['h'],totalbases:['tb'],strikeouts:['so'],rbi:['rbi'],runs:['r'],
   };
-  // The problem: multiple categories have "yds" — need category-aware lookup
-  // Stats object already has all labels from all categories merged
-  // For passing/rushing/receiving we need to be smarter
-  const categoryHints = {
-    passingyards:'passing', rushingyards:'rushing', receivingyards:'receiving',
-    receptions:'receiving', passingtouchdowns:'passing',
-  };
-  const hint = categoryHints[statKey];
-  const keys = [statKey, ...(aliases[statKey]||[])];
+  const keys = lookup[statKey] || [statKey];
   for(const k of keys){
-    // Use category-prefixed key if available
-    if(hint && stats[hint+'_'+k]!==undefined) return stats[hint+'_'+k];
     if(stats[k]!==undefined) return stats[k];
   }
   return null;
