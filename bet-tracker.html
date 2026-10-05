@@ -546,12 +546,35 @@ async function fetchBTBoxScores(date, sport){
   }catch(e){ return {}; }
 }
 
+function normalizeName(n){
+  return (n||'').toLowerCase()
+    .replace(/\b(ii|iii|iv|jr|sr|jr\.|sr\.)\b/g,'')
+    .replace(/\./g,'').trim().replace(/\s+/g,' ');
+}
 function findBTStat(playerStats, playerName, statKey){
-  const name = playerName.toLowerCase();
+  const name = normalizeName(playerName);
+  // Try exact match first
   let stats = playerStats[name];
+  // Try normalized ESPN names
+  if(!stats){
+    const normalizedKeys = Object.keys(playerStats).map(k=>({orig:k,norm:normalizeName(k)}));
+    const exactNorm = normalizedKeys.find(k=>k.norm===name);
+    if(exactNorm) stats = playerStats[exactNorm.orig];
+  }
+  // Try last name match
   if(!stats){
     const lastName = name.split(' ').pop();
-    const match = Object.keys(playerStats).find(k=>k.includes(lastName)&&k.length>lastName.length);
+    const firstInitial = name.charAt(0);
+    const match = Object.keys(playerStats).find(k=>{
+      const kn = normalizeName(k);
+      return kn.includes(lastName) && kn.charAt(0)===firstInitial;
+    });
+    if(match) stats = playerStats[match];
+  }
+  // Fallback: just last name
+  if(!stats){
+    const lastName = name.split(' ').pop();
+    const match = Object.keys(playerStats).find(k=>normalizeName(k).endsWith(lastName));
     if(match) stats = playerStats[match];
   }
   if(!stats) return null;
@@ -621,7 +644,14 @@ async function btAutoGrade(){
   let graded=0, failed=0;
   for(const[key,group] of Object.entries(groups)){
     btn.textContent=`⏳ ${group.sport} ${group.date}…`;
-    const stats = await fetchBTBoxScores(group.date, group.sport);
+    let stats = await fetchBTBoxScores(group.date, group.sport);
+    // If no players found, try next day (e.g. logged Saturday, game Sunday)
+    if(!Object.keys(stats).length){
+      const nextDay = new Date(group.date+'T12:00:00');
+      nextDay.setDate(nextDay.getDate()+1);
+      const nextDate = nextDay.toISOString().split('T')[0];
+      stats = await fetchBTBoxScores(nextDate, group.sport);
+    }
     for(const bet of group.bets){
       const statKey = extractStatKey(bet.propType, bet.prop);
       const line = extractBetLine(bet.prop);
