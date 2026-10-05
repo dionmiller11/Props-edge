@@ -497,13 +497,18 @@ const BT_STAT_MAP = {
 };
 
 function extractBetLine(prop){
-  const m = (prop||'').match(/[OU](\d+\.?\d*)/i);
-  return m ? parseFloat(m[1]) : null;
+  // Try O/U prefix first
+  const m = (prop||'').match(/[OU]\s*(\d+\.?\d*)/i);
+  if(m) return parseFloat(m[1]);
+  // Fall back to any number in the prop
+  const m2 = (prop||'').match(/(\d+\.?\d+)/);
+  return m2 ? parseFloat(m2[1]) : null;
 }
 function extractBetDir(prop, direction){
-  if(direction==='win'||direction==='loss'||direction==='push') return 'OVER'; // already graded
-  if(direction) return direction;
-  return /\bU\d|\bunder/i.test(prop||'') ? 'UNDER' : 'OVER';
+  if(direction==='OVER'||direction==='UNDER') return direction;
+  if(/\bunder\b|\bU\s*\d/i.test(prop||'')) return 'UNDER';
+  if(/\bover\b|\bO\s*\d/i.test(prop||'')) return 'OVER';
+  return 'OVER'; // default
 }
 function extractStatKey(propType, prop){
   const combined = ((propType||'')+' '+(prop||'')).toLowerCase().replace(/[^a-z0-9\s\+]/g,' ').replace(/\s+/g,' ').trim();
@@ -678,7 +683,7 @@ async function btAutoGrade(){
     for(const bet of group.bets){
       const statKey = extractStatKey(bet.propType, bet.prop);
       const line = extractBetLine(bet.prop);
-      const dir = extractBetDir(bet.prop, null);
+      const dir = extractBetDir(bet.prop, bet.direction||null);
       if(!statKey||!line){failed++;continue;}
       const actual = findBTStat(stats, bet.player, statKey);
       if(actual===null){failed++;continue;}
