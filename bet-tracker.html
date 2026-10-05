@@ -506,10 +506,28 @@ function extractBetDir(prop, direction){
   return /\bU\d|\bunder/i.test(prop||'') ? 'UNDER' : 'OVER';
 }
 function extractStatKey(propType, prop){
-  const combined = ((propType||'')+(prop||'')).toLowerCase();
-  for(const [k,v] of Object.entries(BT_STAT_MAP)){
+  const combined = ((propType||'')+' '+(prop||'')).toLowerCase().replace(/[^a-z0-9\s\+]/g,' ').replace(/\s+/g,' ').trim();
+  // Try longest match first
+  const sorted = Object.entries(BT_STAT_MAP).sort((a,b)=>b[0].length-a[0].length);
+  for(const [k,v] of sorted){
     if(combined.includes(k)) return v;
   }
+  // Additional fuzzy matches
+  if(/pass.*yard|yard.*pass|passing.*yard/.test(combined)) return 'passingyards';
+  if(/rush.*yard|yard.*rush|rushing.*yard/.test(combined)) return 'rushingyards';
+  if(/rec.*yard|yard.*rec|receiv.*yard/.test(combined)) return 'receivingyards';
+  if(/reception|catches/.test(combined)) return 'receptions';
+  if(/completion/.test(combined)) return 'completions';
+  if(/pass.*td|passing.*touch/.test(combined)) return 'passingtouchdowns';
+  if(/point|pts/.test(combined)&&!/3point|three/.test(combined)) return 'points';
+  if(/rebound|reb/.test(combined)) return 'rebounds';
+  if(/assist|ast/.test(combined)) return 'assists';
+  if(/3.point|three.point|3pm/.test(combined)) return 'threepointers';
+  if(/hit/.test(combined)&&!/pitch/.test(combined)) return 'hits';
+  if(/total base|tb/.test(combined)) return 'totalbases';
+  if(/strikeout|strike out/.test(combined)) return 'strikeouts';
+  if(/rbi/.test(combined)) return 'rbi';
+  if(/touchdown|anytime td/.test(combined)) return 'touchdowns';
   return null;
 }
 
