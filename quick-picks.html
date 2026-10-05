@@ -255,7 +255,7 @@ function loadPlays(){
   const label = document.getElementById('dateBannerLabel');
   const info = document.getElementById('dateBannerInfo');
   banner.style.display = 'flex';
-  label.textContent = isToday ? '✅ TODAY\'S SCAN' : '⚠️ YESTERDAY\'S SCAN — run a scan to update';
+  label.textContent = isToday ? '✅ TODAY\'S SCAN — upcoming games only' : '⚠️ YESTERDAY\'S SCAN — run a scan to update · upcoming games only';
   info.textContent = `${allPlays.length} plays saved · ${dateUsed} · ${new Set(allPlays.map(p=>p.sport)).size} sports`;
   document.getElementById('scanDate').textContent = dateUsed;
 
@@ -309,6 +309,23 @@ function renderPlays(){
       const teamMatch = (p.team||'').toLowerCase().includes(searchQuery);
       const oppMatch = (p.opposingTeam||p.opp||'').toLowerCase().includes(searchQuery);
       if(!playerMatch&&!teamMatch&&!oppMatch) return false;
+    }
+    // Filter out games that have already started
+    if(p.gameTime){
+      try{
+        const now = new Date();
+        const t = p.gameTime.trim();
+        const pm = /pm/i.test(t);
+        const am = /am/i.test(t);
+        const parts = t.replace(/[apm\s]/gi,'').split(':');
+        let hr = parseInt(parts[0]);
+        const min = parseInt(parts[1]||'0');
+        if(pm && hr!==12) hr+=12;
+        if(am && hr===12) hr=0;
+        const gameDate = new Date();
+        gameDate.setHours(hr, min, 0, 0);
+        if(gameDate < now) return false;
+      }catch(e){}
     }
     return true;
   });
