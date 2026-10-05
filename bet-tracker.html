@@ -175,7 +175,10 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
     <div class="table-wrap">
       <div class="table-header">
         <span class="table-title">📋 BET LOG</span>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="betCount">0 bets</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="betCount">0 bets</span>
+          <button id="btAutoGradeBtn" onclick="btAutoGrade()" style="font-size:10px;padding:3px 9px;border-radius:4px;background:rgba(0,255,136,.08);color:var(--accent2);border:1px solid rgba(0,255,136,.2);cursor:pointer;font-family:var(--font);font-weight:700;">⚡ Auto-Grade</button>
+        </div>
       </div>
       <table>
         <thead><tr>
@@ -290,7 +293,7 @@ function renderBets(){
       <td>${esc(b.units)}u</td>
       <td>${b.result==='pending'
         ?`<div style="display:flex;gap:4px"><button class="result-btn" onclick="updateResult(${b.id},'win')">W</button><button class="result-btn" onclick="updateResult(${b.id},'loss')">L</button><button class="result-btn" onclick="updateResult(${b.id},'push')">P</button></div>`
-        :`<span class="result-badge ${b.result}">${b.result==='win'?'✅ WIN':b.result==='loss'?'❌ LOSS':b.result==='push'?'🟡 PUSH':'⏳'}</span>`
+        :`<span class="result-badge ${b.result}">${b.result==='win'?'✅ WIN':b.result==='loss'?'❌ LOSS':b.result==='push'?'🟡 PUSH':'⏳'}</span>${b.actualStat!=null?`<div style="font-size:9px;color:var(--muted);font-family:var(--font);margin-top:2px">${b.actualStat} vs ${b.gradedDir==='OVER'?'O':'U'}${b.gradedLine}</div>`:''}`
       }</td>
       <td style="font-weight:700;color:${plColor}">${b.result==='pending'?'—':plStr}</td>
       <td><button class="del-btn" onclick="deleteBet(${b.id})">✕</button></td>
@@ -467,6 +470,181 @@ function correlateSelected(){
   params.set('count',selected.length);
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
 }
+// ── BET TRACKER AUTO-GRADER ──
+const BT_STAT_MAP = {
+  // NFL/NCAAFB
+  'pass yds':'passingyards','passing yds':'passingyards','pass yards':'passingyards',
+  'pass tds':'passingtouchdowns','pass td':'passingtouchdowns',
+  'completions':'completions',
+  'rush yds':'rushingyards','rush yards':'rushingyards','rushing yds':'rushingyards',
+  'rec yds':'receivingyards','rec yards':'receivingyards','receiving yds':'receivingyards','receiving yards':'receivingyards',
+  'receptions':'receptions','catches':'receptions',
+  'rush+rec yds':'scrimmage','rush + rec':'scrimmage','rush+rec':'scrimmage','scrimmage':'scrimmage',
+  'pass+rush yds':'totalyards','pass + rush':'totalyards',
+  'tds':'touchdowns','anytime td':'touchdowns',
+  'kicking pts':'kickingpoints','kicking points':'kickingpoints',
+  // NBA/WNBA
+  'points':'points','pts':'points',
+  'rebounds':'rebounds','reb':'rebounds',
+  'assists':'assists','ast':'assists',
+  'pts+reb+ast':'pra','pra':'pra',
+  '3-pointers':'threepointers','3pm':'threepointers','threes':'threepointers',
+  'steals':'steals','blocks':'blocks',
+  // MLB
+  'hits':'hits','total bases':'totalbases','tb':'totalbases',
+  'rbi':'rbi','runs':'runs',
+  'strikeouts':'strikeouts','k':'strikeouts',
+};
+
+function extractBetLine(prop){
+  const m = (prop||'').match(/[OU](\d+\.?\d*)/i);
+  return m ? parseFloat(m[1]) : null;
+}
+function extractBetDir(prop, direction){
+  if(direction==='win'||direction==='loss'||direction==='push') return 'OVER'; // already graded
+  if(direction) return direction;
+  return /\bU\d|\bunder/i.test(prop||'') ? 'UNDER' : 'OVER';
+}
+function extractStatKey(propType, prop){
+  const combined = ((propType||'')+(prop||'')).toLowerCase();
+  for(const [k,v] of Object.entries(BT_STAT_MAP)){
+    if(combined.includes(k)) return v;
+  }
+  return null;
+}
+
+async function fetchBTBoxScores(date, sport){
+  try{
+    const paths={NFL:'football/nfl',NBA:'basketball/nba',WNBA:'basketball/wnba',MLB:'baseball/mlb',NCAAFB:'football/college-football',NHL:'hockey/nhl'};
+    const path=paths[sport]; if(!path) return {};
+    const ds=(date||'').replace(/-/g,'');
+    const res=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${ds}`);
+    if(!res.ok) return {};
+    const data=await res.json();
+    const playerStats={};
+    for(const evt of (data.events||[])){
+      try{
+        const bsRes=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/summary?event=${evt.id}`);
+        if(!bsRes.ok) continue;
+        const bs=await bsRes.json();
+        for(const team of (bs.boxscore?.players||[])){
+          for(const cat of (team.statistics||[])){
+            const labels=(cat.labels||[]).map(l=>l.toLowerCase().replace(/\s/g,''));
+            for(const athlete of (cat.athletes||[])){
+              const name=(athlete.athlete?.displayName||'').toLowerCase();
+              if(!name) continue;
+              if(!playerStats[name]) playerStats[name]={};
+              (athlete.stats||[]).forEach((v,i)=>{
+                if(labels[i]) playerStats[name][labels[i]]=parseFloat(v)||0;
+              });
+            }
+          }
+        }
+      }catch(e){}
+    }
+    return playerStats;
+  }catch(e){ return {}; }
+}
+
+function findBTStat(playerStats, playerName, statKey){
+  const name = playerName.toLowerCase();
+  let stats = playerStats[name];
+  if(!stats){
+    const lastName = name.split(' ').pop();
+    const match = Object.keys(playerStats).find(k=>k.includes(lastName)&&k.length>lastName.length);
+    if(match) stats = playerStats[match];
+  }
+  if(!stats) return null;
+
+  // Handle combo stats
+  if(statKey==='scrimmage'){
+    const rush = stats['rushingyards']??stats['rushing']??stats['ryds']??0;
+    const rec = stats['receivingyards']??stats['receiving']??stats['recyds']??0;
+    return rush+rec;
+  }
+  if(statKey==='pra'){
+    const p=stats['pts']??stats['points']??0;
+    const r=stats['reb']??stats['rebounds']??0;
+    const a=stats['ast']??stats['assists']??0;
+    return p+r+a;
+  }
+  if(statKey==='totalyards'){
+    const pass=stats['passingyards']??stats['passing']??0;
+    const rush=stats['rushingyards']??stats['rushing']??0;
+    return pass+rush;
+  }
+
+  // Direct lookup with fallbacks
+  const aliases = {
+    passingyards:['passingyards','passyds','pyds','passing'],
+    rushingyards:['rushingyards','rushyds','ryds','rushing'],
+    receivingyards:['receivingyards','recyds','receiving'],
+    receptions:['receptions','rec'],
+    completions:['completions','comp','cmp'],
+    passingtouchdowns:['passingtouchdowns','passtd','tds'],
+    touchdowns:['touchdowns','td','tds'],
+    points:['pts','points'],
+    rebounds:['reb','rebounds','totalrebounds','totreb'],
+    assists:['ast','assists'],
+    threepointers:['3pt','3pm','threepointers'],
+    hits:['h','hits'],
+    totalbases:['tb','totalbases'],
+    strikeouts:['so','k','strikeouts'],
+    rbi:['rbi'],
+    kickingpoints:['kickingpoints','fg','pat'],
+  };
+  const keys = [statKey, ...(aliases[statKey]||[])];
+  for(const k of keys){
+    if(stats[k]!==undefined) return stats[k];
+  }
+  return null;
+}
+
+async function btAutoGrade(){
+  const btn = document.getElementById('btAutoGradeBtn');
+  btn.disabled=true; btn.textContent='⏳ Grading…';
+  const pending = bets.filter(b=>b.result==='pending');
+  if(!pending.length){showToast('No pending bets to grade');btn.disabled=false;btn.textContent='⚡ Auto-Grade';return;}
+
+  // Skip 1Q props
+  const gradable = pending.filter(b=>!/(1q|1h|1st q|first q|first h)/i.test((b.prop||'')+(b.propType||'')));
+  const skipped = pending.length - gradable.length;
+
+  // Group by sport+date
+  const groups={};
+  gradable.forEach(b=>{
+    const key=(b.sport||'NFL')+'|'+(b.date||new Date().toISOString().split('T')[0]);
+    if(!groups[key]) groups[key]={sport:b.sport||'NFL',date:b.date||new Date().toISOString().split('T')[0],bets:[]};
+    groups[key].bets.push(b);
+  });
+
+  let graded=0, failed=0;
+  for(const[key,group] of Object.entries(groups)){
+    btn.textContent=`⏳ ${group.sport} ${group.date}…`;
+    const stats = await fetchBTBoxScores(group.date, group.sport);
+    for(const bet of group.bets){
+      const statKey = extractStatKey(bet.propType, bet.prop);
+      const line = extractBetLine(bet.prop);
+      const dir = extractBetDir(bet.prop, null);
+      if(!statKey||!line){failed++;continue;}
+      const actual = findBTStat(stats, bet.player, statKey);
+      if(actual===null){failed++;continue;}
+      const result = dir==='OVER'?(actual>line?'win':actual===line?'push':'loss'):(actual<line?'win':actual===line?'push':'loss');
+      const idx = bets.findIndex(b=>b.id===bet.id);
+      if(idx!==-1){
+        bets[idx].result=result;
+        bets[idx].actualStat=actual;
+        bets[idx].gradedLine=line;
+        bets[idx].gradedDir=dir;
+      }
+      graded++;
+    }
+  }
+  saveBets(); renderBets(); updateStats();
+  btn.disabled=false; btn.textContent='⚡ Auto-Grade';
+  showToast(`⚡ Graded ${graded}${skipped?` · ${skipped} 1Q skipped`:''}${failed?` · ${failed} not found`:''}`);
+}
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 renderBets();updateStats();
