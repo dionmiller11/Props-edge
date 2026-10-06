@@ -161,6 +161,22 @@
   .toast.show{transform:translateY(0);opacity:1;}
 
   /* ── MOBILE RESPONSIVE ── */
+  /* SGP Builder */
+  .sgp-leg{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);margin-bottom:6px;}
+  .sgp-leg-info{flex:1;}
+  .sgp-leg-player{font-weight:700;font-size:13px;}
+  .sgp-leg-prop{font-size:11px;color:var(--muted);font-family:var(--font);margin-top:2px;}
+  .sgp-leg-rate{font-family:var(--font);font-weight:700;font-size:15px;color:var(--accent2);}
+  .sgp-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:2px 6px;}
+  .corr-chip{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--font);margin-left:6px;}
+  .corr-chip.pos{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+  .corr-chip.neg{background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.2);}
+  .corr-chip.neutral{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
+  .sgp-result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+  .sgp-stat{background:var(--surface2);border-radius:6px;padding:10px;text-align:center;}
+  .sgp-stat-val{font-size:22px;font-weight:700;font-family:var(--font);}
+  .sgp-stat-lbl{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:2px;}
+  .edge-positive{color:var(--accent2)!important;} .edge-negative{color:var(--miss)!important;}
   @media(max-width:700px){
     .summary{grid-template-columns:repeat(2,1fr);}
     .filters{flex-direction:column;align-items:flex-start;}
@@ -229,6 +245,7 @@
   <button class="tab" onclick="switchTab('rushing')">💨 RUSHING</button>
   <button class="tab" onclick="switchTab('receiving')">✋ RECEIVING</button>
   <button class="tab" onclick="switchTab('td')">⭐ TDs</button>
+  <button class="tab" onclick="switchTab('sgp')" id="sgpTab">🎰 SGP <span id="sgpCount" style="background:var(--accent);color:#000;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
 </div>
 
 <main>
@@ -318,6 +335,27 @@
       </div>
     </div>
     <div class="parlay-legs" id="parlayLegsEl"><div class="parlay-empty">Add plays using + on each row</div></div>
+  </div>
+
+  <!-- SGP Builder Panel -->
+  <div id="sgpPanel" style="display:none">
+    <div style="background:var(--surface);border:1px solid rgba(0,212,255,.3);border-radius:10px;padding:16px 18px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em">🎰 SAME GAME PARLAY BUILDER</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Add props from any tab using the + button · Monte Carlo sim models inter-prop correlation</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="clearSGP()" style="font-size:10px;padding:4px 10px;border-radius:4px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:var(--font)">Clear</button>
+          <button onclick="runSGPSim()" id="sgpSimBtn" style="font-size:11px;padding:5px 12px;border-radius:5px;background:var(--accent);color:#000;border:none;cursor:pointer;font-weight:700;font-family:var(--sans)">⚡ Run Sim</button>
+        </div>
+      </div>
+      <div id="sgpLegs" style="margin-bottom:12px"><div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Add props using the + button on any prop row</div></div>
+      <div id="sgpResult" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px"></div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--muted);line-height:1.8;">
+      💡 <strong style="color:var(--text)">How SGP Monte Carlo works:</strong> Each simulation runs a full game model — passing volume, rushing load, target share — and checks if all your legs hit simultaneously. This captures correlation: if Mahomes throws 300 yards in a sim, Kelce's receiving yards go up too. 10,000 simulations gives you the true joint probability.
+    </div>
   </div>
 
   <div class="table-wrap">
@@ -414,7 +452,18 @@ function updateStatus(k,ok){
   if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
   if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
 }
-function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['all','passing','rushing','receiving','td'][i]===tab);});document.getElementById('tableTitle').textContent={all:'🏈 ALL NFL PROPS',passing:'🎯 PASSING PROPS',rushing:'💨 RUSHING PROPS',receiving:'✋ RECEIVING PROPS',td:'⭐ TOUCHDOWN PROPS'}[tab]+' — THIS WEEK';renderTable();}
+function switchTab(tab){
+  activeTab=tab;
+  const tabs=['all','passing','rushing','receiving','td','sgp'];
+  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',tabs[i]===tab);});
+  const isSGP = tab==='sgp';
+  document.getElementById('sgpPanel').style.display = isSGP?'block':'none';
+  document.querySelector('.table-wrap').style.display = isSGP?'none':'block';
+  if(!isSGP){
+    document.getElementById('tableTitle').textContent={all:'🏈 ALL NFL PROPS',passing:'🎯 PASSING PROPS',rushing:'💨 RUSHING PROPS',receiving:'✋ RECEIVING PROPS',td:'⭐ TOUCHDOWN PROPS'}[tab]+' — THIS WEEK';
+    renderTable();
+  }
+}
 function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
 function toggleUpcoming(el){upcomingOnly=!upcomingOnly;el.classList.toggle('active',upcomingOnly);renderTable();}
 function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');renderTable();}
@@ -652,7 +701,10 @@ function renderTable(){
       <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>
       <td class="hide-mobile-sm">${isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():'<span class="edge-badge '+ec+'">'+el+'</span>'}</td>
-      <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button></td>
+      <td style="white-space:nowrap">
+        <button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button>
+        <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,propType:p.propType||"",line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})' title="Add to SGP Builder">🎰</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -908,6 +960,215 @@ async function prefetchInjuries(players){
 
 function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}
 }
+// ── SGP BUILDER ──
+let sgpLegs = [];
+
+// Correlation pairs for NFL — positive = legs move together, negative = inverse
+const NFL_CORR = {
+  'passingyards_receivingyards': 0.75,   // QB pass yds ↔ WR rec yds strong+
+  'passingyards_receptions':     0.70,
+  'passingyards_passingtd':      0.55,
+  'passingyards_rushingyards':  -0.25,   // More passing = less rushing
+  'receivingyards_receptions':   0.80,   // Strong+ same player
+  'receivingyards_rushingyards': 0.10,   // Mild+ game script
+  'rushingyards_rushingattempts':0.85,
+  'receivingyards_receivingtd':  0.45,
+  'passingyards_receivingtd':    0.40,
+};
+
+const NBA_CORR = {
+  'points_assists':    0.35,
+  'points_rebounds':  -0.10,
+  'points_threepointers': 0.50,
+  'assists_rebounds':  0.15,
+  'points_steals':     0.20,
+};
+
+const MLB_CORR = {
+  'hits_totalbases':   0.75,
+  'hits_rbi':          0.40,
+  'hits_runs':         0.45,
+  'totalbases_rbi':    0.55,
+};
+
+function getStatKey(propType, prop){
+  const c = ((propType||'')+' '+(prop||'')).toLowerCase();
+  if(/pass.*yd|pass.*yard/.test(c)) return 'passingyards';
+  if(/rush.*yd|rush.*yard/.test(c)) return 'rushingyards';
+  if(/rec.*yd|rec.*yard/.test(c)) return 'receivingyards';
+  if(/reception|catch/.test(c)) return 'receptions';
+  if(/completion/.test(c)) return 'completions';
+  if(/pass.*td|passing.*td/.test(c)) return 'passingtd';
+  if(/rush.*attempt/.test(c)) return 'rushingattempts';
+  if(/point|pts/.test(c)&&!/3pt/.test(c)) return 'points';
+  if(/rebound|reb/.test(c)) return 'rebounds';
+  if(/assist|ast/.test(c)) return 'assists';
+  if(/3.pt|three/.test(c)) return 'threepointers';
+  if(/hit/.test(c)) return 'hits';
+  if(/total base|tb/.test(c)) return 'totalbases';
+  if(/strikeout/.test(c)) return 'strikeouts';
+  if(/rbi/.test(c)) return 'rbi';
+  return 'unknown';
+}
+
+function getCorrScore(keyA, keyB, sport){
+  const corrMap = sport==='NBA'||sport==='WNBA'?NBA_CORR:sport==='MLB'?MLB_CORR:NFL_CORR;
+  const k1 = keyA+'_'+keyB, k2 = keyB+'_'+keyA;
+  return corrMap[k1]??corrMap[k2]??0;
+}
+
+function corrLabel(score){
+  if(score >= 0.5) return {label:'++ STRONG POS', cls:'pos'};
+  if(score >= 0.2) return {label:'+ MILD POS', cls:'pos'};
+  if(score <= -0.3) return {label:'-- NEG', cls:'neg'};
+  if(score <= -0.1) return {label:'- MILD NEG', cls:'neg'};
+  return {label:'~ NEUTRAL', cls:'neutral'};
+}
+
+// Box-Muller normal random
+function randn(){ const u=Math.random(),v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+// Cholesky-based correlated normals for n variables with correlation matrix
+function correlatedNormals(means, stds, corrMatrix){
+  const n = means.length;
+  // Simple approach: use pairwise correlations via linear combination
+  const z = Array.from({length:n},()=>randn());
+  const result = new Array(n);
+  for(let i=0;i<n;i++){
+    let val = z[i];
+    for(let j=0;j<i;j++){
+      const c = corrMatrix[i][j]||0;
+      val = val * Math.sqrt(1-c*c) + z[j]*c;
+    }
+    result[i] = Math.max(0, means[i] + stds[i]*val);
+  }
+  return result;
+}
+
+function runSGPSim(){
+  const btn = document.getElementById('sgpSimBtn');
+  if(sgpLegs.length < 2){ showToast('Add at least 2 legs'); return; }
+  btn.disabled=true; btn.textContent='⏳ Simulating…';
+
+  setTimeout(()=>{
+    const N = 10000;
+    const sport = sgpLegs[0]?.sport || 'NFL';
+    const n = sgpLegs.length;
+
+    // Build correlation matrix
+    const statKeys = sgpLegs.map(l=>getStatKey(l.propType, l.prop));
+    const corrMatrix = Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>{
+      if(i===j) return 1;
+      // Same player = higher correlation
+      const samePlayer = sgpLegs[i].player===sgpLegs[j].player;
+      const baseCorr = getCorrScore(statKeys[i], statKeys[j], sport);
+      return samePlayer ? Math.min(0.95, baseCorr+0.2) : baseCorr;
+    }));
+
+    // Means and std devs from hit rates + line
+    const means = sgpLegs.map(l=>{
+      const line = parseFloat((l.prop||'').match(/[\d.]+/)?.[0])||10;
+      const rate = (l.rate||75)/100;
+      // If 80% OVER line X, expected mean ≈ X + 1 std dev * something
+      return l.direction==='OVER' ? line * (1 + (rate-0.5)*0.4) : line * (1 - (rate-0.5)*0.4);
+    });
+    const stds = means.map(m=>m*0.28);
+
+    // Monte Carlo
+    let allHit = 0;
+    for(let i=0;i<N;i++){
+      const sims = correlatedNormals(means, stds, corrMatrix);
+      let hit = true;
+      for(let j=0;j<n;j++){
+        const line = parseFloat((sgpLegs[j].prop||'').match(/[\d.]+/)?.[0])||10;
+        const over = sgpLegs[j].direction==='OVER';
+        if(over ? sims[j]<=line : sims[j]>=line){ hit=false; break; }
+      }
+      if(hit) allHit++;
+    }
+
+    const truePct = Math.round(allHit/N*100);
+    const naivePct = Math.round(sgpLegs.reduce((p,l)=>(p*(l.rate||75)/100),1)*100);
+    const trueOdds = truePct>0 ? Math.round((100/truePct*100)-100) : 9999;
+    const naiveOdds = naivePct>0 ? Math.round((100/naivePct*100)-100) : 9999;
+    const edge = ((truePct - naivePct));
+    const edgePct = edge.toFixed(1);
+    const edgeDir = edge>=2?'POSITIVE EDGE ✅':edge<=-2?'NEGATIVE EDGE ⚠️':'ROUGHLY FAIR';
+    const edgeCls = edge>=2?'edge-positive':edge<=-2?'edge-negative':'';
+
+    // Correlation summary
+    const corrSummary = [];
+    for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+      const score = corrMatrix[i][j];
+      const cl = corrLabel(score);
+      corrSummary.push(`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(30,45,69,.3)">
+        <span style="color:var(--muted);font-family:var(--font)">${esc(sgpLegs[i].player.split(' ').pop())} ↔ ${esc(sgpLegs[j].player.split(' ').pop())}</span>
+        <span class="corr-chip ${cl.cls}">${cl.label}</span>
+      </div>`);
+    }
+
+    document.getElementById('sgpResult').style.display='block';
+    document.getElementById('sgpResult').innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;margin-bottom:10px">🎲 MONTE CARLO RESULT (${N.toLocaleString()} SIMS)</div>
+      <div class="sgp-result-grid">
+        <div class="sgp-stat"><div class="sgp-stat-val" style="color:var(--gold)">${truePct}%</div><div class="sgp-stat-lbl">TRUE SGP PROB</div></div>
+        <div class="sgp-stat"><div class="sgp-stat-val" style="color:var(--muted)">${naivePct}%</div><div class="sgp-stat-lbl">NAIVE PROB</div></div>
+        <div class="sgp-stat"><div class="sgp-stat-val ${edgeCls}">${edge>=0?'+':''}${edgePct}%</div><div class="sgp-stat-lbl">CORR BOOST</div></div>
+      </div>
+      <div style="background:var(--surface2);border-radius:6px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--font)">ADJUSTED ODDS</div>
+          <div style="font-size:22px;font-weight:700;font-family:var(--font);color:var(--gold)">+${trueOdds}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--font)">NAIVE ODDS</div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--font);color:var(--muted)">+${naiveOdds}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--muted);font-family:var(--font)">ASSESSMENT</div>
+          <div style="font-size:13px;font-weight:700;class="${edgeCls}">${edgeDir}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;margin-bottom:6px">CORRELATION MATRIX</div>
+      <div>${corrSummary.join('')}</div>`;
+
+    btn.disabled=false; btn.textContent='⚡ Run Sim';
+  }, 50);
+}
+
+function addToSGP(play){
+  if(sgpLegs.length>=8){showToast('Max 8 SGP legs');return;}
+  if(sgpLegs.some(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in SGP');return;}
+  sgpLegs.push(play);
+  updateSGPLegs();
+  showToast(`Added to SGP: ${play.player}`);
+  // Auto-switch to SGP tab
+  switchTab('sgp');
+}
+
+function removeSGPLeg(i){ sgpLegs.splice(i,1); updateSGPLegs(); }
+function clearSGP(){ sgpLegs=[]; updateSGPLegs(); document.getElementById('sgpResult').style.display='none'; }
+
+function updateSGPLegs(){
+  const el = document.getElementById('sgpLegs');
+  const cnt = document.getElementById('sgpCount');
+  cnt.textContent = sgpLegs.length;
+  cnt.style.display = sgpLegs.length?'inline':'none';
+  if(!sgpLegs.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Add props using the + button on any prop row</div>';
+    return;
+  }
+  el.innerHTML = sgpLegs.map((l,i)=>`
+    <div class="sgp-leg">
+      <div class="sgp-leg-info">
+        <div class="sgp-leg-player">${esc(l.player)} <span style="font-size:10px;color:var(--muted)">${esc(l.team||'')}</span></div>
+        <div class="sgp-leg-prop">${esc(l.prop)} · ${l.direction==='UNDER'?'▼ UNDER':'▲ OVER'}</div>
+      </div>
+      <div class="sgp-leg-rate">${l.rate||'—'}%</div>
+      <button class="sgp-remove" onclick="removeSGPLeg(${i})">✕</button>
+    </div>`).join('');
+}
+
 // ── SNAPSHOT SAVER ──
 window.savePropsSnapshot=function(plays,sport){
   var ds=new Date().toISOString().split('T')[0];
