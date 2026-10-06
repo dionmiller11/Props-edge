@@ -378,6 +378,17 @@
 </main>
 </div>
 
+<!-- Injury Report Section -->
+<div style="max-width:1100px;margin:0 auto 20px;padding:0 16px;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+    <div style="padding:11px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:12px;font-weight:600;letter-spacing:.05em;">⚠️ INJURY REPORT — YOUR PLAYERS</span>
+      <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="injuryTs">—</span>
+    </div>
+    <div id="injuryReport" style="padding:12px 16px;font-size:12px;color:var(--muted)">Loading injury data…</div>
+  </div>
+</div>
+
 <footer>
   <span>Props Edge Finder · Real stats via MLB Stats API + ESPN + Linemate</span>
   <span style="color:var(--accent2)">● REAL STATS MODE</span>
@@ -589,6 +600,72 @@ function clearBreakdowns(){document.getElementById('propTypeBreakdown').innerHTM
 function exportRecapObsidian(){const snapshot=getSnapshot(recapDate);if(!snapshot||!snapshot.plays){showToast('No data for this date');return;}const bets=getBetTrackerBets();const betMap={};bets.filter(b=>b.date===recapDate).forEach(b=>{const k=(b.player+'|'+b.prop).toLowerCase().replace(/\s+/g,'');if(b.result&&b.result!=='pending')betMap[k]=b.result;});const plays=snapshot.plays.map(p=>{const k=matchKey(p);const result=betMap[k]||recapGrades[recapDate+'|'+k]||'pending';return{...p,result};});const settled=plays.filter(p=>p.result!=='pending');const wins=settled.filter(p=>p.result==='win').length;const winRate=settled.length?Math.round(wins/settled.length*100):0;const netUnits=wins-(settled.length-wins);const tableRows=plays.map(p=>`| ${p.player} | ${p.sport||'—'} | ${p.prop} | ${p.rate||'—'}% | ${p.result==='win'?'✅ WIN':p.result==='loss'?'❌ LOSS':p.result==='push'?'🟡 PUSH':'⏳'} |`).join('\n');const md=`---\ntags: [recap, betting, props, ${recapDate}]\ndate: ${recapDate}\nflagged: ${plays.length}\ngraded: ${settled.length}\nwin_rate: ${winRate}%\nnet_units: ${netUnits>0?'+':''}${netUnits}u\n---\n\n# 📊 Daily Recap — ${fmtDate(recapDate)}\n\n## Summary\n- **Flagged:** ${plays.length} plays\n- **Graded:** ${settled.length} / ${plays.length}\n- **Win Rate:** ${winRate}%\n- **Net Units:** ${netUnits>0?'+':''}${netUnits}u\n\n## Plays\n\n| Player | Sport | Prop | Rate | Result |\n|--------|-------|------|------|--------|\n${tableRows}\n\n---\n*Props Edge Finder · Daily Recap*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`Recap ${recapDate}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Recap exported!');}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── INJURY REPORT ──
+async function loadInjuryReport(){
+  const el = document.getElementById('injuryReport');
+  const ts = document.getElementById('injuryTs');
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+  let plays = [];
+  try{ const s=JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null'); if(s?.plays?.length) plays=s.plays; }catch(e){}
+  if(!plays.length){ try{ const s=JSON.parse(localStorage.getItem('propsSnapshot_'+yesterday)||'null'); if(s?.plays?.length) plays=s.plays; }catch(e){} }
+  if(!plays.length){ el.innerHTML='<span style="color:var(--muted)">No scan data — run a scan first to see injury flags</span>'; return; }
+
+  const playerMap = {};
+  plays.forEach(p=>{ if(p.player) playerMap[p.player.toLowerCase()]={name:p.player,sport:p.sport||'NFL'}; });
+
+  const sportPaths = {NFL:'football/nfl',NBA:'basketball/nba',MLB:'baseball/mlb',WNBA:'basketball/wnba',NCAAFB:'football/college-football'};
+  const injuries = {};
+  const sports = [...new Set(Object.values(playerMap).map(p=>p.sport))];
+  await Promise.all(sports.map(async sport=>{
+    try{
+      const path=sportPaths[sport]; if(!path) return;
+      const res=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/injuries`);
+      if(!res.ok) return;
+      const data=await res.json();
+      for(const team of (data.injuries||[])){
+        for(const inj of (team.injuries||[])){
+          const name=(inj.athlete?.displayName||'').toLowerCase();
+          if(name) injuries[name]={status:inj.status||'',detail:inj.details?.type||'',longDetail:inj.details?.detail||'',returnDate:inj.details?.returnDate||''};
+        }
+      }
+    }catch(e){}
+  }));
+
+  const flagged=[], healthy=[];
+  for(const [key,player] of Object.entries(playerMap)){
+    const inj=injuries[key];
+    if(inj){
+      const s=inj.status.toLowerCase();
+      const isOut=s.includes('out'), isD=s.includes('doubtful'), isQ=s.includes('question');
+      const color=isOut?'var(--miss)':isD?'var(--warn)':'var(--gold)';
+      const icon=isOut?'🔴':isD?'🟠':'🟡';
+      const label=isOut?'OUT':isD?'DOUBTFUL':'QUESTIONABLE';
+      flagged.push({name:player.name,color,icon,label,detail:inj.detail,longDetail:inj.longDetail,returnDate:inj.returnDate,isOut});
+    } else { healthy.push(player.name); }
+  }
+
+  if(!flagged.length){
+    el.innerHTML=`<span style="color:var(--accent2)">✅ All ${healthy.length} players in your snapshot are active</span>`;
+  } else {
+    flagged.sort((a,b)=>b.isOut-a.isOut);
+    el.innerHTML=flagged.map(p=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(30,45,69,.4);">
+        <span style="font-size:14px">${p.icon}</span>
+        <div style="flex:1;">
+          <span style="font-weight:700;color:var(--text)">${esc(p.name)}</span>
+          <span style="font-size:10px;color:${p.color};font-weight:700;margin-left:8px;font-family:var(--font)">${p.label}</span>
+          ${p.detail?`<span style="font-size:10px;color:var(--muted);margin-left:6px">· ${esc(p.detail)}</span>`:''}
+          ${p.longDetail?`<span style="font-size:10px;color:var(--muted);margin-left:6px">${esc(p.longDetail)}</span>`:''}
+        </div>
+        ${p.returnDate?`<span style="font-size:10px;color:var(--muted);font-family:var(--font)">${esc(p.returnDate)}</span>`:''}
+      </div>`).join('')+
+      (healthy.length?`<div style="margin-top:8px;font-size:10px;color:var(--muted)">✅ ${healthy.length} other players active</div>`:'');
+  }
+  ts.textContent='Updated '+new Date().toLocaleTimeString();
+}
+loadInjuryReport();
 </script>
 <script>
 window.savePropsSnapshot=function(plays,sport){const ds=new Date().toISOString().split('T')[0];const key='propsSnapshot_'+ds;let existing;try{existing=JSON.parse(localStorage.getItem(key)||'null');}catch(e){existing=null;}const current=existing||{date:ds,plays:[]};const seen=new Set(current.plays.map(p=>p.player+'|'+p.prop));plays.filter(p=>(p.rate||0)>=80).forEach(p=>{const k=p.player+'|'+p.prop;if(!seen.has(k)){current.plays.push({...p,sport:p.sport||sport,savedAt:Date.now()});seen.add(k);}});current.updatedAt=Date.now();try{localStorage.setItem(key,JSON.stringify(current));}catch(e){}}; 
