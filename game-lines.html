@@ -527,21 +527,23 @@ function renderLines(){
     const pub = g.public;
     const cardClass = g.rlm?'rlm':g.steam?'steam':'';
 
-    // Spread — ESPN returns spread as the home team's line
-    // Negative = home team favored, Positive = away team favored
+    // Use moneyline to determine favorite — negative ML = favored team
+    // Fall back to spread sign if no ML available
     let spreadVal, spreadTeam, spreadDisplay;
     if(g.spread!=null){
-      if(g.spread < 0){
-        // Home team favored — show home team with negative spread
-        spreadTeam = g.home;
-        spreadVal = g.spread;
-      } else if(g.spread > 0){
-        // Away team favored — show away team with negative spread
-        spreadTeam = g.away;
-        spreadVal = -g.spread;
+      let homeFavored;
+      if(g.ml_home!=null && g.ml_away!=null){
+        homeFavored = g.ml_home < g.ml_away;
       } else {
+        // No ML — use spread sign: ESPN tends to show negative for home favorite
+        homeFavored = g.spread < 0;
+      }
+      if(homeFavored){
         spreadTeam = g.home;
-        spreadVal = 0;
+        spreadVal = -Math.abs(g.spread);
+      } else {
+        spreadTeam = g.away;
+        spreadVal = -Math.abs(g.spread);
       }
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
     } else { spreadTeam = g.home; spreadDisplay = '—'; }
