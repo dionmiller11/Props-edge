@@ -78,6 +78,17 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .pick-btn{font-size:10px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:var(--font);font-weight:700;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;}
 .pick-btn:hover{border-color:var(--accent);color:var(--accent);}
 .pick-btn.selected{background:var(--accent);color:#000;border-color:var(--accent);}
+/* Sim probability section */
+.sim-section{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;}
+.sim-title{font-size:9px;color:var(--muted);font-family:var(--font);letter-spacing:.12em;margin-bottom:8px;}
+.sim-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.sim-label{font-size:11px;font-family:var(--font);font-weight:700;min-width:90px;color:var(--text);}
+.sim-bar-wrap{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.sim-bar-fill{height:100%;border-radius:3px;transition:width .5s;}
+.sim-pct{font-size:11px;font-family:var(--font);font-weight:700;min-width:36px;text-align:right;}
+.sim-pct.strong{color:var(--accent2);}
+.sim-pct.solid{color:var(--gold);}
+.sim-pct.weak{color:var(--muted);}
 /* Sharp screener */
 .sharp-list{display:flex;flex-direction:column;gap:10px;}
 .sharp-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;}
@@ -268,6 +279,124 @@ async function fetchESPNGames(sport){
   }catch(e){ return []; }
 }
 
+// ── FETCH TEAM SEASON STATS ──
+const teamStatsCache = {};
+async function fetchTeamStats(sport, teamId){
+  const key = sport.key+'_'+teamId;
+  if(teamStatsCache[key]) return teamStatsCache[key];
+  try{
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/teams/${teamId}`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const team = data.team;
+    // Get scoring stats from record/stats
+    const stats = {};
+    // Try season stats endpoint
+    const sRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/teams/${teamId}/statistics`);
+    if(sRes.ok){
+      const sData = await sRes.json();
+      const cats = sData.results?.stats?.categories||sData.team?.record?.items||[];
+      // Parse scoring offense and defense
+      for(const cat of (sData.results?.stats?.categories||[])){
+        for(const stat of (cat.stats||[])){
+          stats[stat.name] = parseFloat(stat.value)||0;
+        }
+      }
+    }
+    teamStatsCache[key] = stats;
+    return stats;
+  }catch(e){ return null; }
+}
+
+// ── FETCH TEAM IDs FROM SCOREBOARD ──
+async function fetchTeamIds(sport, gameId){
+  try{
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/summary?event=${gameId}`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const comp = data.header?.competitions?.[0];
+    if(!comp) return null;
+    const home = comp.competitors?.find(c=>c.homeAway==='home');
+    const away = comp.competitors?.find(c=>c.homeAway==='away');
+    return {homeId: home?.id, awayId: away?.id,
+      homeScore: parseFloat(home?.score)||null, awayScore: parseFloat(away?.score)||null};
+  }catch(e){ return null; }
+}
+
+// ── MONTE CARLO SIM ──
+const MC_N = 5000;
+function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC_N){
+  // Expected score for each team
+  const expA = (avgPtsA + avgAllowedH) / 2;
+  const expH = (avgPtsH + avgAllowedA) / 2;
+  // Std dev — typical game-to-game variance ~20-25% of scoring average
+  const sdA = Math.max(expA * 0.22, 3);
+  const sdH = Math.max(expH * 0.22, 3);
+  let overCount = 0, awaySpreadCount = 0;
+  for(let i=0;i<n;i++){
+    // Box-Muller
+    const u1=Math.random(), u2=Math.random();
+    const z1=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+    const u3=Math.random(), u4=Math.random();
+    const z2=Math.sqrt(-2*Math.log(u3))*Math.cos(2*Math.PI*u4);
+    const sA = Math.max(0, expA + sdA*z1);
+    const sH = Math.max(0, expH + sdH*z2);
+    if(sA+sH > total) overCount++;
+    // spread: positive = home favored (away gets points)
+    if(spread!==null){
+      const margin = sA - sH; // away margin
+      if(margin + spread > 0) awaySpreadCount++; // away covers
+    }
+  }
+  return {
+    overPct: Math.round(overCount/n*100),
+    underPct: Math.round((n-overCount)/n*100),
+    awaySpreadPct: spread!==null ? Math.round(awaySpreadCount/n*100) : null,
+    homeSpreadPct: spread!==null ? Math.round((n-awaySpreadCount)/n*100) : null,
+  };
+}
+
+// Sport scoring stat names
+const SCORE_STATS = {
+  NFL:    {off:'pointsPerGame', def:'opponentPointsPerGame'},
+  NCAAFB: {off:'pointsPerGame', def:'opponentPointsPerGame'},
+  NBA:    {off:'avgPoints',     def:'avgPointsAllowed'},
+  WNBA:   {off:'avgPoints',     def:'avgPointsAllowed'},
+  MLB:    {off:'avgRuns',       def:'avgRunsAllowed'},
+  NHL:    {off:'avgGoals',      def:'avgGoalsAllowed'},
+};
+
+// ── RUN SIM FOR ALL GAMES ──
+async function runSimsForGames(games, sportObj){
+  const sport = games[0]?.sport;
+  const statNames = SCORE_STATS[sport];
+  if(!statNames) return;
+
+  setStatus('running', `🎲 Running Monte Carlo sims for ${sport} games…`);
+
+  for(const g of games){
+    try{
+      const ids = await fetchTeamIds(sportObj, g.id);
+      if(!ids?.homeId||!ids?.awayId) continue;
+
+      const [awayStats, homeStats] = await Promise.all([
+        fetchTeamStats(sportObj, ids.awayId),
+        fetchTeamStats(sportObj, ids.homeId),
+      ]);
+
+      const awayOff = awayStats?.[statNames.off] || awayStats?.['pointsPerGame'] || awayStats?.['avgPoints'] || 22;
+      const awayDef = awayStats?.[statNames.def] || awayStats?.['opponentPointsPerGame'] || awayStats?.['avgPointsAllowed'] || 22;
+      const homeOff = homeStats?.[statNames.off] || homeStats?.['pointsPerGame'] || homeStats?.['avgPoints'] || 22;
+      const homeDef = homeStats?.[statNames.def] || homeStats?.['opponentPointsPerGame'] || homeStats?.['avgPointsAllowed'] || 22;
+
+      if(!awayOff||!homeOff) continue;
+
+      const sim = simGame(awayOff, homeOff, awayDef, homeDef, g.total||44, g.spread);
+      g.sim = sim;
+    }catch(e){ continue; }
+  }
+}
+
 // ── FETCH ACTION NETWORK PUBLIC % ──
 async function fetchPublicPct(anKey, dateStr){
   try{
@@ -374,9 +503,15 @@ async function loadAll(){
     return {...g, od, rlm, steam, sharpScore:Math.min(100,Math.round(sharpScore))};
   });
 
+  // Run Monte Carlo sims per sport
+  for(const [key, sport] of sportEntries){
+    const sportGames = allGames.filter(g=>g.sport===key);
+    if(sportGames.length) await runSimsForGames(sportGames, {...sport, key});
+  }
+
   renderCurrentTab();
   document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-  setStatus('done', `✅ ${allGames.length} games loaded · ${allGames.filter(g=>g.rlm).length} RLM · ${allGames.filter(g=>g.steam).length} steam moves`);
+  setStatus('done', `✅ ${allGames.length} games loaded · ${allGames.filter(g=>g.rlm).length} RLM · ${allGames.filter(g=>g.steam).length} steam moves · 🎲 sims complete`);
   btn.disabled = false; btn.textContent = '⚡ LOAD LINES';
 }
 
@@ -394,23 +529,15 @@ function renderLines(){
 
     // Spread — ESPN returns spread from away team perspective
     // Negative spread = away team favored, Positive = home team favored
-    // ESPN spread: negative = home team favored, positive = away team favored
-    let spreadVal = g.spread, spreadTeam, spreadDisplay;
+    let spreadVal = g.spread, spreadTeam = g.away, spreadDisplay;
     if(g.spread!=null){
-      if(g.spread < 0){
-        // Home team favored
+      if(g.spread > 0){
+        // Home team favored — show home team's spread (negative)
         spreadTeam = g.home;
-        spreadVal = g.spread; // already negative, correct
-      } else if(g.spread > 0){
-        // Away team favored — show as negative
-        spreadTeam = g.away;
         spreadVal = -g.spread;
-      } else {
-        spreadTeam = g.away;
-        spreadVal = 0;
       }
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
-    } else { spreadTeam = g.away; spreadDisplay = '—'; }
+    } else { spreadDisplay = '—'; }
     const spread = spreadDisplay;
     const spreadMove = od?.spreadMove!=null&&Math.abs(od.spreadMove)>=0.5 ? `<div class="line-move ${od.spreadMove>0?'up':'down'}">${od.spreadMove>0?'▲':'▼'}${Math.abs(od.spreadMove)} from ${od.opener?.spread!=null?(od.opener.spread>0?'+':'')+od.opener.spread:'open'}</div>` : '<div class="line-move none">no move</div>';
     // Total
@@ -487,6 +614,26 @@ function renderLines(){
           </div>
         </div>
         ${publicHtml}
+        ${g.sim ? `<div class="sim-section">
+          <div class="sim-title">🎲 MONTE CARLO SIM PROBABILITY (${MC_N.toLocaleString()} RUNS)</div>
+          ${g.total!=null?`
+          <div class="sim-row">
+            <div class="sim-label" style="color:${g.sim.overPct>=65?'var(--accent2)':g.sim.overPct<=40?'var(--miss)':'var(--muted)'}">O ${g.total}</div>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${g.sim.overPct}%;background:${g.sim.overPct>=65?'var(--accent2)':g.sim.overPct>=55?'var(--gold)':'var(--muted)'}"></div></div>
+            <div class="sim-pct ${g.sim.overPct>=65?'strong':g.sim.overPct>=55?'solid':'weak'}">${g.sim.overPct}%</div>
+          </div>
+          <div class="sim-row">
+            <div class="sim-label" style="color:${g.sim.underPct>=65?'var(--accent2)':g.sim.underPct<=40?'var(--miss)':'var(--muted)'}">U ${g.total}</div>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${g.sim.underPct}%;background:${g.sim.underPct>=65?'var(--accent2)':g.sim.underPct>=55?'var(--gold)':'var(--muted)'}"></div></div>
+            <div class="sim-pct ${g.sim.underPct>=65?'strong':g.sim.underPct>=55?'solid':'weak'}">${g.sim.underPct}%</div>
+          </div>`:''} 
+          ${g.sim.awaySpreadPct!=null&&g.spread!=null?`
+          <div class="sim-row">
+            <div class="sim-label" style="color:${g.sim.awaySpreadPct>=65?'var(--accent2)':g.sim.awaySpreadPct<=40?'var(--miss)':'var(--muted)'}">${esc(spreadTeam)} ${spread}</div>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${g.sim.awaySpreadPct>=65?g.sim.awaySpreadPct:g.sim.homeSpreadPct}%;background:${(g.sim.awaySpreadPct>=65||g.sim.homeSpreadPct>=65)?'var(--accent2)':(g.sim.awaySpreadPct>=55||g.sim.homeSpreadPct>=55)?'var(--gold)':'var(--muted)'}"></div></div>
+            <div class="sim-pct ${g.sim.awaySpreadPct>=65||g.sim.homeSpreadPct>=65?'strong':g.sim.awaySpreadPct>=55||g.sim.homeSpreadPct>=55?'solid':'weak'}">${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%</div>
+          </div>`:''} 
+        </div>` : ''}
         <div class="game-actions">
           <button class="pick-btn" onclick="addLeg(${gameId},'spread','away')">ATS ${esc(g.away)}</button>
           <button class="pick-btn" onclick="addLeg(${gameId},'spread','home')">ATS ${esc(g.home)}</button>
