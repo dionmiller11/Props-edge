@@ -527,17 +527,24 @@ function renderLines(){
     const pub = g.public;
     const cardClass = g.rlm?'rlm':g.steam?'steam':'';
 
-    // Spread — ESPN returns spread from away team perspective
-    // Negative spread = away team favored, Positive = home team favored
-    let spreadVal = g.spread, spreadTeam = g.away, spreadDisplay;
+    // Spread — ESPN returns spread as the home team's line
+    // Negative = home team favored, Positive = away team favored
+    let spreadVal, spreadTeam, spreadDisplay;
     if(g.spread!=null){
-      if(g.spread > 0){
-        // Home team favored — show home team's spread (negative)
+      if(g.spread < 0){
+        // Home team favored — show home team with negative spread
         spreadTeam = g.home;
+        spreadVal = g.spread;
+      } else if(g.spread > 0){
+        // Away team favored — show away team with negative spread
+        spreadTeam = g.away;
         spreadVal = -g.spread;
+      } else {
+        spreadTeam = g.home;
+        spreadVal = 0;
       }
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
-    } else { spreadDisplay = '—'; }
+    } else { spreadTeam = g.home; spreadDisplay = '—'; }
     const spread = spreadDisplay;
     const spreadMove = od?.spreadMove!=null&&Math.abs(od.spreadMove)>=0.5 ? `<div class="line-move ${od.spreadMove>0?'up':'down'}">${od.spreadMove>0?'▲':'▼'}${Math.abs(od.spreadMove)} from ${od.opener?.spread!=null?(od.opener.spread>0?'+':'')+od.opener.spread:'open'}</div>` : '<div class="line-move none">no move</div>';
     // Total
