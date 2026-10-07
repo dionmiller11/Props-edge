@@ -467,6 +467,21 @@ function extractLine(prop){const m=(prop||'').match(/[OU](\d+\.?\d*)/i);return m
 function extractDirection(prop){return /\bU\d|\bunder/i.test(prop)?'UNDER':'OVER';}
 function extractStatKey(prop){const p=prop.toLowerCase();for(const[k,v]of Object.entries(STAT_MAP)){if(p.includes(k))return v;}return null;}
 
+// ── SHARED GRADING ENGINE (same as bet tracker) ──
+const RC_STAT_MAP={'pass yds':'passingyards','passing yds':'passingyards','pass yards':'passingyards','pass tds':'passingtouchdowns','pass td':'passingtouchdowns','completions':'completions','rush yds':'rushingyards','rush yards':'rushingyards','rushing yds':'rushingyards','rec yds':'receivingyards','rec yards':'receivingyards','receiving yds':'receivingyards','receiving yards':'receivingyards','receptions':'receptions','catches':'receptions','rush+rec yds':'scrimmage','rush + rec':'scrimmage','scrimmage':'scrimmage','pass+rush yds':'totalyards','pass + rush':'totalyards','tds':'touchdowns','anytime td':'anytimetd','anytime scorer':'anytimetd','fg made':'fgmade','field goals made':'fgmade','kicking pts':'kickingpoints','points':'points','rebounds':'rebounds','assists':'assists','3-pointers':'threepointers','3pm':'threepointers','pts+reb+ast':'pra','pra':'pra','steals':'steals','blocks':'blocks','hits':'hits','total bases':'totalbases','tb':'totalbases','strikeouts':'strikeouts','rbi':'rbi','runs':'runs'};
+function rcExtractStatKey(propType,prop){const combined=((propType||'')+' '+(prop||'')).toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();const sorted=Object.entries(RC_STAT_MAP).sort((a,b)=>b[0].length-a[0].length);for(const[k,v]of sorted){if(combined.includes(k))return v;}if(/pass.*yard|passing.*yard/.test(combined))return'passingyards';if(/rush.*yard|rushing.*yard/.test(combined))return'rushingyards';if(/rec.*yard|receiv.*yard/.test(combined))return'receivingyards';if(/reception|catch/.test(combined))return'receptions';if(/pass.*td|passing.*touch/.test(combined))return'passingtouchdowns';if(/point|pts/.test(combined)&&!/3pt/.test(combined))return'points';if(/rebound|reb/.test(combined))return'rebounds';if(/assist|ast/.test(combined))return'assists';if(/3.pt|three/.test(combined))return'threepointers';if(/hit/.test(combined))return'hits';if(/total base/.test(combined))return'totalbases';if(/strikeout/.test(combined))return'strikeouts';if(/rbi/.test(combined))return'rbi';if(/touchdown|anytime/.test(combined))return'anytimetd';if(/fg made|field goal/.test(combined))return'fgmade';return null;}
+function rcExtractLine(prop){const m=(prop||'').match(/[OU]\s*(\d+\.?\d*)/i);if(m)return parseFloat(m[1]);const m2=(prop||'').match(/(\d+\.?\d+)/);return m2?parseFloat(m2[1]):null;}
+function rcExtractDir(prop,direction){if(direction==='OVER'||direction==='UNDER')return direction;if(/\bunder\b|\bU\s*\d/i.test(prop||''))return'UNDER';if(/\bover\b|\bO\s*\d/i.test(prop||''))return'OVER';return'OVER';}
+function rcNormName(n){return(n||'').toLowerCase().replace(/\b(ii|iii|iv|jr|sr|jr\.|sr\.)\b/g,'').replace(/\./g,'').trim().replace(/\s+/g,' ');}
+function rcFindStat(playerStats,playerName,statKey){const name=rcNormName(playerName);let stats=playerStats[name];if(!stats){const normKeys=Object.keys(playerStats).map(k=>({orig:k,norm:rcNormName(k)}));const exact=normKeys.find(k=>k.norm===name);if(exact)stats=playerStats[exact.orig];}if(!stats){const lastName=name.split(' ').pop();const first=name.charAt(0);const m=Object.keys(playerStats).find(k=>{const kn=rcNormName(k);return kn.includes(lastName)&&kn.charAt(0)===first;});if(m)stats=playerStats[m];}if(!stats)return null;
+// Combo stats
+if(statKey==='scrimmage'){return(stats['rushing_yds']??0)+(stats['receiving_yds']??0);}
+if(statKey==='pra'){return(stats['scoring_pts']??stats['pts']??0)+(stats['scoring_reb']??stats['reb']??0)+(stats['scoring_ast']??stats['ast']??0);}
+if(statKey==='totalyards'){return(stats['passing_yds']??0)+(stats['rushing_yds']??0);}
+if(statKey==='anytimetd'){return((stats['rushing_td']??0)+(stats['receiving_td']??0)+(stats['passing_td']??0))>0?1:0;}
+const lookup={passingyards:['passing_yds'],completions:['passing_c'],passingtouchdowns:['passing_td'],rushingyards:['rushing_yds'],receivingyards:['receiving_yds'],receptions:['receiving_rec'],touchdowns:['receiving_td','rushing_td','td'],fgmade:['kicking_fg','fg'],kickingpoints:['kicking_pts','pts'],points:['scoring_pts','pts'],rebounds:['scoring_reb','reb'],assists:['scoring_ast','ast'],threepointers:['scoring_3pt','3pt'],steals:['scoring_stl','stl'],blocks:['scoring_blk','blk'],hits:['batting_h','h'],totalbases:['batting_tb','tb'],strikeouts:['pitching_so','batting_so','so'],rbi:['batting_rbi','rbi'],runs:['batting_r','r']};
+const keys=lookup[statKey]||[statKey];for(const k of keys){if(stats[k]!==undefined)return stats[k];}return null;}
+
 async function fetchBoxScores(date, sport){
   try{
     const ds=date.replace(/-/g,'');
@@ -477,77 +492,44 @@ async function fetchBoxScores(date, sport){
     const data=await res.json();
     const playerStats={};
     for(const evt of (data.events||[])){
-      // Try to get box score via event ID
       try{
         const bsRes=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/summary?event=${evt.id}`);
         if(!bsRes.ok)continue;
         const bs=await bsRes.json();
         for(const team of (bs.boxscore?.players||[])){
           for(const cat of (team.statistics||[])){
-            const labels=cat.labels||[];
+            const catName=(cat.name||'').toLowerCase().trim();
+            const labels=(cat.labels||[]).map(l=>l.toLowerCase().trim().split('/')[0]);
             for(const athlete of (cat.athletes||[])){
-              const name=(athlete.athlete?.displayName||'').toLowerCase();
-              const stats={};
-              (athlete.stats||[]).forEach((v,i)=>{if(labels[i])stats[labels[i].toLowerCase()]=parseFloat(v)||0;});
+              const name=rcNormName(athlete.athlete?.displayName||'');
+              if(!name)continue;
               if(!playerStats[name])playerStats[name]={};
-              Object.assign(playerStats[name],stats);
+              (athlete.stats||[]).forEach((v,i)=>{
+                if(!labels[i])return;
+                const val=String(v).includes('/')?parseFloat(String(v).split('/')[0])||0:parseFloat(v)||0;
+                playerStats[name][catName+'_'+labels[i]]=val;
+                if(playerStats[name][labels[i]]===undefined)playerStats[name][labels[i]]=val;
+              });
             }
           }
         }
       }catch(e){}
+    }
+    // Also try next day (handles Saturday log → Sunday game)
+    if(!Object.keys(playerStats).length){
+      const nextDay=new Date(date+'T12:00:00');nextDay.setDate(nextDay.getDate()+1);
+      return fetchBoxScores(nextDay.toISOString().split('T')[0],sport);
     }
     return playerStats;
   }catch(e){return{};}
 }
 
 function gradeFromStats(play, playerStats){
-  const name=play.player.toLowerCase();
-  const line=extractLine(play.prop);
-  const dir=play.direction||extractDirection(play.prop);
-  const statKey=extractStatKey(play.prop);
-  if(!line||!statKey)return null;
-  // Try exact name match first, then partial
-  let stats=playerStats[name];
-  if(!stats){
-    const keys=Object.keys(playerStats);
-    const match=keys.find(k=>k.includes(name.split(' ').pop())||name.includes(k.split(' ').pop()));
-    if(match)stats=playerStats[match];
-  }
-  if(!stats)return null;
-  // Find the stat value — try multiple label formats
-  const aliases={
-    rushingYards:['rushing yards','rush yds','ryds','rushing'],
-    receivingYards:['receiving yards','rec yds','recyds','receiving'],
-    passingYards:['passing yards','pass yds','passyds','passing'],
-    receptions:['receptions','rec','catches'],
-    passingTouchdowns:['passing touchdowns','pass td','passtd'],
-    points:['pts','points'],
-    rebounds:['reb','rebounds','total rebounds','totreb'],
-    assists:['ast','assists'],
-    threePointFieldGoalsMade:['3pt','3pm','threes made'],
-    steals:['stl','steals'],
-    blocks:['blk','blocks'],
-    turnovers:['to','turnovers'],
-    hits:['h','hits'],
-    totalBases:['tb','total bases'],
-    rbi:['rbi','rbis'],
-    runs:['r','runs'],
-    strikeOuts:['so','k','strikeouts'],
-    earnedRuns:['er','earned runs'],
-    pointsReboundsAssists:['pts+reb+ast','pra'],
-  };
-  const tryKeys=[statKey.toLowerCase(),...(aliases[statKey]||[])];
-  let actual=null;
-  for(const k of tryKeys){
-    if(stats[k]!==undefined){actual=stats[k];break;}
-  }
-  // PRA special case
-  if(statKey==='pointsReboundsAssists'&&actual===null){
-    const p=stats['pts']??stats['points']??0;
-    const r=stats['reb']??stats['rebounds']??0;
-    const a=stats['ast']??stats['assists']??0;
-    if(p||r||a)actual=p+r+a;
-  }
+  const statKey=rcExtractStatKey(play.propType||'',play.prop||'');
+  const line=rcExtractLine(play.prop);
+  const dir=rcExtractDir(play.prop,play.direction);
+  if(!statKey||line===null)return null;
+  const actual=rcFindStat(playerStats,play.player,statKey);
   if(actual===null)return null;
   const result=dir==='OVER'?(actual>line?'win':actual===line?'push':'loss'):(actual<line?'win':actual===line?'push':'loss');
   return{result,actual,line,dir,statKey};
