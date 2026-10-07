@@ -324,7 +324,7 @@ async function fetchTeamIds(sport, gameId){
 }
 
 // ── MONTE CARLO SIM ──
-const MC_N = 5000;
+const MC_N = 10000;
 function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC_N){
   // Expected score for each team
   const expA = (avgPtsA + avgAllowedH) / 2;
