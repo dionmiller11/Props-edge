@@ -226,10 +226,33 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
 <div class="toast" id="toast"></div>
 <script>
 let bets = [], activeFilter = 'all', activePage = 'log';
-try { bets = JSON.parse(localStorage.getItem('propsBets')||'[]'); } catch(e) { bets = []; }
+const KV_BASE = 'https://line-monitor.dion-miller11.workers.dev';
+let _kvSaveTimer = null;
+
+// Load from KV first, fall back to localStorage
+(async function initBets(){
+  let loaded = false;
+  try {
+    const r = await fetch(KV_BASE+'/bets/get');
+    if(r.ok){ const d=await r.json(); if(d.found && d.bets && d.bets.length){ bets=d.bets; loaded=true; } }
+  } catch(e){}
+  if(!loaded){ try{ bets=JSON.parse(localStorage.getItem('propsBets')||'[]'); }catch(e){ bets=[]; } }
+  // Sync KV into localStorage so offline works
+  try{ localStorage.setItem('propsBets', JSON.stringify(bets)); }catch(e){}
+  if(typeof renderBets==='function') renderBets();
+  if(typeof updateStats==='function') updateStats();
+})();
+
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 
-function saveBets(){ try{ localStorage.setItem('propsBets', JSON.stringify(bets)); }catch(e){} }
+function saveBets(){
+  try{ localStorage.setItem('propsBets', JSON.stringify(bets)); }catch(e){}
+  // Debounce KV writes — wait 1.5s after last change to batch rapid edits
+  if(_kvSaveTimer) clearTimeout(_kvSaveTimer);
+  _kvSaveTimer = setTimeout(function(){
+    fetch(KV_BASE+'/bets/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({bets})}).catch(function(){});
+  }, 1500);
+}
 
 function calcPL(bet){
   if(bet.result==='win'){const odds=parseInt(bet.odds)||(-110);const units=parseFloat(bet.units)||1;return odds>0?+(units*odds/100).toFixed(2):+(units*100/Math.abs(odds)).toFixed(2);}
