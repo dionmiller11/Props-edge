@@ -179,7 +179,10 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 
 <script>
 // ── CONFIG ──
-const PP_URL = 'https://partner-api.prizepicks.com/projections?league_id=182&per_page=250&single_stat=true&state_abbr=CA';
+// League IDs to try for NCAAFB (PrizePicks changes these occasionally)
+const PP_LEAGUE_IDS = [182, 183, 184, 272, 273];
+const PP_BASE = 'https://partner-api.prizepicks.com/projections?per_page=250&single_stat=true';
+const PP_URL = PP_BASE + '&league_id=182';
 const ESPN_CFB = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football';
 const PROXY = 'https://sports-proxy.dion-miller11.workers.dev';
 const MC_SIMULATIONS = 10000;
@@ -350,18 +353,47 @@ async function runScan(){
       if(item.type === 'league') leagueMap[item.id] = item.attributes;
     });
 
-    // Filter to NCAAFB only (league_id 182 or league_ppid CFB)
-    const cfbProjs = projections.filter(p => {
+    // Filter to NCAAFB — try by league name, ppid, or known IDs
+    let cfbProjs = projections.filter(p => {
       const leagueId = p.relationships?.league?.data?.id;
       const league = leagueMap[leagueId];
       return league?.name?.toLowerCase().includes('college football') ||
              league?.abbreviation?.toLowerCase() === 'cfb' ||
              p.attributes?.league_ppid === 'CFB' ||
-             leagueId === '182';
+             ['182','183','184','272','273'].includes(leagueId);
     });
 
+    // If nothing found, try fetching without league_id filter to find CFB
     if(!cfbProjs.length){
-      setStatus('error','❌ No NCAAFB props found on PrizePicks today — check back Saturday morning');
+      setStatus('running','🔍 Searching all PrizePicks leagues for CFB…');
+      try {
+        const allUrl = `${PP_BASE}&per_page=500`;
+        const proxyAll = `${PROXY}?url=${encodeURIComponent(allUrl)}`;
+        const allRes = await fetch(proxyAll);
+        if(allRes.ok){
+          const allData = await allRes.json();
+          const allIncluded = allData.included || [];
+          const allLeagues = {};
+          allIncluded.forEach(item => { if(item.type==='league') allLeagues[item.id]=item.attributes; });
+          // Find CFB league ID
+          const cfbLeague = Object.entries(allLeagues).find(([id,l])=>
+            l.name?.toLowerCase().includes('college football')||l.abbreviation?.toLowerCase()==='cfb'
+          );
+          if(cfbLeague){
+            const cfbId = cfbLeague[0];
+            cfbProjs = (allData.data||[]).filter(p=>p.relationships?.league?.data?.id===cfbId);
+            // Update included maps
+            allIncluded.forEach(item=>{
+              if(item.type==='new_player') playerMap[item.id]=item.attributes;
+              if(item.type==='league') leagueMap[item.id]=item.attributes;
+            });
+          }
+        }
+      } catch(e){ console.warn('All-league search failed:', e.message); }
+    }
+
+    if(!cfbProjs.length){
+      setStatus('error','❌ No NCAAFB props found on PrizePicks today — check back closer to kickoff (usually 9-10am Saturday)');
       btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
       return;
     }
@@ -460,6 +492,23 @@ async function runScan(){
   }
   btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
 }
+
+// ── SNAPSHOT SAVER ──
+window.savePropsSnapshot=function(plays,sport){
+  var ds=new Date().toISOString().split('T')[0];
+  var key='propsSnapshot_'+ds;
+  var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
+  var cur=ex||{date:ds,plays:[]};
+  var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
+  var newPlays=[];
+  plays.filter(function(p){return(p.rate||0)>=80;}).forEach(function(p){
+    var k=p.player+'|'+p.prop;
+    if(!seen.has(k)){var np=Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()});cur.plays.push(np);seen.add(k);newPlays.push(np);}
+  });
+  cur.updatedAt=Date.now();
+  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
+  if(newPlays.length>0){try{fetch('https://line-monitor.dion-miller11.workers.dev/snapshot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:ds,plays:newPlays})}).catch(function(){});}catch(e){}}
+};
 
 // ── RENDER TABLE ──
 function renderTable(){

@@ -251,18 +251,35 @@ async function fetchInjuries(){
   }));
 }
 
-function loadPlays(){
+async function loadPlays(){
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
   let plays = [], dateUsed = '', isToday = false;
+  const KV_BASE = 'https://line-monitor.dion-miller11.workers.dev';
 
-  // Try today first
+  // 1. Try KV for today
   try{
-    const snap = JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null');
-    if(snap&&snap.plays&&snap.plays.length){plays=snap.plays;dateUsed=today;isToday=true;}
+    const r = await fetch(KV_BASE+'/snapshot/get?date='+today);
+    if(r.ok){const d=await r.json();if(d.found&&d.plays&&d.plays.length){plays=d.plays;dateUsed=today;isToday=true;}}
   }catch(e){}
 
-  // Fall back to yesterday
+  // 2. If KV empty, try localStorage today
+  if(!plays.length){
+    try{
+      const snap = JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null');
+      if(snap&&snap.plays&&snap.plays.length){plays=snap.plays;dateUsed=today;isToday=true;}
+    }catch(e){}
+  }
+
+  // 3. Fall back to KV yesterday
+  if(!plays.length){
+    try{
+      const r = await fetch(KV_BASE+'/snapshot/get?date='+yesterday);
+      if(r.ok){const d=await r.json();if(d.found&&d.plays&&d.plays.length){plays=d.plays;dateUsed=yesterday;isToday=false;}}
+    }catch(e){}
+  }
+
+  // 4. Fall back to localStorage yesterday
   if(!plays.length){
     try{
       const snap = JSON.parse(localStorage.getItem('propsSnapshot_'+yesterday)||'null');

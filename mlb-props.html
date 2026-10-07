@@ -887,12 +887,14 @@ window.savePropsSnapshot=function(plays,sport){
   var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
   var cur=ex||{date:ds,plays:[]};
   var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
+  var newPlays=[];
   plays.filter(function(p){return (p.rate||0)>=80;}).forEach(function(p){
     var k=p.player+'|'+p.prop;
-    if(!seen.has(k)){cur.plays.push(Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()}));seen.add(k);}
+    if(!seen.has(k)){var np=Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()});cur.plays.push(np);seen.add(k);newPlays.push(np);}
   });
   cur.updatedAt=Date.now();
-  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){};
+  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
+  if(newPlays.length>0){try{fetch('https://line-monitor.dion-miller11.workers.dev/snapshot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:ds,plays:newPlays})}).catch(function(){});}catch(e){}}
 };
 
 

@@ -411,12 +411,17 @@ let recapDate=yesterday();let recapGrades={};try{recapGrades=JSON.parse(localSto
 function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];}
 function fmtDate(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
 function changeRecapDate(dir){const d=new Date(recapDate+'T12:00:00');d.setDate(d.getDate()+dir);const newDs=d.toISOString().split('T')[0];if(newDs>today.toISOString().split('T')[0])return;recapDate=newDs;loadRecap();}
-function getSnapshot(date){try{return JSON.parse(localStorage.getItem('propsSnapshot_'+date)||'null');}catch(e){return null;}}
+const KV_BASE='https://line-monitor.dion-miller11.workers.dev';
+async function getSnapshot(date){
+  // Try KV first (cross-device), fall back to localStorage
+  try{const r=await fetch(KV_BASE+'/snapshot/get?date='+date);if(r.ok){const d=await r.json();if(d.found&&d.plays&&d.plays.length)return d;}}catch(e){}
+  try{return JSON.parse(localStorage.getItem('propsSnapshot_'+date)||'null');}catch(e){return null;}
+}
 function getBetTrackerBets(){try{return JSON.parse(localStorage.getItem('propsBets')||'[]');}catch(e){return[];}}
 function matchKey(p){return(p.player+'|'+p.prop).toLowerCase().replace(/\s+/g,'');}
-function loadRecap(){
+async function loadRecap(){
   document.getElementById('recapDateLabel').textContent=fmtDate(recapDate);
-  const snapshot=getSnapshot(recapDate);
+  const snapshot=await getSnapshot(recapDate);
   if(!snapshot||!snapshot.plays||!snapshot.plays.length){document.getElementById('recapBody').innerHTML=`<tr><td colspan="7"><div class="empty-recap"><div class="empty-recap-icon">📊</div><p>No flagged plays found for ${fmtDate(recapDate)}.<br><span style="font-size:11px">Run a scan in any tool — plays are auto-saved here.</span></p></div></td></tr>`;document.getElementById('recapPlayCount').textContent='';document.getElementById('recapPlaysTitle').textContent='FLAGGED PLAYS';setRecapStats(0,0,null,null);clearBreakdowns();return;}
   const plays=snapshot.plays;const bets=getBetTrackerBets();const betMap={};
   bets.filter(b=>b.date===recapDate).forEach(b=>{const k=(b.player+'|'+b.prop).toLowerCase().replace(/\s+/g,'');if(b.result&&b.result!=='pending')betMap[k]=b.result;});
@@ -590,7 +595,10 @@ async function loadInjuryReport(){
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
   let plays = [];
-  try{ const s=JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null'); if(s?.plays?.length) plays=s.plays; }catch(e){}
+  // Try KV first, then localStorage
+  try{ const r=await fetch(KV_BASE+'/snapshot/get?date='+today); if(r.ok){const d=await r.json();if(d.found&&d.plays?.length)plays=d.plays;} }catch(e){}
+  if(!plays.length){ try{ const s=JSON.parse(localStorage.getItem('propsSnapshot_'+today)||'null'); if(s?.plays?.length) plays=s.plays; }catch(e){} }
+  if(!plays.length){ try{ const r=await fetch(KV_BASE+'/snapshot/get?date='+yesterday); if(r.ok){const d=await r.json();if(d.found&&d.plays?.length)plays=d.plays;} }catch(e){} }
   if(!plays.length){ try{ const s=JSON.parse(localStorage.getItem('propsSnapshot_'+yesterday)||'null'); if(s?.plays?.length) plays=s.plays; }catch(e){} }
   if(!plays.length){ el.innerHTML='<span style="color:var(--muted)">No scan data — run a scan first to see injury flags</span>'; return; }
 
