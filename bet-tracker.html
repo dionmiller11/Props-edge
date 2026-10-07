@@ -481,8 +481,10 @@ const BT_STAT_MAP = {
   'receptions':'receptions','catches':'receptions',
   'rush+rec yds':'scrimmage','rush + rec':'scrimmage','rush+rec':'scrimmage','scrimmage':'scrimmage',
   'pass+rush yds':'totalyards','pass + rush':'totalyards',
-  'tds':'touchdowns','anytime td':'touchdowns',
+  'tds':'touchdowns','anytime td':'anytimetd','anytime scorer':'anytimetd',
   'kicking pts':'kickingpoints','kicking points':'kickingpoints',
+  'fg made':'fgmade','field goals made':'fgmade','field goal':'fgmade',
+  'extra points':'patmade','pat made':'patmade',
   // NBA/WNBA
   'points':'points','pts':'points',
   'rebounds':'rebounds','reb':'rebounds',
@@ -532,7 +534,11 @@ function extractStatKey(propType, prop){
   if(/total base|tb/.test(combined)) return 'totalbases';
   if(/strikeout|strike out/.test(combined)) return 'strikeouts';
   if(/rbi/.test(combined)) return 'rbi';
+  if(/anytime td|anytime scorer/.test(combined)) return 'anytimetd';
   if(/touchdown|anytime td/.test(combined)) return 'touchdowns';
+  if(/fg made|field goal made|field goals/.test(combined)) return 'fgmade';
+  if(/kicking pt|kicking point/.test(combined)) return 'kickingpoints';
+  if(/extra point|pat made/.test(combined)) return 'patmade';
   return null;
 }
 
@@ -560,10 +566,9 @@ async function fetchBTBoxScores(date, sport){
               if(!playerStats[name]) playerStats[name]={};
               (athlete.stats||[]).forEach((v,i)=>{
                 if(!labels[i]) return;
-                const val = parseFloat(v)||0;
-                // Always store category-prefixed to avoid collision
+                // Handle fraction stats like "3/4" (FG made/attempted) — take numerator
+                const val = String(v).includes('/') ? parseFloat(String(v).split('/')[0])||0 : parseFloat(v)||0;
                 playerStats[name][catName+'_'+labels[i]] = val;
-                // Only store raw if not already set by a more specific category
                 if(playerStats[name][labels[i]]===undefined) playerStats[name][labels[i]] = val;
               });
             }
@@ -621,9 +626,15 @@ function findBTStat(playerStats, playerName, statKey){
     return p+r+a;
   }
   if(statKey==='totalyards'){
-    const pass=stats['passingyards']??stats['passing']??0;
-    const rush=stats['rushingyards']??stats['rushing']??0;
+    const pass=stats['passing_yds']??stats['passingyards']??0;
+    const rush=stats['rushing_yds']??stats['rushingyards']??0;
     return pass+rush;
+  }
+  if(statKey==='anytiметd'||statKey==='anytimetd'){
+    const rushTd=stats['rushing_td']??0;
+    const recTd=stats['receiving_td']??0;
+    const passTd=stats['passing_td']??0;
+    return rushTd+recTd+passTd>0?1:0; // 1 = scored, 0 = didn't score
   }
 
   // ESPN uses short labels — map our stat keys to ESPN abbreviations
@@ -639,6 +650,8 @@ function findBTStat(playerStats, playerName, statKey){
     receptions:        ['receiving_rec'],
     touchdowns:        ['receiving_td','rushing_td','td'],
     kickingpoints:     ['kicking_pts','pts'],
+    fgmade:            ['kicking_fg','kicking_fgm','fg'],
+    patmade:           ['kicking_xp','kicking_pat','xp'],
     // NBA — ESPN category: "scoring" labels=[min,fg,3pt,ft,oreb,dreb,reb,ast,stl,blk,to,pf,pts]
     points:    ['scoring_pts','pts'],
     rebounds:  ['scoring_reb','reb'],
