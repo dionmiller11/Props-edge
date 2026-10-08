@@ -220,8 +220,8 @@
 <div class="toast" id="toast"></div>
 <script>
 const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_BASE='https://api.linemate.io/api/wnba/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER';
-const LINEMATE_ENDPOINTS=[LINEMATE_BASE+'&limit=200'];
+const LINEMATE_V4_BASE='https://api.linemate.io/api/wnba/v4';
+const LINEMATE_TEAMS_URL=LINEMATE_V4_BASE+'/teams';
 const today=new Date(),todayStr=today.toISOString().split('T')[0];
 let allData=[],activeTab='all',edgeOnly=false,upcomingOnly=false,parlayLegs=[];
 const PROP_CATS={scoring:['points','threePointersMade','fieldGoalsMade','freeThrowsMade'],rebounds:['rebounds','offensiveRebounds','defensiveRebounds'],assists:['assists'],defense:['steals','blocks','turnovers'],combos:['pointsReboundsAssists','pointsAssists','pointsRebounds','reboundsAssists']};
