@@ -309,109 +309,71 @@ async function runScan(){
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';document.getElementById('tokenBox').style.display='none';
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
-  setStatus('running','📡 Fetching WNBA teams from Linemate v4…');setLoadingRow();
+  setStatus('running','📡 Fetching WNBA props from Linemate…');setLoadingRow();
   await fetchWNBADefense();
   b2bTeams = await getB2BTeams('basketball/wnba');
   try{
     const headers={'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};
-
-    // Step 1: Get all teams + players
-    setProgress(10,'Loading WNBA roster…');
-    const teamsResp=await fetch(LINEMATE_TEAMS_URL,{headers});
-    if(teamsResp.status===401)throw new Error('Token expired — paste a fresh Linemate JWT');
-    if(!teamsResp.ok)throw new Error('Teams fetch failed: '+teamsResp.status);
-    const teamsData=await teamsResp.json();
-
-    // Extract player IDs from teams payload
-    // teamsData may be array of teams or {teams:[...]} or {data:[...]}
-    const teamsList=Array.isArray(teamsData)?teamsData:(teamsData.teams||teamsData.data||[]);
-    const players=[];
-    for(const t of teamsList){
-      const pList=t.players||t.roster||[];
-      for(const p of pList){
-        const pid=p.id||p.playerId;
-        if(pid) players.push({id:pid,name:p.fullName||p.name||'Unknown',team:t.code||t.abbreviation||'—',position:p.position||''});
-      }
+    // Fetch paginated — Linemate uses limit=20, multiple pages
+    setProgress(20,'Fetching page 1…');
+    const allItems=[];
+    const PAGE_SIZE=20;
+    const MAX_PAGES=15;
+    for(let page=0;page<MAX_PAGES;page++){
+      const url=LINEMATE_BASE+`&limit=${PAGE_SIZE}&offset=${page*PAGE_SIZE}`;
+      const r=await fetch(url,{headers});
+      if(r.status===401)throw new Error('Token expired — paste a fresh Linemate JWT');
+      if(!r.ok)break;
+      const d=await r.json();
+      const items=Array.isArray(d)?d:(d.data||d.props||d.results||[]);
+      if(!items.length)break;
+      allItems.push(...items);
+      setProgress(Math.min(20+page*5,80),`Fetching… ${allItems.length} props`);
+      if(items.length<PAGE_SIZE)break;// last page
     }
-    if(!players.length)throw new Error('No players found in teams response — WNBA may be off-season or endpoint changed');
-    setProgress(20,`Scanning ${players.length} players…`);
-
-    // Step 2: Fetch /v4/players/{id}/markets for all players in parallel batches
-    const BATCH=8;
-    const allMarkets=[];
-    for(let i=0;i<players.length;i+=BATCH){
-      const batch=players.slice(i,i+BATCH);
-      const pct=Math.round(20+((i/players.length)*65));
-      setProgress(pct,`Fetching props ${Math.min(i+BATCH,players.length)}/${players.length}…`);
-      const batchResults=await Promise.all(batch.map(p=>
-        fetch(`${LINEMATE_V4_BASE}/players/${p.id}/markets`,{headers})
-          .then(r=>r.ok?r.json():null)
-          .then(d=>{if(d)allMarkets.push({player:p,markets:Array.isArray(d)?d:(d.markets||d.data||[])});})
-          .catch(()=>{})
-      ));
-      await new Promise(r=>setTimeout(r,50));// small throttle
-    }
-
-    setProgress(88,'Processing markets…');
+    setProgress(85,'Processing '+allItems.length+' props…');
+    if(allItems.length>0)console.log('WNBA sample item:',JSON.stringify(allItems[0]).slice(0,800));
     const results=[];
-    for(const {player:pInfo,markets} of allMarkets){
-      for(const mkt of markets){
-        try{
-          const rawName=mkt.name||mkt.market||mkt.marketName||'';
-          if(!rawName)continue;
-          const propType=rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
-          const propLabel=PROP_LABELS[propType]||cleanPropName(rawName)||propType;
-          const opp=mkt.opposingTeam?.code||mkt.opponent||'—';
-          const gameTime=mkt.gameTime||mkt.timestamp?new Date(mkt.gameTime||mkt.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-          const books=mkt.books||mkt.providers||{};
-          let bestLine=null,bestOverOdds=null,bestUnderOdds=null,bestOverBook=null,bestUnderBook=null,bookOverCount=0,bookUnderCount=0;
-          for(const bk of Object.keys(books)){
-            const b=books[bk];
-            const ol=b?.over?.current?.value||b?.line||b?.value;
-            const oo=b?.over?.current?.odds?.american||b?.overOdds;
-            const uo=b?.under?.current?.odds?.american||b?.underOdds;
-            if(ol&&!bestLine)bestLine=ol;
-            if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}
-            if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)){bestUnderOdds=uo;bestUnderBook=bk;}}
-          }
-          if(!bestLine)continue;
-          const signals=mkt.signals||mkt.trends||[];
-          const recentForm=signals.find(s=>s.type==='RECENT_FORM'||s.type==='recent_form');
-          if(!recentForm)continue;
-          const hitRate=parseInt((recentForm.annotation||recentForm.value||'0').replace('%',''))||0;
-          if(hitRate<minRate)continue;
-          const desc=recentForm.description||'';
-          const parts=desc.match(/Hit in (\d+) of last (\d+)/i);
-          const hits=parts?parseInt(parts[1]):0,games=parts?parseInt(parts[2]):10;
-          const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
-          const streak=calcStreak(last10);
-          const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD'||s.type==='head_to_head');
-          const matchupNote=h2h?h2h.description:('vs '+opp);
-          // determine direction from outcome or best rate
-          const direction=(mkt.outcome||'OVER').toUpperCase();
-          const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
-          const bestBook=direction==='OVER'?bestOverBook:bestUnderBook;
-          results.push({
-            player:pInfo.name,team:pInfo.team,position:pInfo.position,propKey:propType,
-            prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
-            line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,
-            opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',
-            matchupNote,bestOdds,bestBook,
-            b2b:b2bTeams.has(pInfo.team.toUpperCase()),
-            bookCount:bookOverCount+bookUnderCount,
-            bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,
-            source:'linemate-v4',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'
-          });
-        }catch(e){console.warn(e);}
-      }
+    for(const item of allItems){
+      try{
+        // player name: try fullName, then firstName+lastName, then firstName
+        const p=item.player||{};
+        const playerName=p.fullName||(p.firstName&&p.lastName?p.firstName+' '+p.lastName:null)||p.firstName||'Unknown';
+        const team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=p.position||p.pos||'';
+        const rawName=item.market?.name||'';
+        // market.name is like "ASSISTS", "POINTS", "THREE_POINT_FIELD_GOALS_MADE"
+        const propType=rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
+        const propLabel=PROP_LABELS[propType]||cleanPropName(rawName)||rawName;
+        const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+        const direction=(item.outcome||'over').toUpperCase();
+        // line is top-level: item.line
+        const topLine=item.line;
+        const books=item.market?.books||{};let bestLine=topLine||null,bestOverOdds=null,bestUnderOdds=null,bestOverBook=null,bestUnderBook=null,bookOverCount=0,bookUnderCount=0;
+        for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value||b?.line;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)){bestUnderOdds=uo;bestUnderBook=bk;}}}
+        if(!bestLine)continue;
+        const signals=item.signals||[];
+        const recentForm=signals.find(s=>s.type==='RECENT_FORM'||s.type==='recent_form'||s.trendType==='RECENT_FORM');
+        if(!recentForm)continue;
+        // annotation like "93%" or description like "Hit in 13 of last 14 games"
+        const hitRate=parseInt((recentForm.annotation||recentForm.value||'0').toString().replace('%',''))||0;
+        if(hitRate<minRate)continue;
+        const desc=recentForm.description||recentForm.label||'';
+        const parts=desc.match(/Hit in (\d+) of last (\d+)/i)||desc.match(/(\d+)\/(\d+)/);
+        const hits=parts?parseInt(parts[1]):Math.round(hitRate/100*10),games=parts?parseInt(parts[2]):10;
+        const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
+        const streak=calcStreak(last10);
+        const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD');
+        const matchupNote=h2h?h2h.description:('vs '+opp);
+        const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
+        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),bookCount:bookOverCount+bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
+      }catch(e){console.warn(e);}
     }
-
     setProgress(95,'Sorting…');
     const seen={};allData=results.filter(p=>{const k=p.player+p.propKey+p.direction;if(seen[k]&&seen[k]>=p.rate)return false;seen[k]=p.rate;return true;}).sort((a,b)=>(b.rate||0)-(a.rate||0));
     hideProgress();populateTeamFilter();saveLines(allData);await prefetchInjuries(allData);renderTable();updateSummary();
     document.getElementById('summary').style.display='grid';
     ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
-    document.getElementById('dataTs').textContent=`Linemate v4 · ${new Date().toLocaleTimeString()}`;
+    document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
     setStatus('done',`✅ ${allData.length} WNBA prop edges — ${new Date().toLocaleTimeString()}`);
     document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
     saveLineHistory(allData);
