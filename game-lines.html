@@ -638,10 +638,10 @@ function renderLines(){
           </div>`:''} 
           ${g.sim.awaySpreadPct!=null&&g.spread!=null?`
           <div class="sim-row">
-            <div class="sim-label" style="color:${g.sim.awaySpreadPct>=65?'var(--accent2)':g.sim.awaySpreadPct<=40?'var(--miss)':'var(--muted)'}">${esc(spreadTeam)} ${spread}</div>
-            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${g.sim.awaySpreadPct>=65?g.sim.awaySpreadPct:g.sim.homeSpreadPct}%;background:${(g.sim.awaySpreadPct>=65||g.sim.homeSpreadPct>=65)?'var(--accent2)':(g.sim.awaySpreadPct>=55||g.sim.homeSpreadPct>=55)?'var(--gold)':'var(--muted)'}"></div></div>
-            <div class="sim-pct ${g.sim.awaySpreadPct>=65||g.sim.homeSpreadPct>=65?'strong':g.sim.awaySpreadPct>=55||g.sim.homeSpreadPct>=55?'solid':'weak'}">${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%</div>
-          </div>`:''} 
+            <div class="sim-label" style="color:${(spreadTeam===g.home?g.sim.homeSpreadPct:g.sim.awaySpreadPct)>=65?'var(--accent2)':(spreadTeam===g.home?g.sim.homeSpreadPct:g.sim.awaySpreadPct)<=40?'var(--miss)':'var(--muted)'}">${esc(spreadTeam)} ${spread}</div>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%;background:${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=65?'var(--accent2)':Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=55?'var(--gold)':'var(--muted)'}"></div></div>
+            <div class="sim-pct ${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=65?'strong':Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=55?'solid':'weak'}">${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%</div>
+          </div>`:''}
         </div>` : ''}
         <div class="game-actions">
           <button class="pick-btn" onclick="addLeg(${gameId},'spread','away')">ATS ${esc(g.away)}</button>
