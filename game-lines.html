@@ -245,10 +245,23 @@ function renderCurrentTab(){
 // ── FETCH ESPN GAMES ──
 async function fetchESPNGames(sport){
   try{
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard`);
+    // NCAAFB: fetch all groups (80=FBS, 81=FCS) with high limit to get all games
+    const isNCAAFB = sport.path.includes('college-football');
+    const url = isNCAAFB
+      ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=80`
+      : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard`;
+    const res = await fetch(url);
     if(!res.ok) return [];
     const data = await res.json();
-    return (data.events||[]).map(evt=>{
+    let events = data.events||[];
+    // For NCAAFB also fetch FCS (group 81) and merge
+    if(isNCAAFB){
+      try{
+        const res2 = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=81`);
+        if(res2.ok){ const d2=await res2.json(); events=[...events,...(d2.events||[])]; }
+      }catch(e){}
+    }
+    return events.map(evt=>{
       const comp = evt.competitions?.[0];
       const home = comp?.competitors?.find(c=>c.homeAway==='home');
       const away = comp?.competitors?.find(c=>c.homeAway==='away');
