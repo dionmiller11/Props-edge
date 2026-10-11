@@ -377,14 +377,15 @@ function scorePlay(p){
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
 
+function setEl(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
 function updateSummary(){
   const q = allPlays;
-  document.getElementById('s-total').textContent = q.length;
-  document.getElementById('s-sharp').textContent = q.filter(p=>scorePlay(p).verdict==='sharp').length;
-  document.getElementById('s-play').textContent = q.filter(p=>scorePlay(p).verdict==='play').length;
-  document.getElementById('s-watch').textContent = q.filter(p=>scorePlay(p).verdict==='watch').length;
-  document.getElementById('s-b2b').textContent = q.filter(p=>p.b2b).length;
-  document.getElementById('s-sports').textContent = new Set(q.map(p=>p.sport).filter(Boolean)).size;
+  setEl('s-total', q.length);
+  setEl('s-sharp', q.filter(p=>scorePlay(p).verdict==='sharp').length);
+  setEl('s-play',  q.filter(p=>scorePlay(p).verdict==='play').length);
+  setEl('s-watch', q.filter(p=>scorePlay(p).verdict==='watch').length);
+  setEl('s-b2b', q.filter(p=>p.b2b).length);
+  setEl('s-sports', new Set(q.map(p=>p.sport).filter(Boolean)).size);
 }
 
 function toggleSport(sport, el){
