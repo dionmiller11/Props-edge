@@ -370,9 +370,9 @@ function scorePlay(p){
   const juicePenalty = impl > 60 ? (impl-60)*0.9 : 0;
   const score = edge + bookBoost + streakBoost - samplePenalty - juicePenalty;
   let verdict, verdictLabel;
-  if(score>=28 && rate>=88 && books>=18 && streak>=5){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
-  else if(score>=18 && rate>=80 && streak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  else if(score>=8 && rate>=72 && streak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  if(score>=28 && rate>=88 && books>=18 && streak>=4){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  else if(score>=18 && rate>=80){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  else if(score>=6 && rate>=70){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
