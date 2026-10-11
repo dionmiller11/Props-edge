@@ -475,7 +475,8 @@ function renderPlays(){
     else if(isQ) badges += '<span class="badge questionable">🟡 Q</span>';
 
     const inParlay = parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop);
-    const pData = JSON.stringify({player:p.player,team:p.team||'',prop:p.prop,line:p.line,direction:dir,rate,sport:p.sport||'',bestOdds:p.bestOdds||p.odds||''}).replace(/"/g,"'");
+    const pIdx = allPlays.indexOf(p);
+    const pData = pIdx;
 
     const cardClass = `play-card ${sport}${isOut?' injured':''}${isQ?' questionable-card':''}`;
     return `<div class="${cardClass}">
@@ -504,10 +505,10 @@ function renderPlays(){
       <div class="play-bot">
         <div class="play-meta">${p.hits||0}/${p.games||10} ${dir}${p.streak>=2?' · '+p.streak+'G streak':''}</div>
         <div class="play-actions">
-          <button class="play-btn parlay ${inParlay?'active':''}" onclick="addToParlay(${pData})" style="${inParlay?'background:rgba(0,212,255,.3);color:#000':''}">
+          <button class="play-btn parlay ${inParlay?'active':''}" onclick="addToParlay(allPlays[${pData}])" style="${inParlay?'background:rgba(0,212,255,.3);color:#000':''}">
             ${inParlay?'✓':'+'}
           </button>
-          <button class="play-btn log" onclick="logBet(${pData})">📋</button>
+          <button class="play-btn log" onclick="logBet(allPlays[${pData}])">📋</button>
         </div>
       </div>
     </div>`;
