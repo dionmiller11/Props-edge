@@ -508,10 +508,6 @@ function renderPlays(){
         <span class="prob-chip">MKT <span>${impl}%</span></span>
         <span style="color:var(--border)">·</span>
         <span class="prob-chip">EDGE <span class="${edgeColor}">${edge>0?'+':''}${edge}%</span></span>
-        <span style="color:var(--border)">·</span>
-        <span class="prob-chip" style="color:var(--muted)">SCR <span>${scorePlay(p).score}</span></span>
-        <span style="color:var(--border)">·</span>
-        <span class="prob-chip" style="color:var(--muted)">STK <span>${p.streak||0}</span></span>
       </div>
       <div class="play-mid">
         <span class="play-prop">${esc(p.prop)}</span>
