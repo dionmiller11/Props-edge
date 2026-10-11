@@ -78,6 +78,14 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .pick-btn{font-size:10px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:var(--font);font-weight:700;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;}
 .pick-btn:hover{border-color:var(--accent);color:var(--accent);}
 .pick-btn.selected{background:var(--accent);color:#000;border-color:var(--accent);}
+/* Weather strip on game cards */
+.wx-strip{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--surface2);border-radius:6px;margin-bottom:8px;font-family:var(--font);font-size:11px;}
+.wx-icon{font-size:18px;flex-shrink:0;}
+.wx-temp{font-weight:700;font-size:13px;color:var(--text);}
+.wx-wind{color:var(--warn);font-weight:700;}
+.wx-wind.ok{color:var(--muted);}
+.wx-rain{color:var(--accent);font-weight:700;}
+.wx-desc{color:var(--muted);font-size:10px;}
 /* Sim probability section */
 .sim-section{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;}
 .sim-title{font-size:9px;color:var(--muted);font-family:var(--font);letter-spacing:.12em;margin-bottom:8px;}
@@ -206,6 +214,77 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 
 <script>
 const WORKER_URL = localStorage.getItem('lineMonitorWorkerUrl') || 'https://line-monitor.dion-miller11.workers.dev';
+
+// ── STADIUM DATABASE (lat/lon for weather) ──
+const STADIUMS = {
+  'BUF':{name:'Highmark Stadium',lat:42.774,lon:-78.787,dome:false},
+  'MIA':{name:'Hard Rock Stadium',lat:25.958,lon:-80.239,dome:false},
+  'NE': {name:'Gillette Stadium',lat:42.091,lon:-71.264,dome:false},
+  'NYJ':{name:'MetLife Stadium',lat:40.813,lon:-74.074,dome:false},
+  'NYG':{name:'MetLife Stadium',lat:40.813,lon:-74.074,dome:false},
+  'BAL':{name:'M&T Bank Stadium',lat:39.278,lon:-76.623,dome:false},
+  'CIN':{name:'Paycor Stadium',lat:39.095,lon:-84.516,dome:false},
+  'CLE':{name:'Cleveland Browns Stadium',lat:41.506,lon:-81.699,dome:false},
+  'PIT':{name:'Acrisure Stadium',lat:40.447,lon:-80.016,dome:false},
+  'HOU':{name:'NRG Stadium',lat:29.685,lon:-95.411,dome:true},
+  'IND':{name:'Lucas Oil Stadium',lat:39.760,lon:-86.164,dome:true},
+  'JAX':{name:'EverBank Stadium',lat:30.324,lon:-81.638,dome:false},
+  'TEN':{name:'Nissan Stadium',lat:36.166,lon:-86.771,dome:false},
+  'DEN':{name:'Empower Field',lat:39.744,lon:-105.020,dome:false},
+  'KC': {name:'Arrowhead Stadium',lat:39.049,lon:-94.484,dome:false},
+  'LV': {name:'Allegiant Stadium',lat:36.091,lon:-115.184,dome:true},
+  'LAC':{name:'SoFi Stadium',lat:33.953,lon:-118.339,dome:true},
+  'LAR':{name:'SoFi Stadium',lat:33.953,lon:-118.339,dome:true},
+  'DAL':{name:'AT&T Stadium',lat:32.748,lon:-97.093,dome:true},
+  'PHI':{name:'Lincoln Financial Field',lat:39.901,lon:-75.168,dome:false},
+  'WAS':{name:'Northwest Stadium',lat:38.908,lon:-76.864,dome:false},
+  'CHI':{name:'Soldier Field',lat:41.862,lon:-87.617,dome:false},
+  'DET':{name:'Ford Field',lat:42.340,lon:-83.046,dome:true},
+  'GB': {name:'Lambeau Field',lat:44.501,lon:-88.062,dome:false},
+  'MIN':{name:'U.S. Bank Stadium',lat:44.974,lon:-93.258,dome:true},
+  'ATL':{name:'Mercedes-Benz Stadium',lat:33.755,lon:-84.401,dome:true},
+  'CAR':{name:'Bank of America Stadium',lat:35.226,lon:-80.853,dome:false},
+  'NO': {name:'Caesars Superdome',lat:29.951,lon:-90.081,dome:true},
+  'TB': {name:'Raymond James Stadium',lat:27.976,lon:-82.503,dome:false},
+  'ARI':{name:'State Farm Stadium',lat:33.528,lon:-112.263,dome:true},
+  'SEA':{name:'Lumen Field',lat:47.595,lon:-122.332,dome:false},
+  'SF': {name:"Levi's Stadium",lat:37.403,lon:-121.970,dome:false},
+};
+
+const WX_ICONS = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',85:'🌨️',86:'🌨️',95:'⛈️',96:'⛈️',99:'⛈️'};
+let weatherCache = {};
+async function fetchWeatherForGame(homeAbbr, venueName){
+  // Find stadium
+  let info = STADIUMS[homeAbbr];
+  if(!info && venueName){
+    const vl = venueName.toLowerCase();
+    for(const v of Object.values(STADIUMS)){
+      if(v.name && vl.includes(v.name.toLowerCase().split(' ')[0])){ info=v; break; }
+    }
+  }
+  if(!info || info.dome || !info.lat) return null;
+  const key = `${info.lat},${info.lon}`;
+  if(weatherCache[key]) return weatherCache[key];
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${info.lat}&longitude=${info.lon}&current=temperature_2m,wind_speed_10m,precipitation,weather_code&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch`;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const c = data.current;
+    const wc = c.weather_code||0;
+    const isRain = [51,53,55,61,63,65,80,81,82,95,96,99].includes(wc);
+    const isSnow = [71,73,75,77,85,86].includes(wc);
+    const result = {
+      temp: Math.round(c.temperature_2m),
+      wind: Math.round(c.wind_speed_10m),
+      precip: c.precipitation||0,
+      icon: WX_ICONS[wc]||'🌡️',
+      isRain, isSnow,
+    };
+    weatherCache[key] = result;
+    return result;
+  }catch(e){ return null; }
+}
 const ESPN_SPORTS = {
   NFL:    {path:'football/nfl',           an:'nfl',   color:'#ff6b35'},
   NCAAFB: {path:'football/college-football', an:'ncaaf', color:'#ffd700'},
@@ -516,6 +595,12 @@ async function loadAll(){
     return {...g, od, rlm, steam, sharpScore:Math.min(100,Math.round(sharpScore))};
   });
 
+  // Fetch live weather for outdoor NFL/NCAAFB games
+  weatherCache = {}; // bust cache every load
+  await Promise.all(allGames.filter(g=>g.isOutdoor&&['NFL','NCAAFB'].includes(g.sport)).map(async g=>{
+    g.weather = await fetchWeatherForGame(g.home, g.venue);
+  }));
+
   // Run Monte Carlo sims per sport
   for(const [key, sport] of sportEntries){
     const sportGames = allGames.filter(g=>g.sport===key);
@@ -601,7 +686,11 @@ function renderLines(){
     let badges = '';
     if(g.rlm) badges += '<span class="alert-badge rlm">🚨 RLM</span>';
     if(g.steam) badges += '<span class="alert-badge steam">💨 STEAM</span>';
-    if(g.isOutdoor&&['NFL','NCAAFB'].includes(g.sport)) badges += '<span class="alert-badge weather">🌤️ OUTDOOR</span>';
+    // weather badge — replaced below with full strip; just flag for rain/wind here
+    if(g.isOutdoor&&['NFL','NCAAFB'].includes(g.sport)&&!g.weather) badges += '<span class="alert-badge weather">🌤️ OUTDOOR</span>';
+    if(g.weather?.wind>=15) badges += `<span class="alert-badge weather" style="color:var(--warn);border-color:rgba(255,107,53,.4)">💨 ${g.weather.wind}mph</span>`;
+    if(g.weather?.isRain) badges += `<span class="alert-badge weather">🌧️ RAIN</span>`;
+    if(g.weather?.isSnow) badges += `<span class="alert-badge weather" style="color:#aad4ff;border-color:rgba(170,212,255,.3)">❄️ SNOW</span>`;
     if(g.sharpScore>=70) badges += '<span class="alert-badge value">⚡ SHARP</span>';
 
     const gameId = JSON.stringify({id:g.id,away:g.away,home:g.home,sport:g.sport,spread:g.spread,total:g.total,ml_away:g.ml_away,ml_home:g.ml_home}).replace(/"/g,"'");
@@ -619,6 +708,14 @@ function renderLines(){
       </div>
       <div class="game-body">
         ${badges?`<div class="alert-badges">${badges}</div>`:''}
+        ${g.weather ? `<div class="wx-strip">
+          <span class="wx-icon">${g.weather.icon}</span>
+          <span class="wx-temp">${g.weather.temp}°F</span>
+          <span class="wx-wind ${g.weather.wind<15?'ok':''}">💨 ${g.weather.wind}mph</span>
+          ${g.weather.isRain?'<span class="wx-rain">🌧️ Rain</span>':g.weather.isSnow?'<span class="wx-rain" style="color:#aad4ff">❄️ Snow</span>':''}
+          ${g.weather.wind>=25?'<span style="color:var(--miss);font-size:10px">⚠️ avoid passing props</span>':g.weather.wind>=15?'<span style="color:var(--warn);font-size:10px">fade OVER</span>':''}
+          ${(g.weather.isRain||g.weather.isSnow)?'<span style="color:var(--accent);font-size:10px">fade OVER</span>':''}
+        </div>`:''}
         <div class="lines-row">
           <div class="line-box">
             <div class="line-label">SPREAD (${esc(spreadTeam)})</div>
