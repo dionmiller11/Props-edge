@@ -583,7 +583,7 @@ async function runScan(){
           const uo=b?.under?.current?.odds?.american;
           if(ol&&!bestLine)bestLine=ol;
           if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}
-          if(uo&&(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))){bestUnderOdds=uo;bestUnderBook=bk;}
+          if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)){bestUnderOdds=uo;bestUnderBook=bk;}}
         }
         if(!bestLine) continue;
 
@@ -599,7 +599,8 @@ async function runScan(){
         const games = parts ? parseInt(parts[2]) : 10;
         const misses = games - hits;
         const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
-        const streak = calcStreak(last10);
+        // Streak capped at games count — can't exceed sample window
+        const streak = Math.min(calcStreak(last10), games);
 
         const h2h = signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote = h2h ? h2h.description : ('vs '+opp);
@@ -610,6 +611,7 @@ async function runScan(){
           prop: propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
           line: String(bestLine), direction, rate: hitRate,
           hits, games, last10, streak, hotStreak: streak>=2,
+          bookCount: direction==='OVER' ? bookOverCount : bookUnderCount,
           opposingTeam: opp, gameTime,
           matchupGrade: hitRate>=90?'A':hitRate>=80?'B':'C',
           matchupNote, bestOdds, bestBook: direction==='OVER' ? bestOverBook : bestUnderBook, realData: true, source: 'linemate',
