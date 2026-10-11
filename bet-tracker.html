@@ -229,16 +229,22 @@ let bets = [], activeFilter = 'all', activePage = 'log';
 const KV_BASE = 'https://line-monitor.dion-miller11.workers.dev';
 let _kvSaveTimer = null;
 
-// Load from KV first, fall back to localStorage
+// Merge KV + localStorage — local wins on id conflict (newer device data takes priority)
 (async function initBets(){
-  let loaded = false;
+  let kvBets=[], localBets=[];
   try {
     const r = await fetch(KV_BASE+'/bets/get');
-    if(r.ok){ const d=await r.json(); if(d.found && d.bets && d.bets.length){ bets=d.bets; loaded=true; } }
+    if(r.ok){ const d=await r.json(); if(d.found && d.bets) kvBets=d.bets; }
   } catch(e){}
-  if(!loaded){ try{ bets=JSON.parse(localStorage.getItem('propsBets')||'[]'); }catch(e){ bets=[]; } }
-  // Sync KV into localStorage so offline works
+  try{ localBets=JSON.parse(localStorage.getItem('propsBets')||'[]'); }catch(e){}
+  // Merge: local wins on conflict (more recent write); KV fills in anything missing locally
+  const seen=new Set(localBets.map(b=>String(b.id)));
+  const merged=[...localBets, ...kvBets.filter(b=>!seen.has(String(b.id)))];
+  merged.sort((a,b)=>String(b.id).localeCompare(String(a.id)));
+  bets=merged;
+  // Push merged back to both stores so they stay in sync
   try{ localStorage.setItem('propsBets', JSON.stringify(bets)); }catch(e){}
+  fetch(KV_BASE+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bets})}).catch(function(){});
   if(typeof renderBets==='function') renderBets();
   if(typeof updateStats==='function') updateStats();
 })();
