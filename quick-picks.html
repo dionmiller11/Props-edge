@@ -357,16 +357,22 @@ function scorePlay(p){
   const rate = p.rate||0;
   const impl = impliedProb(p.bestOdds||p.odds||'-110');
   const edge = rate - impl;
-  // Signal bonus: bookCount (consensus) and streak
-  const sigBoost = (p.bookCount>=18?12:p.bookCount>=15?8:p.bookCount>=10?4:0)
-                 + (p.streak>=4?8:p.streak>=3?5:p.streak>=2?2:0);
-  // Juice penalty: anything above 60% implied is market-heavy, penalize harder
-  const juicePenalty = impl > 60 ? (impl-60)*0.8 : 0;
-  const score = edge + sigBoost - juicePenalty;
+  // Sample size confidence: streak is recent L10 form count
+  const streak = p.streak||0;
+  const books = p.bookCount||0;
+  // Small sample penalty — 100% on 2 games isn't reliable
+  const samplePenalty = streak<=2?15:streak<=3?8:streak<=4?3:0;
+  // Book consensus bonus
+  const bookBoost = books>=20?14:books>=15?9:books>=10?5:books>=5?2:0;
+  // Streak bonus only for longer confirmed streaks
+  const streakBoost = streak>=6?8:streak>=5?5:streak>=4?3:0;
+  // Juice penalty: anything above 60% implied is market-heavy
+  const juicePenalty = impl > 60 ? (impl-60)*0.9 : 0;
+  const score = edge + bookBoost + streakBoost - samplePenalty - juicePenalty;
   let verdict, verdictLabel;
-  if(score>=28 && rate>=88 && (p.bookCount||0)>=18){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
-  else if(score>=20 && rate>=82){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  else if(score>=10 && rate>=72){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  if(score>=28 && rate>=88 && books>=18 && streak>=5){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  else if(score>=18 && rate>=80 && streak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  else if(score>=8 && rate>=72 && streak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
