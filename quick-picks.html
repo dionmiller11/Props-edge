@@ -64,6 +64,18 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .play-btn.parlay{background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2);}
 .play-btn.log{background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.2);}
 .play-btn.corr{background:rgba(176,110,255,.1);color:var(--purple);border-color:rgba(176,110,255,.2);}
+/* Verdict badge */
+.verdict{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:700;font-family:var(--font);letter-spacing:.04em;}
+.verdict.play{background:rgba(0,255,136,.15);color:var(--accent2);border:1px solid rgba(0,255,136,.35);}
+.verdict.watch{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+.verdict.pass{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
+/* Implied prob row */
+.prob-row{display:flex;gap:10px;margin-bottom:6px;align-items:center;}
+.prob-chip{font-size:10px;font-family:var(--font);color:var(--muted);}
+.prob-chip span{font-weight:700;}
+.prob-chip span.green{color:var(--accent2);}
+.prob-chip span.yellow{color:var(--gold);}
+.prob-chip span.red{color:var(--miss);}
 /* Badges */
 .badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;font-family:var(--font);margin-left:3px;}
 .badge.sharp{background:rgba(255,215,0,.2);color:var(--gold);border:1px solid rgba(255,215,0,.4);}
@@ -145,8 +157,8 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
   <!-- Summary -->
   <div class="summary">
     <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-total">0</div><div class="stat-lbl">TOTAL PLAYS</div></div>
-    <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-elite">0</div><div class="stat-lbl">🔥 90%+ RATE</div></div>
-    <div class="stat-card"><div class="stat-val" style="color:var(--accent2)" id="s-strong">0</div><div class="stat-lbl">✅ 80-89%</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--accent2)" id="s-play">0</div><div class="stat-lbl">⚡ PLAY</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-watch">0</div><div class="stat-lbl">👀 WATCH</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--miss)" id="s-b2b">0</div><div class="stat-lbl">⚠️ B2B FLAGS</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--purple)" id="s-sports">0</div><div class="stat-lbl">SPORTS</div></div>
   </div>
@@ -156,7 +168,9 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
     <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="80" min="60" max="100" step="5" oninput="renderPlays()">%</div>
     <div class="filter-group"><span class="filter-label">SORT</span>
       <select id="sortBy" onchange="renderPlays()">
+        <option value="verdict">Verdict (PLAY first)</option>
         <option value="rate">Hit Rate</option>
+        <option value="edge">Edge %</option>
         <option value="sport">Sport</option>
         <option value="direction">Direction</option>
       </select>
@@ -330,11 +344,35 @@ async function loadPlays(){
   if(staleWarn) staleWarn.style.display = isToday ? 'none' : 'flex';
 }
 
+// ── SCORING ──
+function impliedProb(odds){
+  if(!odds) return 52; // default ~-110
+  odds = parseInt(odds);
+  if(odds > 0) return Math.round(100/(odds+100)*100);
+  return Math.round(Math.abs(odds)/(Math.abs(odds)+100)*100);
+}
+
+function scorePlay(p){
+  const rate = p.rate||0;
+  const impl = impliedProb(p.bestOdds||p.odds||'-110');
+  const edge = rate - impl; // positive = we have edge over market
+  // Signal bonus: bookCount (consensus) and streak
+  const sigBoost = (p.bookCount>=15?10:0) + (p.streak>=3?5:p.streak>=2?2:0);
+  // Penalty: juice too high (impl > 60 means heavy favorite pricing)
+  const juicePenalty = impl > 62 ? (impl-62)*0.5 : 0;
+  const score = edge + sigBoost - juicePenalty;
+  let verdict, verdictLabel;
+  if(score>=12 && rate>=75){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  else if(score>=4 && rate>=65){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  else { verdict='pass'; verdictLabel='⛔ PASS'; }
+  return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
+}
+
 function updateSummary(){
   const q = allPlays;
   document.getElementById('s-total').textContent = q.length;
-  document.getElementById('s-elite').textContent = q.filter(p=>(p.rate||0)>=90).length;
-  document.getElementById('s-strong').textContent = q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;
+  document.getElementById('s-play').textContent = q.filter(p=>scorePlay(p).verdict==='play').length;
+  document.getElementById('s-watch').textContent = q.filter(p=>scorePlay(p).verdict==='watch').length;
   document.getElementById('s-b2b').textContent = q.filter(p=>p.b2b).length;
   document.getElementById('s-sports').textContent = new Set(q.map(p=>p.sport).filter(Boolean)).size;
 }
@@ -380,9 +418,15 @@ function renderPlays(){
     return true;
   });
 
+  const verdictOrder = {play:0,watch:1,pass:2};
   data = [...data].sort((a,b)=>{
     if(sortBy==='sport') return (a.sport||'').localeCompare(b.sport||'');
     if(sortBy==='direction') return (a.direction||'OVER').localeCompare(b.direction||'OVER');
+    if(sortBy==='edge') return scorePlay(b).edge - scorePlay(a).edge;
+    if(sortBy==='verdict'){
+      const vd = verdictOrder[scorePlay(a).verdict]-verdictOrder[scorePlay(b).verdict];
+      return vd!==0?vd:(b.rate||0)-(a.rate||0);
+    }
     return (b.rate||0)-(a.rate||0);
   });
 
@@ -400,8 +444,9 @@ function renderPlays(){
     const dirArrow = dir==='OVER'?'▲':'▼';
     const opp = p.opposingTeam||p.opp||'';
     const gameTime = p.gameTime||'';
+    const {impl, edge, verdict, verdictLabel} = scorePlay(p);
+    const edgeColor = edge>=10?'green':edge>=3?'yellow':'red';
 
-    // Badges
     // Injury status
     const inj = injuryMap[p.player.toLowerCase()];
     const injStatus = inj?.status||'';
@@ -420,7 +465,7 @@ function renderPlays(){
     else if(isQ) badges += '<span class="badge questionable">🟡 Q</span>';
 
     const inParlay = parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop);
-    const pData = JSON.stringify({player:p.player,team:p.team||'',prop:p.prop,line:p.line,direction:dir,rate,sport:p.sport||''}).replace(/"/g,"'");
+    const pData = JSON.stringify({player:p.player,team:p.team||'',prop:p.prop,line:p.line,direction:dir,rate,sport:p.sport||'',bestOdds:p.bestOdds||p.odds||''}).replace(/"/g,"'");
 
     const cardClass = `play-card ${sport}${isOut?' injured':''}${isQ?' questionable-card':''}`;
     return `<div class="${cardClass}">
@@ -429,7 +474,17 @@ function renderPlays(){
           <div class="play-player">${esc(p.player)} ${badges}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(p.team||'')}${opp?' vs '+esc(opp):''}${gameTime?' · '+esc(gameTime):''}</div>
         </div>
-        <div class="play-rate ${rc}">${rate}%</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="verdict ${verdict}">${verdictLabel}</span>
+          <div class="play-rate ${rc}" style="font-size:14px">${rate}%</div>
+        </div>
+      </div>
+      <div class="prob-row">
+        <span class="prob-chip">HIT RATE <span class="${rc==='elite'?'green':rc==='strong'?'green':'yellow'}">${rate}%</span></span>
+        <span style="color:var(--border)">·</span>
+        <span class="prob-chip">MKT <span>${impl}%</span></span>
+        <span style="color:var(--border)">·</span>
+        <span class="prob-chip">EDGE <span class="${edgeColor}">${edge>0?'+':''}${edge}%</span></span>
       </div>
       <div class="play-mid">
         <span class="play-prop">${esc(p.prop)}</span>
