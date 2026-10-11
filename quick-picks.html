@@ -377,12 +377,12 @@ function scorePlay(p){
   const score = cappedEdge + streakScore + bookScore - juicePenalty;
 
   let verdict, verdictLabel;
-  // SHARP: max streak (5 capped) + heavy book consensus + strong edge
-  if(score>=50 && rawStreak>=5 && books>=18){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
-  // PLAY: strong book count + at least 4G streak (current season likely)
-  else if(score>=42 && books>=12 && rawStreak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  // WATCH: decent books + 3G streak
-  else if(score>=32 && books>=8 && rawStreak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  // SHARP: strong streak + strong edge + (books if available)
+  if(score>=50 && rawStreak>=5 && (books===0||books>=15)){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  // PLAY: 4G streak + good score
+  else if(score>=38 && rawStreak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  // WATCH: 3G streak + decent score
+  else if(score>=28 && rawStreak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
