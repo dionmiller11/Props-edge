@@ -322,8 +322,9 @@ async function loadPlays(){
     if(seen.has(k)) return false;
     seen.add(k);
     return true;
-  }).map(p=>({
+  }).map((p,i)=>({
     ...p,
+    _idx: i,
     logged: loggedKeys.has((p.player+'|'+p.prop).toLowerCase()),
   }));
 
@@ -487,8 +488,7 @@ function renderPlays(){
     else if(isQ) badges += '<span class="badge questionable">🟡 Q</span>';
 
     const inParlay = parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop);
-    const pIdx = allPlays.indexOf(p);
-    const pData = pIdx;
+    const pData = p._idx;
 
     const cardClass = `play-card ${sport}${isOut?' injured':''}${isQ?' questionable-card':''}`;
     return `<div class="${cardClass}">
