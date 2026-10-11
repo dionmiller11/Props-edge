@@ -357,28 +357,32 @@ function scorePlay(p){
   const rate = p.rate||0;
   const impl = impliedProb(p.bestOdds||p.odds||'-110');
   const edge = rate - impl;
-  const streak = p.streak||0;
+  const rawStreak = p.streak||0;
   const books = p.bookCount||0;
+  // Cap streak at 5 — anything beyond is likely cross-season and unreliable
+  const streak = Math.min(rawStreak, 5);
 
-  // Edge is capped — 100% hit rate on small sample shouldn't dominate
-  const cappedEdge = Math.min(edge, 30);
+  // Edge capped — 100% hit rate shouldn't dominate
+  const cappedEdge = Math.min(edge, 25);
 
-  // Streak is primary signal: must be sustained
-  // streak here = consecutive hits in recent form (from Linemate)
-  const streakScore = streak>=7?30:streak>=6?24:streak>=5?18:streak>=4?12:streak>=3?6:streak>=2?2:-5;
+  // Streak score — capped at 5 so 10G streak = 5G streak in scoring
+  const streakScore = streak>=5?18:streak>=4?12:streak>=3?6:streak>=2?2:0;
 
-  // Book consensus: more books = market agrees
-  const bookScore = books>=20?15:books>=15?10:books>=10?5:books>=5?2:0;
+  // Book consensus is primary live signal — weight heavily
+  const bookScore = books>=20?20:books>=15?14:books>=10?8:books>=5?3:0;
 
-  // Juice penalty: market pricing above 60% implied = sharp money on other side
+  // Juice penalty
   const juicePenalty = impl > 60 ? (impl-60)*1.2 : 0;
 
   const score = cappedEdge + streakScore + bookScore - juicePenalty;
 
   let verdict, verdictLabel;
-  if(score>=58 && streak>=6 && books>=15){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
-  else if(score>=50 && streak>=5){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  else if(score>=40 && streak>=4){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  // SHARP: max streak (5 capped) + heavy book consensus + strong edge
+  if(score>=50 && rawStreak>=5 && books>=18){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  // PLAY: strong book count + at least 4G streak (current season likely)
+  else if(score>=42 && books>=12 && rawStreak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  // WATCH: decent books + 3G streak
+  else if(score>=32 && books>=8 && rawStreak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
