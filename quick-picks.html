@@ -120,6 +120,30 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .play-card.questionable-card{border-left-color:var(--gold)!important;}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
 .toast.show{transform:translateY(0);opacity:1;}
+/* ── TODAY'S BEST ── */
+.best-section{margin-bottom:16px;}
+.best-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.best-title{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--gold);}
+.best-subtitle{font-size:10px;color:var(--muted);font-family:var(--font);}
+.best-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
+.best-strip::-webkit-scrollbar{display:none;}
+.best-card{background:var(--surface);border:1px solid rgba(255,215,0,.35);border-radius:8px;padding:10px 12px;min-width:190px;max-width:210px;flex-shrink:0;cursor:pointer;transition:all .15s;position:relative;}
+.best-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,215,0,.15);border-color:var(--gold);}
+.best-card-rank{position:absolute;top:8px;right:10px;font-size:10px;font-weight:700;font-family:var(--font);color:var(--gold);opacity:.7;}
+.best-card-player{font-weight:700;font-size:12px;margin-bottom:3px;padding-right:20px;}
+.best-card-prop{font-size:10px;color:var(--muted);font-family:var(--font);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.best-card-stats{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.best-card-rate{font-size:15px;font-weight:700;font-family:var(--font);color:var(--accent2);}
+.best-card-verdict{font-size:10px;font-weight:700;font-family:var(--font);}
+.best-card-verdict.sharp{color:#ff6b35;} .best-card-verdict.play{color:var(--accent2);} .best-card-verdict.watch{color:var(--gold);}
+.best-card-log{position:absolute;bottom:8px;right:8px;background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.25);border-radius:3px;font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer;font-family:var(--font);}
+.best-card-log:hover{background:rgba(0,255,136,.25);}
+.best-card-sport{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:2px;margin-left:2px;}
+.best-card-sport.nfl{background:rgba(255,107,53,.15);color:#ff6b35;}
+.best-card-sport.nba{background:rgba(0,212,255,.12);color:#00d4ff;}
+.best-card-sport.mlb{background:rgba(0,255,136,.1);color:#00ff88;}
+.best-card-sport.wnba{background:rgba(255,105,180,.1);color:#ff69b4;}
+.best-card-sport.ncaafb{background:rgba(255,215,0,.1);color:#ffd700;}
 @media(max-width:700px){.summary{grid-template-columns:repeat(3,1fr);}.plays-grid{grid-template-columns:1fr;}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}}
 </style>
 </head>
@@ -166,7 +190,14 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 
   <!-- Filters -->
   <div class="filters">
-    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="80" min="60" max="100" step="5" oninput="renderPlays()">%</div>
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="88" min="60" max="100" step="1" oninput="renderPlays()">%</div>
+    <div class="filter-group"><span class="filter-label">VERDICT</span>
+      <select id="verdictFilter" onchange="renderPlays()">
+        <option value="actionable">SHARP + PLAY</option>
+        <option value="all">All (incl. Watch)</option>
+        <option value="sharp">SHARP only</option>
+      </select>
+    </div>
     <div class="filter-group"><span class="filter-label">SORT</span>
       <select id="sortBy" onchange="renderPlays()">
         <option value="verdict">Verdict (SHARP first)</option>
@@ -214,6 +245,15 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${Object.entries({NFL:'nfl-props',NBA:'nba-props',MLB:'mlb-props',WNBA:'wnba-props'}).map(([s,p])=>`<a href="https://dionmiller11.github.io/Props-edge/${p}.html" style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:700;text-decoration:none;background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.2)">Run ${s}</a>`).join('')}
     </div>
+  </div>
+
+  <!-- Today's Best -->
+  <div class="best-section" id="bestSection" style="display:none">
+    <div class="best-header">
+      <span class="best-title">⭐ TODAY'S BEST</span>
+      <span class="best-subtitle" id="bestSubtitle">top picks by composite score</span>
+    </div>
+    <div class="best-strip" id="bestStrip"></div>
   </div>
 
   <!-- Plays -->
@@ -334,10 +374,11 @@ async function loadPlays(){
   const info = document.getElementById('dateBannerInfo');
   banner.style.display = 'flex';
   label.textContent = isToday ? '✅ TODAY\'S SCAN' : '⚠️ YESTERDAY\'S DATA — run a new scan for today\'s plays';
-  info.textContent = `${allPlays.length} plays saved · ${dateUsed} · ${new Set(allPlays.map(p=>p.sport)).size} sports`;
+  info.textContent = `${allPlays.length} plays in pool · showing top 15 · ${dateUsed}`;
   document.getElementById('scanDate').textContent = dateUsed;
 
   updateSummary();
+  renderBestPicks();
   // Fetch injuries in background
   fetchInjuries().then(()=>renderPlays());
   renderPlays();
@@ -411,9 +452,10 @@ function toggleSport(sport, el){
 function toggleB2B(el){b2bOnly=!b2bOnly;el.classList.toggle('active',b2bOnly);renderPlays();}
 
 function resetFilters(){
-  document.getElementById('minRate').value=80;
-  document.getElementById('sortBy').value='rate';
+  document.getElementById('minRate').value=88;
+  document.getElementById('sortBy').value='verdict';
   document.getElementById('dirFilter').value='all';
+  document.getElementById('verdictFilter').value='actionable';
   b2bOnly=false;
   document.getElementById('b2bChip').classList.remove('active');
   activeSports=new Set(SPORTS);
@@ -423,9 +465,10 @@ function resetFilters(){
 
 function renderPlays(){
   const grid = document.getElementById('playsGrid');
-  const minRate = parseInt(document.getElementById('minRate').value)||80;
+  const minRate = parseInt(document.getElementById('minRate').value)||88;
   const sortBy = document.getElementById('sortBy').value;
   const dirFilter = document.getElementById('dirFilter').value;
+  const verdictFilter = (document.getElementById('verdictFilter')||{}).value||'actionable';
 
   let data = allPlays.filter(p=>{
     if(!activeSports.has(p.sport)) return false;
@@ -438,6 +481,9 @@ function renderPlays(){
       const oppMatch = (p.opposingTeam||p.opp||'').toLowerCase().includes(searchQuery);
       if(!playerMatch&&!teamMatch&&!oppMatch) return false;
     }
+    const v = scorePlay(p).verdict;
+    if(verdictFilter==='sharp' && v!=='sharp') return false;
+    if(verdictFilter==='actionable' && v!=='sharp' && v!=='play') return false;
     return true;
   });
 
@@ -452,6 +498,11 @@ function renderPlays(){
     }
     return (b.rate||0)-(a.rate||0);
   });
+
+  // Hard cap — model picks the best 15, you bet or don't
+  const CAP = 15;
+  const totalBeforeCap = data.length;
+  if(!searchQuery) data = data.slice(0, CAP);
 
   if(!data.length){
     grid.innerHTML = '<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🔍</div><p>No plays match your filters.<br>Try lowering the min rate or enabling more sports.</p></div></div>';
@@ -525,6 +576,65 @@ function renderPlays(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── TODAY'S BEST ──
+function renderBestPicks(){
+  const section = document.getElementById('bestSection');
+  const strip = document.getElementById('bestStrip');
+  const sub = document.getElementById('bestSubtitle');
+
+  // Score every play, pick top 5 regardless of current filters (always shows best of all)
+  const scored = allPlays
+    .filter(p=>p.rate>=70) // floor — below 70% is noise
+    .map(p=>({p, s:scorePlay(p)}))
+    .filter(({s})=>s.verdict!=='pass') // only actionable
+    .sort((a,b)=>b.s.score-a.s.score)
+    .slice(0,5);
+
+  if(!scored.length){section.style.display='none';return;}
+  section.style.display='block';
+  sub.textContent=`top ${scored.length} picks by composite score · scroll for more`;
+
+  strip.innerHTML=scored.map(({p,s},i)=>{
+    const sport=(p.sport||'nfl').toLowerCase();
+    const dir=p.direction||'OVER';
+    const dirArrow=dir==='OVER'?'▲':'▼';
+    const dirColor=dir==='OVER'?'color:var(--accent2)':'color:var(--miss)';
+    const medals=['🥇','🥈','🥉','4️⃣','5️⃣'];
+    const prop=p.prop||'';
+    return `<div class="best-card" onclick="scrollToPlay(${p._idx})">
+      <div class="best-card-rank">${medals[i]||i+1}</div>
+      <div class="best-card-player">${esc(p.player)}<span class="best-card-sport ${sport}">${esc(p.sport||'')}</span></div>
+      <div class="best-card-prop" title="${esc(prop)}">${esc(prop)}</div>
+      <div class="best-card-stats">
+        <span class="best-card-rate">${p.rate}%</span>
+        <span style="${dirColor};font-size:11px;font-weight:700;font-family:var(--font)">${dirArrow} ${dir}</span>
+        <span class="best-card-verdict ${s.verdict}">${s.verdictLabel}</span>
+      </div>
+      ${p.streak>=2?`<div style="font-size:9px;color:var(--muted);font-family:var(--font);margin-top:4px">${p.streak}G streak · edge +${s.edge}%</div>`:`<div style="font-size:9px;color:var(--muted);font-family:var(--font);margin-top:4px">edge +${s.edge}%</div>`}
+      <button class="best-card-log" onclick="event.stopPropagation();logBet(allPlays[${p._idx}])">📋 LOG</button>
+    </div>`;
+  }).join('');
+}
+
+function scrollToPlay(idx){
+  // Ensure sort is by verdict so the card is visible, then scroll to it
+  const sortEl=document.getElementById('sortBy');
+  if(sortEl.value!=='verdict'){sortEl.value='verdict';renderPlays();}
+  // Find the rendered card by player+prop match
+  const target=allPlays[idx];
+  if(!target)return;
+  const cards=document.querySelectorAll('#playsGrid .play-card');
+  for(const card of cards){
+    const nameEl=card.querySelector('.play-player');
+    if(nameEl&&nameEl.textContent.includes(target.player)){
+      card.style.outline='2px solid var(--gold)';
+      card.scrollIntoView({behavior:'smooth',block:'center'});
+      setTimeout(()=>card.style.outline='',1500);
+      return;
+    }
+  }
 }
 
 function renderEmpty(){
