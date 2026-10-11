@@ -599,8 +599,10 @@ async function runScan(){
         const games = parts ? parseInt(parts[2]) : 10;
         const misses = games - hits;
         const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
-        // Streak capped at games count — can't exceed sample window
-        const streak = Math.min(calcStreak(last10), games);
+        const rawStreak = calcStreak(last10);
+        // If hit rate is 100% over more than 5 games, likely cross-season — cap at 5
+        // Otherwise cap at games count to bound within sample window
+        const streak = (hits===games && games>5) ? 5 : Math.min(rawStreak, games);
 
         const h2h = signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote = h2h ? h2h.description : ('vs '+opp);
