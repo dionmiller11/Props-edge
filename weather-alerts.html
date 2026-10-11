@@ -65,6 +65,10 @@ main{max-width:960px;margin:0 auto;padding:18px 16px;}
 .empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:12px;}
 .empty-icon{font-size:28px;margin-bottom:8px;opacity:.4;}
 .dome-badge{font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(107,122,150,.15);color:var(--muted);border:1px solid rgba(107,122,150,.2);font-family:var(--font);font-weight:700;}
+.live-badge{font-size:9px;padding:2px 7px;border-radius:3px;background:rgba(255,77,109,.2);color:var(--miss);border:1px solid rgba(255,77,109,.4);font-family:var(--font);font-weight:700;animation:pulse 1.5s infinite;}
+.final-badge{font-size:9px;padding:2px 7px;border-radius:3px;background:rgba(107,122,150,.15);color:var(--muted);border:1px solid rgba(107,122,150,.2);font-family:var(--font);font-weight:700;}
+.auto-refresh{font-family:var(--font);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--accent2);animation:pulse 2s infinite;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -75,7 +79,7 @@ main{max-width:960px;margin:0 auto;padding:18px 16px;}
     <h1>WEATHER <span>ALERTS</span></h1>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
-    <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="lastUpdated">—</span>
+    <div class="auto-refresh"><div class="refresh-dot"></div><span id="lastUpdated">—</span><span id="nextRefresh" style="color:var(--muted)"></span></div>
     <button class="btn btn-primary" id="runBtn" onclick="runWeather()">⚡ CHECK WEATHER</button>
   </div>
 </header>
@@ -254,35 +258,50 @@ function getStadiumInfo(homeTeam, venueName){
 }
 
 let allGames = [];
+let _autoRefreshTimer = null;
+let _refreshCountdown = null;
+const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
-async function runWeather(){
+async function runWeather(silent){
   const btn = document.getElementById('runBtn');
-  btn.disabled = true; btn.textContent = '⏳ Loading…';
-  setStatus('running', '📡 Fetching games from ESPN…');
-  weatherCache = {};
+  if(!silent){ btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+  setStatus('running', '📡 Fetching live conditions…');
+  weatherCache = {}; // always bust cache — force live data every time
   try {
     allGames = await fetchGames(activeSport);
     if(!allGames.length){setStatus('error','No games found for today');btn.disabled=false;btn.textContent='⚡ CHECK WEATHER';return;}
-    setStatus('running', `Found ${allGames.length} games — fetching weather…`);
+    setStatus('running', `Found ${allGames.length} games — fetching live weather…`);
 
-    // Fetch weather for all outdoor stadiums
-    let done = 0;
     await Promise.all(allGames.map(async game => {
       const info = getStadiumInfo(game.home, game.venueName);
       if(!info.dome && info.lat){
         game.weather = await fetchWeather(info.lat, info.lon);
       }
       game.stadiumInfo = info;
-      done++;
     }));
 
     renderGames();
-    document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-    setStatus('done', `✅ ${allGames.length} games loaded — ${allGames.filter(g=>!g.stadiumInfo?.dome).length} outdoor`);
+    document.getElementById('lastUpdated').textContent = 'Live · ' + new Date().toLocaleTimeString();
+    setStatus('done', `✅ ${allGames.length} games · live conditions · auto-refreshes every 10 min`);
+    scheduleAutoRefresh();
   } catch(e){
     setStatus('error','❌ '+e.message);
   }
   btn.disabled=false; btn.textContent='⚡ CHECK WEATHER';
+}
+
+function scheduleAutoRefresh(){
+  if(_autoRefreshTimer) clearTimeout(_autoRefreshTimer);
+  if(_refreshCountdown) clearInterval(_refreshCountdown);
+  let secondsLeft = REFRESH_INTERVAL / 1000;
+  const nextEl = document.getElementById('nextRefresh');
+  _refreshCountdown = setInterval(()=>{
+    secondsLeft--;
+    const m = Math.floor(secondsLeft/60), s = secondsLeft%60;
+    if(nextEl) nextEl.textContent = ` · next in ${m}:${String(s).padStart(2,'0')}`;
+    if(secondsLeft<=0) clearInterval(_refreshCountdown);
+  }, 1000);
+  _autoRefreshTimer = setTimeout(()=>{ runWeather(true); }, REFRESH_INTERVAL);
 }
 
 function renderGames(){
@@ -328,7 +347,11 @@ function renderGames(){
           <div class="game-teams">${esc(game.away)} @ ${esc(game.home)}</div>
           <div class="game-time">${esc(info.name||game.venueName||'—')} · ${time}</div>
         </div>
-        ${info.dome?'<span class="dome-badge">DOME</span>':''}
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          ${/in_progress|in progress/i.test(game.status)?'<span class="live-badge">🔴 LIVE</span>':''}
+          ${/final/i.test(game.status)?'<span class="final-badge">FINAL</span>':''}
+          ${info.dome?'<span class="dome-badge">DOME</span>':''}
+        </div>
       </div>
       <div class="weather-body">
         ${weatherHtml}
