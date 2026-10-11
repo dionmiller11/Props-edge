@@ -376,9 +376,9 @@ function scorePlay(p){
   const score = cappedEdge + streakScore + bookScore - juicePenalty;
 
   let verdict, verdictLabel;
-  if(score>=45 && streak>=5 && books>=15){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
-  else if(score>=30 && streak>=4){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  else if(score>=18 && streak>=3){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  if(score>=58 && streak>=6 && books>=15){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  else if(score>=50 && streak>=5){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  else if(score>=40 && streak>=4){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
