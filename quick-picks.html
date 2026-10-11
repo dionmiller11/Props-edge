@@ -606,12 +606,31 @@ function correlateParlayLegs(){
 }
 
 function logBet(play){
-  const params = new URLSearchParams({
-    player:play.player||'',prop:play.prop||'',
-    sport:play.sport||'',odds:play.bestOdds||'-110',
-    rate:play.rate||'',direction:play.direction||'OVER',
-  });
-  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+  const KV_URL='https://line-monitor.dion-miller11.workers.dev';
+  const bet={
+    id:Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    player:play.player||'',
+    prop:play.prop||'',
+    sport:play.sport||'',
+    odds:play.bestOdds||play.odds||'-110',
+    rate:play.rate||'',
+    direction:play.direction||'OVER',
+    line:play.line||'',
+    bookCount:play.bookCount||0,
+    streak:play.streak||0,
+    loggedAt:new Date().toISOString(),
+    status:'pending',
+  };
+  // Save to localStorage
+  try{
+    const stored=JSON.parse(localStorage.getItem('propsBets')||'[]');
+    stored.unshift(bet);
+    localStorage.setItem('propsBets',JSON.stringify(stored));
+  }catch(e){}
+  // Sync to KV
+  fetch(KV_URL+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bet)})
+    .catch(()=>{});
+  showToast('Bet logged: '+bet.player+' '+bet.direction+' '+bet.prop);
 }
 
 let searchQuery='';
