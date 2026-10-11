@@ -631,29 +631,32 @@ function correlateParlayLegs(){
 function logBet(play){
   const KV_URL='https://line-monitor.dion-miller11.workers.dev';
   const bet={
-    id:Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    id:Date.now(),
+    date:new Date().toISOString().split('T')[0],
     player:play.player||'',
-    prop:play.prop||'',
-    sport:play.sport||'',
+    prop:(play.direction||'OVER')+' '+play.line+' '+esc(play.prop||''),
+    propType:play.prop||'',
+    sport:(play.sport||'').toUpperCase(),
     odds:play.bestOdds||play.odds||'-110',
+    units:'1',
     rate:play.rate||'',
-    direction:play.direction||'OVER',
-    line:play.line||'',
+    book:'',
     bookCount:play.bookCount||0,
     streak:play.streak||0,
-    loggedAt:new Date().toISOString(),
-    status:'pending',
+    result:'pending',
   };
-  // Save to localStorage
+  // Save to localStorage and sync full array to KV (same format as bet-tracker)
   try{
     const stored=JSON.parse(localStorage.getItem('propsBets')||'[]');
     stored.unshift(bet);
     localStorage.setItem('propsBets',JSON.stringify(stored));
-  }catch(e){}
-  // Sync to KV
-  fetch(KV_URL+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bet)})
-    .catch(()=>{});
-  showToast('Bet logged: '+bet.player+' '+bet.direction+' '+bet.prop);
+    fetch(KV_URL+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bets:stored})})
+      .catch(()=>{});
+  }catch(e){
+    fetch(KV_URL+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bets:[bet]})})
+      .catch(()=>{});
+  }
+  showToast('✅ Logged: '+bet.player+' · '+bet.propType);
 }
 
 let searchQuery='';
