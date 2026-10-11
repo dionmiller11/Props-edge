@@ -66,6 +66,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .play-btn.corr{background:rgba(176,110,255,.1);color:var(--purple);border-color:rgba(176,110,255,.2);}
 /* Verdict badge */
 .verdict{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:700;font-family:var(--font);letter-spacing:.04em;}
+.verdict.sharp{background:rgba(255,107,53,.18);color:#ff6b35;border:1px solid rgba(255,107,53,.45);}
 .verdict.play{background:rgba(0,255,136,.15);color:var(--accent2);border:1px solid rgba(0,255,136,.35);}
 .verdict.watch{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
 .verdict.pass{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
@@ -157,10 +158,10 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
   <!-- Summary -->
   <div class="summary">
     <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-total">0</div><div class="stat-lbl">TOTAL PLAYS</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:#ff6b35" id="s-sharp">0</div><div class="stat-lbl">🔥 SHARP</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--accent2)" id="s-play">0</div><div class="stat-lbl">⚡ PLAY</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--gold)" id="s-watch">0</div><div class="stat-lbl">👀 WATCH</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--miss)" id="s-b2b">0</div><div class="stat-lbl">⚠️ B2B FLAGS</div></div>
-    <div class="stat-card"><div class="stat-val" style="color:var(--purple)" id="s-sports">0</div><div class="stat-lbl">SPORTS</div></div>
   </div>
 
   <!-- Filters -->
@@ -355,15 +356,17 @@ function impliedProb(odds){
 function scorePlay(p){
   const rate = p.rate||0;
   const impl = impliedProb(p.bestOdds||p.odds||'-110');
-  const edge = rate - impl; // positive = we have edge over market
+  const edge = rate - impl;
   // Signal bonus: bookCount (consensus) and streak
-  const sigBoost = (p.bookCount>=15?10:0) + (p.streak>=3?5:p.streak>=2?2:0);
-  // Penalty: juice too high (impl > 60 means heavy favorite pricing)
-  const juicePenalty = impl > 62 ? (impl-62)*0.5 : 0;
+  const sigBoost = (p.bookCount>=18?12:p.bookCount>=15?8:p.bookCount>=10?4:0)
+                 + (p.streak>=4?8:p.streak>=3?5:p.streak>=2?2:0);
+  // Juice penalty: anything above 60% implied is market-heavy, penalize harder
+  const juicePenalty = impl > 60 ? (impl-60)*0.8 : 0;
   const score = edge + sigBoost - juicePenalty;
   let verdict, verdictLabel;
-  if(score>=12 && rate>=75){ verdict='play'; verdictLabel='⚡ PLAY'; }
-  else if(score>=4 && rate>=65){ verdict='watch'; verdictLabel='👀 WATCH'; }
+  if(score>=28 && rate>=88 && (p.bookCount||0)>=18){ verdict='sharp'; verdictLabel='🔥 SHARP'; }
+  else if(score>=20 && rate>=82){ verdict='play'; verdictLabel='⚡ PLAY'; }
+  else if(score>=10 && rate>=72){ verdict='watch'; verdictLabel='👀 WATCH'; }
   else { verdict='pass'; verdictLabel='⛔ PASS'; }
   return {impl, edge: Math.round(edge), score: Math.round(score), verdict, verdictLabel};
 }
@@ -371,6 +374,7 @@ function scorePlay(p){
 function updateSummary(){
   const q = allPlays;
   document.getElementById('s-total').textContent = q.length;
+  document.getElementById('s-sharp').textContent = q.filter(p=>scorePlay(p).verdict==='sharp').length;
   document.getElementById('s-play').textContent = q.filter(p=>scorePlay(p).verdict==='play').length;
   document.getElementById('s-watch').textContent = q.filter(p=>scorePlay(p).verdict==='watch').length;
   document.getElementById('s-b2b').textContent = q.filter(p=>p.b2b).length;
@@ -418,7 +422,7 @@ function renderPlays(){
     return true;
   });
 
-  const verdictOrder = {play:0,watch:1,pass:2};
+  const verdictOrder = {sharp:0,play:1,watch:2,pass:3};
   data = [...data].sort((a,b)=>{
     if(sortBy==='sport') return (a.sport||'').localeCompare(b.sport||'');
     if(sortBy==='direction') return (a.direction||'OVER').localeCompare(b.direction||'OVER');
