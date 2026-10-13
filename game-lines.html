@@ -364,9 +364,19 @@ async function fetchESPNGames(sport){
         spread: odds?.spread!=null?parseFloat(odds.spread):null,
         total: odds?.overUnder!=null?parseFloat(odds.overUnder):null,
         ml_home: odds?.homeTeamOdds?.moneyLine!=null?parseInt(odds.homeTeamOdds.moneyLine)
-                 : home?.odds?.moneyLine!=null?parseInt(home.odds.moneyLine):null,
+                 : home?.odds?.moneyLine!=null?parseInt(home.odds.moneyLine)
+                 : (()=>{ // parse from details string e.g. "DET -115"
+                     const abbr = home?.team?.abbreviation||'';
+                     const m = (odds?.details||'').match(new RegExp(abbr+'\\s*([+-]?\\d+)','i'));
+                     return m?parseInt(m[1]):null;
+                   })(),
         ml_away: odds?.awayTeamOdds?.moneyLine!=null?parseInt(odds.awayTeamOdds.moneyLine)
-                 : away?.odds?.moneyLine!=null?parseInt(away.odds.moneyLine):null,
+                 : away?.odds?.moneyLine!=null?parseInt(away.odds.moneyLine)
+                 : (()=>{ // parse from details string
+                     const abbr = away?.team?.abbreviation||'';
+                     const m = (odds?.details||'').match(new RegExp(abbr+'\\s*([+-]?\\d+)','i'));
+                     return m?parseInt(m[1]):null;
+                   })(),
         venue: venue?.fullName||'',
         isOutdoor,
         status: evt.status?.type?.shortDetail||'',
@@ -387,9 +397,15 @@ async function fetchESPNGames(sport){
           if(!o) return;
           if(g.spread==null && o.spread!=null) g.spread = parseFloat(o.spread);
           if(g.total==null && o.overUnder!=null) g.total = parseFloat(o.overUnder);
-          // Try multiple paths ESPN uses for moneyline
-          const hML = o.homeTeamOdds?.moneyLine ?? o.homeTeamOdds?.current?.moneyLine ?? o.homeMoneyLine;
-          const aML = o.awayTeamOdds?.moneyLine ?? o.awayTeamOdds?.current?.moneyLine ?? o.awayMoneyLine;
+          // Try multiple paths ESPN uses for moneyline; also parse "DET -115" from details string
+          const parseDetailsML = (abbr, details) => {
+            const m = (details||'').match(new RegExp(abbr+'\\s*([+-]?\\d+)','i'));
+            return m ? parseInt(m[1]) : null;
+          };
+          const hML = o.homeTeamOdds?.moneyLine ?? o.homeTeamOdds?.current?.moneyLine ?? o.homeMoneyLine
+                    ?? parseDetailsML(g.home, o.details);
+          const aML = o.awayTeamOdds?.moneyLine ?? o.awayTeamOdds?.current?.moneyLine ?? o.awayMoneyLine
+                    ?? parseDetailsML(g.away, o.details);
           if(g.ml_home==null && hML!=null) g.ml_home = parseInt(hML);
           if(g.ml_away==null && aML!=null) g.ml_away = parseInt(aML);
         }catch(e){}
