@@ -238,6 +238,14 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       </div>
     </div>
     <div id="sim-dates-bar" style="display:none;margin-bottom:12px;gap:6px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="sim-sport-filters">
+      <button class="filter-chip active" onclick="setSimSport('ALL',this)">ALL</button>
+      <button class="filter-chip" onclick="setSimSport('NFL',this)">🏈 NFL</button>
+      <button class="filter-chip" onclick="setSimSport('NCAAFB',this)">🏟 NCAAFB</button>
+      <button class="filter-chip" onclick="setSimSport('MLB',this)">⚾ MLB</button>
+      <button class="filter-chip" onclick="setSimSport('NBA',this)">🏀 NBA</button>
+      <button class="filter-chip" onclick="setSimSport('NHL',this)">🏒 NHL</button>
+    </div>
     <div id="sim-accuracy" style="margin-bottom:16px"></div>
     <div id="sim-table-wrap" class="table-wrap">
       <div class="table-header"><span class="table-title">🎲 SIM PREDICTIONS</span><span id="sim-count" style="font-size:11px;color:var(--muted)"></span></div>
@@ -799,6 +807,13 @@ async function btAutoGrade(){
 }
 
 // ── SIM RESULTS ──
+let simSportFilter = 'ALL';
+function setSimSport(sport, el){
+  simSportFilter = sport;
+  document.querySelectorAll('#sim-sport-filters .filter-chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderSim();
+}
 async function renderSim(){
   const date = document.getElementById('sim-date').value;
   if(!date) return;
@@ -812,7 +827,7 @@ async function renderSim(){
       document.getElementById('sim-body').innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for ${date}.</p></div></td></tr>`;
       return;
     }
-    const preds = d.predictions;
+    const preds = simSportFilter==='ALL' ? d.predictions : d.predictions.filter(p=>(p.sport||'').toUpperCase()===simSportFilter);
     // Accuracy buckets
     const buckets={'50-59':{label:'50–59%',w:0,l:0},'60-69':{label:'60–69%',w:0,l:0},'70+':{label:'70%+',w:0,l:0}};
     const byType={total:{w:0,l:0},spread:{w:0,l:0},ml:{w:0,l:0}};
