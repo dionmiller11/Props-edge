@@ -55,7 +55,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
 .sport-badge{padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;}
 .sport-badge.mlb{background:rgba(0,255,136,.1);color:var(--accent2);} .sport-badge.nfl{background:rgba(255,107,53,.1);color:var(--warn);}
 .sport-badge.wnba{background:rgba(255,105,180,.1);color:#ff69b4;} .sport-badge.nba{background:rgba(0,212,255,.1);color:var(--accent);}
-.sport-badge.ncaafb{background:rgba(255,215,0,.1);color:var(--gold);}
+.sport-badge.ncaafb{background:rgba(255,215,0,.1);color:var(--gold);} .sport-badge.nhl{background:rgba(0,229,255,.1);color:#00e5ff;}
 .del-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;}
 .del-btn:hover{color:var(--miss);}
 .result-btn{background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font);}
@@ -140,7 +140,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         <div class="form-group"><span class="form-label">SPORT</span>
           <select class="form-input" id="f-sport">
             <option value="MLB">MLB</option><option value="NFL">NFL</option>
-            <option value="WNBA">WNBA</option><option value="NBA">NBA</option><option value="NCAAFB">NCAAFB</option>
+            <option value="WNBA">WNBA</option><option value="NBA">NBA</option><option value="NCAAFB">NCAAFB</option><option value="NHL">NHL</option>
           </select>
         </div>
         <div class="form-group"><span class="form-label">ODDS</span><input class="form-input" id="f-odds" placeholder="-110" type="number" /></div>
@@ -172,6 +172,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <button class="filter-chip" onclick="setFilter('NFL',this)">🏈 NFL</button>
       <button class="filter-chip" onclick="setFilter('NBA',this)">🏀 NBA</button>
       <button class="filter-chip" onclick="setFilter('WNBA',this)">WNBA</button>
+      <button class="filter-chip" onclick="setFilter('NHL',this)">🏒 NHL</button>
     </div>
     <div class="table-wrap">
       <div class="table-header">
@@ -556,6 +557,13 @@ const BT_STAT_MAP = {
   'hits':'hits','total bases':'totalbases','tb':'totalbases',
   'rbi':'rbi','runs':'runs',
   'strikeouts':'strikeouts','k':'strikeouts',
+  // NHL
+  'goals':'goals','goal':'goals',
+  'assists':'nhlassists','nhl assists':'nhlassists',
+  'points':'nhlpoints','nhl points':'nhlpoints',
+  'shots':'shotsOnGoal','shots on goal':'shotsOnGoal','sog':'shotsOnGoal',
+  'saves':'saves','goalie saves':'saves',
+  'power play points':'powerplaypoints','pp points':'powerplaypoints',
 };
 
 function extractBetLine(prop){
@@ -599,6 +607,11 @@ function extractStatKey(propType, prop){
   if(/fg made|field goal made|field goals/.test(combined)) return 'fgmade';
   if(/kicking pt|kicking point/.test(combined)) return 'kickingpoints';
   if(/extra point|pat made/.test(combined)) return 'patmade';
+  // NHL fuzzy
+  if(/shot.*goal|shots.*goal|sog/.test(combined)) return 'shotsOnGoal';
+  if(/\bgoal\b/.test(combined)&&!/field goal|fg/.test(combined)) return 'goals';
+  if(/\bsave\b/.test(combined)) return 'saves';
+  if(/power.?play|pp point/.test(combined)) return 'powerplaypoints';
   return null;
 }
 

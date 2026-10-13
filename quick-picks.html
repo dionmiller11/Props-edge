@@ -36,6 +36,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .chip.mlb.active{background:#00ff88;color:#000;border-color:#00ff88;}
 .chip.wnba.active{background:#ff69b4;color:#fff;border-color:#ff69b4;}
 .chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
+.chip.nhl.active{background:#00e5ff;color:#000;border-color:#00e5ff;}
 /* Date banner */
 .date-banner{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.15);border-radius:6px;padding:8px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;font-size:11px;font-family:var(--font);}
 .date-banner-label{color:var(--gold);font-weight:700;}
@@ -89,6 +90,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .badge.sport.mlb{background:rgba(0,255,136,.1);color:#00ff88;}
 .badge.sport.wnba{background:rgba(255,105,180,.1);color:#ff69b4;}
 .badge.sport.ncaafb{background:rgba(255,215,0,.1);color:#ffd700;}
+.badge.sport.nhl{background:rgba(0,229,255,.1);color:#00e5ff;}
 /* Parlay panel */
 .parlay-panel{background:var(--surface);border:1px solid rgba(0,212,255,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none;}
 .parlay-panel.open{display:block;}
@@ -221,6 +223,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
       <button class="chip mlb active" onclick="toggleSport('MLB',this)">⚾ MLB</button>
       <button class="chip wnba active" onclick="toggleSport('WNBA',this)">🏀 WNBA</button>
       <button class="chip ncaafb active" onclick="toggleSport('NCAAFB',this)">🏈 CFB</button>
+      <button class="chip nhl active" onclick="toggleSport('NHL',this)">🏒 NHL</button>
     </div>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
@@ -264,13 +267,14 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 <div class="toast" id="toast"></div>
 
 <script>
-const SPORTS = ['NFL','NBA','MLB','WNBA','NCAAFB'];
+const SPORTS = ['NFL','NBA','MLB','WNBA','NCAAFB','NHL'];
 const SPORT_TOOLS = {
   NFL:    'https://dionmiller11.github.io/Props-edge/nfl-props.html',
   NBA:    'https://dionmiller11.github.io/Props-edge/nba-props.html',
   MLB:    'https://dionmiller11.github.io/Props-edge/mlb-props.html',
   WNBA:   'https://dionmiller11.github.io/Props-edge/wnba-props.html',
   NCAAFB: 'https://dionmiller11.github.io/Props-edge/ncaafb-props.html',
+  NHL:    'https://dionmiller11.github.io/Props-edge/nhl-props.html',
 };
 
 let allPlays = [], activeSports = new Set(SPORTS), b2bOnly = false, parlayLegs = [], scanDateLabel = '';
@@ -278,7 +282,7 @@ let injuryMap = {}; // player name (lowercase) -> {status, detail}
 
 const SPORT_INJURY_PATH = {
   NFL:'football/nfl', NBA:'basketball/nba', MLB:'baseball/mlb',
-  WNBA:'basketball/wnba', NCAAFB:'football/college-football'
+  WNBA:'basketball/wnba', NCAAFB:'football/college-football', NHL:'hockey/nhl'
 };
 
 async function fetchInjuries(){

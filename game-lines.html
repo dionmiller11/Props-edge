@@ -417,13 +417,17 @@ async function fetchTeamIds(sport, gameId){
 
 // ── MONTE CARLO SIM ──
 const MC_N = 10000;
-function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC_N){
+function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC_N, sport=''){
   // Expected score for each team
   const expA = (avgPtsA + avgAllowedH) / 2;
   const expH = (avgPtsH + avgAllowedA) / 2;
-  // Std dev — typical game-to-game variance ~20-25% of scoring average
-  const sdA = Math.max(expA * 0.22, 3);
-  const sdH = Math.max(expH * 0.22, 3);
+  // NHL: low-scoring Poisson-like — use tighter variance (~30%) with floor of 0.5 goals
+  // Other sports: ~22% variance
+  const isHockey = sport === 'NHL';
+  const varFactor = isHockey ? 0.30 : 0.22;
+  const minSd = isHockey ? 0.8 : 3;
+  const sdA = Math.max(expA * varFactor, minSd);
+  const sdH = Math.max(expH * varFactor, minSd);
   let overCount = 0, awaySpreadCount = 0;
   for(let i=0;i<n;i++){
     // Box-Muller
@@ -476,14 +480,16 @@ async function runSimsForGames(games, sportObj){
         fetchTeamStats(sportObj, ids.homeId),
       ]);
 
-      const awayOff = awayStats?.[statNames.off] || awayStats?.['pointsPerGame'] || awayStats?.['avgPoints'] || 22;
-      const awayDef = awayStats?.[statNames.def] || awayStats?.['opponentPointsPerGame'] || awayStats?.['avgPointsAllowed'] || 22;
-      const homeOff = homeStats?.[statNames.off] || homeStats?.['pointsPerGame'] || homeStats?.['avgPoints'] || 22;
-      const homeDef = homeStats?.[statNames.def] || homeStats?.['opponentPointsPerGame'] || homeStats?.['avgPointsAllowed'] || 22;
+      const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:22;
+      const awayOff = awayStats?.[statNames.off] || awayStats?.['pointsPerGame'] || awayStats?.['avgPoints'] || awayStats?.['avgGoals'] || sportDefault;
+      const awayDef = awayStats?.[statNames.def] || awayStats?.['opponentPointsPerGame'] || awayStats?.['avgPointsAllowed'] || awayStats?.['avgGoalsAllowed'] || sportDefault;
+      const homeOff = homeStats?.[statNames.off] || homeStats?.['pointsPerGame'] || homeStats?.['avgPoints'] || homeStats?.['avgGoals'] || sportDefault;
+      const homeDef = homeStats?.[statNames.def] || homeStats?.['opponentPointsPerGame'] || homeStats?.['avgPointsAllowed'] || homeStats?.['avgGoalsAllowed'] || sportDefault;
 
       if(!awayOff||!homeOff) continue;
 
-      const sim = simGame(awayOff, homeOff, awayDef, homeDef, g.total||44, g.spread);
+      const defaultTotal = sport==='NHL'?5.5:sport==='MLB'?8.5:44;
+      const sim = simGame(awayOff, homeOff, awayDef, homeDef, g.total||defaultTotal, g.spread, MC_N, sport);
       g.sim = sim;
     }catch(e){ continue; }
   }
