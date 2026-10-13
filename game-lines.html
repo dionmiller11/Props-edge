@@ -373,8 +373,8 @@ async function fetchESPNGames(sport){
                    const favAbbr = m[1], favML = parseInt(m[2]);
                    const homeAbbr = home?.team?.abbreviation||'';
                    if(favAbbr.toUpperCase()===homeAbbr.toUpperCase()) return favML;
-                   // home is underdog — flip the juice (~10pt vig)
-                   return favML < 0 ? Math.round(-favML - 10) : Math.round(-favML + 10);
+                   // home is underdog — standard vig flip: -155 fav → +130 dog
+                   return favML < 0 ? Math.round(-favML - 25) : Math.round(-favML + 25);
                  })(),
         ml_away: (()=>{
                    if(odds?.awayTeamOdds?.moneyLine!=null) return parseInt(odds.awayTeamOdds.moneyLine);
@@ -385,7 +385,7 @@ async function fetchESPNGames(sport){
                    const favAbbr = m[1], favML = parseInt(m[2]);
                    const awayAbbr = away?.team?.abbreviation||'';
                    if(favAbbr.toUpperCase()===awayAbbr.toUpperCase()) return favML;
-                   return favML < 0 ? Math.round(-favML - 10) : Math.round(-favML + 10);
+                   return favML < 0 ? Math.round(-favML - 25) : Math.round(-favML + 25);
                  })(),
         venue: venue?.fullName||'',
         isOutdoor,
@@ -570,7 +570,8 @@ async function fetchPublicPct(anKey, dateStr){
     const data = await res.json();
     if(data.error) return {}; // proxy returned error
     const splits = {};
-    for(const game of (data.games||[])){
+    const games = data.games || data.scoreboard?.games || data.data?.games || [];
+    for(const game of games){
       const teams = game.teams||[];
       const awayT = teams.find(t=>t.id===game.away_team_id);
       const homeT = teams.find(t=>t.id===game.home_team_id);
