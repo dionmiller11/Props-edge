@@ -342,7 +342,7 @@ async function fetchESPNGames(sport){
         if(res2.ok){ const d2=await res2.json(); events=[...events,...(d2.events||[])]; }
       }catch(e){}
     }
-    return events.map(evt=>{
+    const mapped = events.map(evt=>{
       const comp = evt.competitions?.[0];
       const home = comp?.competitors?.find(c=>c.homeAway==='home');
       const away = comp?.competitors?.find(c=>c.homeAway==='away');
@@ -368,8 +368,30 @@ async function fetchESPNGames(sport){
         venue: venue?.fullName||'',
         isOutdoor,
         status: evt.status?.type?.shortDetail||'',
+        _compId: comp?.id||evt.id,
       };
     });
+
+    // For games missing moneylines, try the core odds API (NHL often omits ML in scoreboard)
+    const needsOdds = mapped.filter(g=>g.ml_home==null||g.ml_away==null);
+    if(needsOdds.length){
+      await Promise.all(needsOdds.map(async g=>{
+        try{
+          const r = await fetch(`https://sports.core.api.espn.com/v2/sports/${sport.path}/events/${g.id}/competitions/${g._compId}/odds?limit=10`);
+          if(!r.ok) return;
+          const d = await r.json();
+          const items = d.items||[];
+          const o = items.find(i=>i.provider?.id===1001)||items[0];
+          if(!o) return;
+          if(g.spread==null && o.spread!=null) g.spread = parseFloat(o.spread);
+          if(g.total==null && o.overUnder!=null) g.total = parseFloat(o.overUnder);
+          if(g.ml_home==null && o.homeTeamOdds?.moneyLine!=null) g.ml_home = parseInt(o.homeTeamOdds.moneyLine);
+          if(g.ml_away==null && o.awayTeamOdds?.moneyLine!=null) g.ml_away = parseInt(o.awayTeamOdds.moneyLine);
+        }catch(e){}
+      }));
+    }
+
+    return mapped;
   }catch(e){ return []; }
 }
 
