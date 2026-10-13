@@ -483,7 +483,7 @@ function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC
   const minSd = isHockey ? 0.8 : 3;
   const sdA = Math.max(expA * varFactor, minSd);
   const sdH = Math.max(expH * varFactor, minSd);
-  let overCount = 0, awaySpreadCount = 0;
+  let overCount = 0, awaySpreadCount = 0, awayWinCount = 0;
   for(let i=0;i<n;i++){
     // Box-Muller
     const u1=Math.random(), u2=Math.random();
@@ -493,17 +493,21 @@ function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, n=MC
     const sA = Math.max(0, expA + sdA*z1);
     const sH = Math.max(0, expH + sdH*z2);
     if(sA+sH > total) overCount++;
+    if(sA > sH) awayWinCount++;
     // spread: positive = home favored (away gets points)
     if(spread!==null){
       const margin = sA - sH; // away margin
       if(margin + spread > 0) awaySpreadCount++; // away covers
     }
   }
+  const awayWinPct = Math.round(awayWinCount/n*100);
   return {
     overPct: Math.round(overCount/n*100),
     underPct: Math.round((n-overCount)/n*100),
     awaySpreadPct: spread!==null ? Math.round(awaySpreadCount/n*100) : null,
     homeSpreadPct: spread!==null ? Math.round((n-awaySpreadCount)/n*100) : null,
+    awayWinPct,
+    homeWinPct: 100 - awayWinPct,
   };
 }
 
@@ -848,6 +852,23 @@ function renderLines(){
             <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%;background:${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=65?'var(--accent2)':Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=55?'var(--gold)':'var(--muted)'}"></div></div>
             <div class="sim-pct ${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=65?'strong':Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)>=55?'solid':'weak'}">${Math.max(g.sim.awaySpreadPct,g.sim.homeSpreadPct)}%</div>
           </div>`:''}
+          ${(()=>{
+            // ML sim rows — show implied% vs sim% edge
+            const rows = [];
+            for(const [team, ml, simPct] of [[g.away, g.ml_away, g.sim.awayWinPct],[g.home, g.ml_home, g.sim.homeWinPct]]){
+              if(ml==null||simPct==null) continue;
+              const impliedPct = ml < 0 ? Math.round((-ml)/(-ml+100)*100) : Math.round(100/(ml+100)*100);
+              const edge = simPct - impliedPct;
+              const edgeStr = edge>0?`+${edge}%`:`${edge}%`;
+              const color = edge>=5?'var(--accent2)':edge<=-5?'var(--miss)':'var(--muted)';
+              rows.push(`<div class="sim-row">
+                <div class="sim-label" style="color:${color}">${esc(team)} ML ${ml>0?'+':''}${ml} <span style="font-size:9px;opacity:.7">(impl ${impliedPct}% → sim ${edgeStr})</span></div>
+                <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${simPct}%;background:${edge>=5?'var(--accent2)':edge>0?'var(--gold)':'var(--muted)'}"></div></div>
+                <div class="sim-pct ${edge>=5?'strong':edge>0?'solid':'weak'}">${simPct}%</div>
+              </div>`);
+            }
+            return rows.join('');
+          })()}
         </div>` : ''}
         <div class="game-actions">
           <button class="pick-btn" onclick="addLeg(${gameId},'spread','away')">ATS ${esc(g.away)}</button>
