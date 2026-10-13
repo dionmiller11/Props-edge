@@ -244,30 +244,42 @@ async function runScan(){
     const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
     if(res.status===401)throw new Error('Token expired — get a new one from linemate.io DevTools');
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const data=await res.json();setProgress(60,'Processing '+data.length+' props…');
+    const raw=await res.json();const data=Array.isArray(raw)?raw:(raw.data||raw.trends||raw.items||[]);setProgress(60,'Processing '+data.length+' props…');
     const results=[];
     for(const item of data){
       try{
-        const playerName=item.player?.fullName||'Unknown',team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=item.player?.position||'';
+        const playerName=(item.player?.firstName&&item.player?.lastName)?item.player.firstName+' '+item.player.lastName:(item.player?.fullName||'Unknown');
+        const team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=item.player?.position||'';
         const propType=toMarketKey(item.market?.name||''),propLabel=PROP_LABELS[propType]||item.market?.name||propType;
         const isGoalie=GOALIE_PROPS.includes(propType);
         const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-        const books=item.market?.books||{},bookKeys=Object.keys(books);
-        let bestLine=null,bestOverOdds=null,bestUnderOdds=null,bookOverCount=0,bookUnderCount=0;
-        for(const bk of bookKeys){const b=books[bk];const ol=b?.over?.current?.value;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))bestOverOdds=oo;}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))bestUnderOdds=uo;}}
-        if(!bestLine)continue;
-        const allTrends=item.trends||{},lineTrends=allTrends[String(bestLine)]||{};
-        const overTrend=lineTrends['CUSTOM_RECENT_FORM_OVER']||lineTrends['LAST_10']||{};
-        const underTrend=lineTrends['CUSTOM_RECENT_FORM_UNDER']||{};
-        const overRate=Math.round(overTrend?.all?.hitRate||0),underRate=Math.round(underTrend?.all?.hitRate||0);
-        const overHits=overTrend?.all?.hits||0,underHits=underTrend?.all?.hits||0;
-        const overGames=overTrend?.all?.games||10,underGames=underTrend?.all?.games||10;
-        const l10=allTrends[String(bestLine)]?.['LAST_10']?.all;
-        const last10=l10?Array(Math.min(l10.hits,10)).fill(1).concat(Array(Math.min(l10.misses,10)).fill(0)).slice(0,10):[];
-        const streak=calcStreak(last10);
-        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:bookOverCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookOverCount/(bookOverCount+bookUnderCount)*100):null,sport:'NHL',category:propType};
-        if(overRate>=minRate)results.push({...base,prop:propLabel+' O'+bestLine,direction:'OVER',rate:overRate,hits:overHits,games:overGames,last10,streak,hotStreak:streak>=3,matchupGrade:overRate>=90?'A':overRate>=80?'B':'C',bestOdds:bestOverOdds});
-        if(underRate>=minRate)results.push({...base,prop:propLabel+' U'+bestLine,direction:'UNDER',rate:underRate,hits:underHits,games:underGames,last10:last10.map(v=>1-v),streak:calcStreak(last10.map(v=>1-v)),hotStreak:underRate>=80,matchupGrade:underRate>=90?'A':underRate>=80?'B':'C',bestOdds:bestUnderOdds});
+        // Line is directly on item
+        const bestLine=item.line!=null?item.line:null;
+        if(bestLine==null)continue;
+        // Direction from item.outcome
+        const direction=(item.outcome||'over').toUpperCase();
+        // Hit rate: max annotation% across signals
+        const signals=item.signals||[];
+        let hitRate=0,hitDesc='',hitGames=10,hitHits=0;
+        for(const sig of signals){
+          const pct=parseInt((sig.annotation||'').replace('%',''))||0;
+          if(pct>hitRate){
+            hitRate=pct;
+            hitDesc=sig.description||'';
+            // parse "Hit in X of last Y games" for hits/games
+            const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);
+            if(m){hitHits=parseInt(m[1]);hitGames=parseInt(m[2]);}
+          }
+        }
+        if(hitRate===0)continue; // skip if no signal data
+        // Build last10 approximation from hitHits/hitGames
+        const last10=Array(Math.min(hitHits,10)).fill(1).concat(Array(Math.max(0,Math.min(hitGames,10)-Math.min(hitHits,10))).fill(0)).slice(0,10);
+        const streak=calcStreak(direction==='UNDER'?last10:last10);
+        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType};
+        if(hitRate>=minRate){
+          const dirLabel=direction==='UNDER'?'U':'O';
+          results.push({...base,prop:propLabel+' '+dirLabel+bestLine,direction,rate:hitRate,hits:hitHits,games:hitGames,last10,streak,hotStreak:streak>=3,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',bestOdds:null,signalDesc:hitDesc});
+        }
       }catch(e){}
     }
     setProgress(95,'Sorting…');
