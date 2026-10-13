@@ -152,6 +152,19 @@
     <p id="greetingSub">Select a sport to find today's edges</p>
   </div>
 
+  <!-- Auto-sim banner -->
+  <div id="sim-banner" style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);border-radius:8px;padding:10px 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="sim-banner-icon" style="font-size:16px">🎲</span>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent2)" id="sim-banner-title">Monte Carlo Sims</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--font)" id="sim-banner-sub">Running today's simulations in the background…</div>
+      </div>
+    </div>
+    <a href="https://dionmiller11.github.io/Props-edge/bet-tracker.html#sim" style="font-size:11px;font-weight:700;color:var(--accent2);text-decoration:none;padding:4px 10px;border:1px solid rgba(0,255,136,.3);border-radius:4px;">View Results →</a>
+  </div>
+  <iframe id="sim-frame" src="" style="display:none;width:0;height:0;border:none;" title="sim-runner"></iframe>
+
   <div class="sport-grid">
     <a class="sport-card mlb" href="https://dionmiller11.github.io/Props-edge/mlb-props.html">
       <div class="sport-icon">⚾</div>
@@ -656,6 +669,40 @@ async function loadInjuryReport(){
   ts.textContent='Updated '+new Date().toLocaleTimeString();
 }
 loadInjuryReport();
+
+// ── AUTO-SIM RUNNER ──
+// Loads game-lines.html in a hidden iframe so Monte Carlo sims fire and save to KV automatically
+(function autoRunSims(){
+  const frame = document.getElementById('sim-frame');
+  const title = document.getElementById('sim-banner-title');
+  const sub   = document.getElementById('sim-banner-sub');
+  const icon  = document.getElementById('sim-banner-icon');
+  // Delay 3s so dashboard renders first
+  setTimeout(function(){
+    frame.src = 'https://dionmiller11.github.io/Props-edge/game-lines.html?autoSim=1';
+    // Poll until the frame reports sims complete (or 90s timeout)
+    let elapsed = 0;
+    const poll = setInterval(function(){
+      elapsed += 5;
+      sub.textContent = `Running simulations… (${elapsed}s)`;
+      try {
+        const doc = frame.contentDocument || frame.contentWindow?.document;
+        if(doc && doc.body && doc.body.innerText.includes('sims complete')){
+          clearInterval(poll);
+          icon.textContent = '✅';
+          title.textContent = 'Sims Complete';
+          sub.textContent = 'Today\'s Monte Carlo predictions saved — check SIM RESULTS in Bet Tracker';
+        }
+      } catch(e) {} // cross-origin — fall back to timeout
+      if(elapsed >= 90){
+        clearInterval(poll);
+        icon.textContent = '✅';
+        title.textContent = 'Sims Sent';
+        sub.textContent = 'Predictions should be ready in Bet Tracker → SIM RESULTS';
+      }
+    }, 5000);
+  }, 3000);
+})();
 </script>
 <script>
 window.savePropsSnapshot=function(plays,sport){const ds=new Date().toISOString().split('T')[0];const key='propsSnapshot_'+ds;let existing;try{existing=JSON.parse(localStorage.getItem(key)||'null');}catch(e){existing=null;}const current=existing||{date:ds,plays:[]};const seen=new Set(current.plays.map(p=>p.player+'|'+p.prop));plays.filter(p=>(p.rate||0)>=80).forEach(p=>{const k=p.player+'|'+p.prop;if(!seen.has(k)){current.plays.push({...p,sport:p.sport||sport,savedAt:Date.now()});seen.add(k);}});current.updatedAt=Date.now();try{localStorage.setItem(key,JSON.stringify(current));}catch(e){}}; 
