@@ -619,7 +619,13 @@ async function loadAll(){
   for (const g of allGames) {
     if (!g.sim) continue;
     if (g.total != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'total', line: g.total, simOverPct: g.sim.overPct, simUnderPct: g.sim.underPct, commence: g.commence });
-    if (g.spread != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'spread', spread: g.spread, simAwayPct: g.sim.awaySpreadPct, simHomePct: g.sim.homeSpreadPct, commence: g.commence });
+    if (g.spread != null) {
+      // Determine favorite from ML; ESPN spread is home team's value
+      const homeFav = (g.ml_home!=null&&g.ml_away!=null) ? g.ml_home < g.ml_away : g.spread < 0;
+      const favTeam = homeFav ? g.home : g.away;
+      const favSpread = -Math.abs(g.spread); // favorite always gets negative spread
+      predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'spread', spread: favSpread, favTeam, simAwayPct: g.sim.awaySpreadPct, simHomePct: g.sim.homeSpreadPct, commence: g.commence });
+    }
   }
   if (predictions.length) {
     fetch(`${WORKER_URL}/sim/save`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date: todayDate, predictions }) }).catch(()=>{});
@@ -654,13 +660,9 @@ function renderLines(){
         // No ML — use spread sign: ESPN tends to show negative for home favorite
         homeFavored = g.spread < 0;
       }
-      if(homeFavored){
-        spreadTeam = g.home;
-        spreadVal = -Math.abs(g.spread);
-      } else {
-        spreadTeam = g.away;
-        spreadVal = Math.abs(g.spread);
-      }
+      // Favorite always gets negative spread; underdog gets positive
+      spreadTeam = homeFavored ? g.home : g.away;
+      spreadVal = -Math.abs(g.spread);
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
     } else { spreadTeam = g.home; spreadDisplay = '—'; }
     const spread = spreadDisplay;

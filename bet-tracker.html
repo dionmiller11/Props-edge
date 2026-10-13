@@ -864,9 +864,9 @@ async function renderSim(){
       const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':'<span class="result-badge pending">⏳</span>';
       const finalStr = p.betType==='total'&&p.finalTotal!=null?`${p.finalTotal}`:
         p.homeScore!=null?`${p.away} ${p.awayScore}–${p.homeScore} ${p.home}`:'—';
-      // p.spread is ESPN home-team spread: positive = home is dog, negative = home is fav
+      // p.favTeam = the favorite, p.spread = their spread (always negative)
       const lineStr = p.betType==='total'?`O/U ${p.line}`:p.betType==='spread'?(
-        p.spread > 0 ? `${p.home} +${p.spread}` : `${p.home} ${p.spread}`
+        `${p.favTeam||p.away} ${p.spread}`
       ):`ML`;
       const typeColor = p.betType==='total'?'var(--accent)':p.betType==='spread'?'var(--gold)':'var(--purple)';
       return`<tr>
