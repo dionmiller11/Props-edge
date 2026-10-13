@@ -607,6 +607,18 @@ async function loadAll(){
     if(sportGames.length) await runSimsForGames(sportGames, {...sport, key});
   }
 
+  // Save sim predictions to KV for tracking
+  const todayDate = new Date().toISOString().split('T')[0];
+  const predictions = [];
+  for (const g of allGames) {
+    if (!g.sim) continue;
+    if (g.total != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'total', line: g.total, simOverPct: g.sim.overPct, simUnderPct: g.sim.underPct, commence: g.commence });
+    if (g.spread != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'spread', spread: g.spread, simAwayPct: g.sim.awaySpreadPct, simHomePct: g.sim.homeSpreadPct, commence: g.commence });
+  }
+  if (predictions.length) {
+    fetch(`${WORKER_URL}/sim/save`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date: todayDate, predictions }) }).catch(()=>{});
+  }
+
   renderCurrentTab();
   document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   setStatus('done', `✅ ${allGames.length} games loaded · ${allGames.filter(g=>g.rlm).length} RLM · ${allGames.filter(g=>g.steam).length} steam moves · 🎲 sims complete`);
