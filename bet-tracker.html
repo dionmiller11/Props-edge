@@ -223,6 +223,33 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <div id="units-sport"></div>
     </div>
   </div>
+
+  <!-- SIM RESULTS PAGE -->
+  <div id="page-sim" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:11px;color:var(--muted);font-family:var(--font)">DATE</label>
+        <input type="date" id="sim-date" class="form-input" style="width:150px" onchange="renderSim()">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="loadSimDates()" style="font-size:11px">📅 Dates</button>
+        <button class="btn btn-primary" onclick="renderSim()" style="font-size:11px">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="sim-dates-bar" style="display:none;margin-bottom:12px;gap:6px;flex-wrap:wrap"></div>
+    <div id="sim-accuracy" style="margin-bottom:16px"></div>
+    <div id="sim-table-wrap" class="table-wrap">
+      <div class="table-header"><span class="table-title">🎲 SIM PREDICTIONS</span><span id="sim-count" style="font-size:11px;color:var(--muted)"></span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>GAME</th><th>TYPE</th><th>LINE</th><th>SIM EDGE</th><th>RESULT</th><th>FINAL</th>
+          </tr></thead>
+          <tbody id="sim-body"><tr><td colspan="6"><div class="empty"><div class="empty-icon">🎲</div><p>Select a date to load sim predictions.</p></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </main>
 <div class="toast" id="toast"></div>
 <script>
@@ -271,9 +298,12 @@ function showPage(page){
   activePage=page;
   document.getElementById('page-log').style.display=page==='log'?'block':'none';
   document.getElementById('page-analytics').style.display=page==='analytics'?'block':'none';
+  document.getElementById('page-sim').style.display=page==='sim'?'block':'none';
   document.getElementById('tab-log').classList.toggle('active',page==='log');
   document.getElementById('tab-analytics').classList.toggle('active',page==='analytics');
+  document.getElementById('tab-sim').classList.toggle('active',page==='sim');
   if(page==='analytics') renderAnalytics();
+  if(page==='sim'){ document.getElementById('sim-date').value=new Date().toISOString().split('T')[0]; renderSim(); }
 }
 
 function addBet(){
@@ -753,6 +783,84 @@ async function btAutoGrade(){
   saveBets(); renderBets(); updateStats();
   btn.disabled=false; btn.textContent='⚡ Auto-Grade';
   showToast(`⚡ Graded ${graded}${skipped?` · ${skipped} 1Q skipped`:''}${failed?` · ${failed} not found`:''}`);
+}
+
+// ── SIM RESULTS ──
+async function renderSim(){
+  const date = document.getElementById('sim-date').value;
+  if(!date) return;
+  document.getElementById('sim-body').innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">⏳ Loading…</td></tr>`;
+  document.getElementById('sim-accuracy').innerHTML='';
+  document.getElementById('sim-count').textContent='';
+  try{
+    const r = await fetch(`${KV_BASE}/sim/results?date=${date}`);
+    const d = await r.json();
+    if(!d.predictions||!d.predictions.length){
+      document.getElementById('sim-body').innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for ${date}.</p></div></td></tr>`;
+      return;
+    }
+    const preds = d.predictions;
+    // Accuracy buckets
+    const buckets={'50-59':{label:'50–59%',w:0,l:0},'60-69':{label:'60–69%',w:0,l:0},'70+':{label:'70%+',w:0,l:0}};
+    const byType={total:{w:0,l:0},spread:{w:0,l:0},ml:{w:0,l:0}};
+    for(const p of preds){
+      if(!p.result) continue;
+      const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
+      const bkt = conf>=70?'70+':conf>=60?'60-69':'50-59';
+      if(p.result==='W') buckets[bkt].w++; else buckets[bkt].l++;
+      const bt=byType[p.betType]||{w:0,l:0};
+      if(p.result==='W') bt.w++; else bt.l++;
+      byType[p.betType]=bt;
+    }
+    const graded = preds.filter(p=>p.result);
+    const totalW = graded.filter(p=>p.result==='W').length;
+    const winPct = graded.length ? Math.round(totalW/graded.length*100) : 0;
+    const accHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:4px">
+        <div class="stat-card"><div class="stat-val ${winPct>=55?'green':winPct>=45?'gold':'red'}">${winPct}%</div><div class="stat-lbl">OVERALL ACC (${totalW}/${graded.length})</div></div>
+        ${Object.entries(buckets).map(([k,b])=>{
+          const tot=b.w+b.l; const pct=tot?Math.round(b.w/tot*100):0;
+          return`<div class="stat-card"><div class="stat-val ${pct>=55?'green':pct>=45?'gold':'red'}">${pct}%</div><div class="stat-lbl">${b.label} CONF (${b.w}/${tot})</div></div>`;
+        }).join('')}
+        ${Object.entries(byType).map(([bt,v])=>{
+          const tot=v.w+v.l; const pct=tot?Math.round(v.w/tot*100):0;
+          return tot?`<div class="stat-card"><div class="stat-val ${pct>=55?'green':pct>=45?'gold':'red'}">${pct}%</div><div class="stat-lbl">${bt.toUpperCase()} (${v.w}/${tot})</div></div>`:'';
+        }).join('')}
+      </div>`;
+    document.getElementById('sim-accuracy').innerHTML=accHtml;
+    document.getElementById('sim-count').textContent=`${preds.length} predictions · ${graded.length} graded`;
+    document.getElementById('sim-body').innerHTML = preds.map(p=>{
+      const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
+      const favors = p.betType==='total'?(p.simOverPct>50?'OVER':'UNDER'):(p.simAwayPct>50?p.away:p.home);
+      const edgePct = conf ? `${conf}%` : '—';
+      const confColor = conf>=70?'var(--accent2)':conf>=60?'var(--gold)':'var(--muted)';
+      const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':'<span class="result-badge pending">⏳</span>';
+      const finalStr = p.betType==='total'&&p.finalTotal!=null?`${p.finalTotal}`:
+        p.homeScore!=null?`${p.away} ${p.awayScore}–${p.homeScore} ${p.home}`:'—';
+      const lineStr = p.betType==='total'?`O/U ${p.line}`:p.betType==='spread'?`${p.away} ${p.spread>0?'+':''}${p.spread}`:`ML`;
+      return`<tr>
+        <td><div class="player-name" style="font-size:12px">${esc(p.away)} @ ${esc(p.home)}</div><div class="sub-text">${esc(p.sport)} · ${esc(p.betType)}</div></td>
+        <td><span class="sport-badge" style="font-size:10px">${esc(p.betType.toUpperCase())}</span></td>
+        <td style="color:var(--muted)">${esc(lineStr)}</td>
+        <td><span style="color:${confColor};font-weight:700">${edgePct}</span><div class="sub-text">→ ${esc(favors)}</div></td>
+        <td>${resultBadge}</td>
+        <td style="font-size:11px;color:var(--muted)">${esc(finalStr)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e){
+    document.getElementById('sim-body').innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--miss);padding:20px">Error loading sim results</td></tr>`;
+  }
+}
+async function loadSimDates(){
+  const bar = document.getElementById('sim-dates-bar');
+  bar.style.display='flex';
+  bar.innerHTML='<span style="font-size:11px;color:var(--muted)">⏳ Loading dates…</span>';
+  try{
+    const r = await fetch(`${KV_BASE}/sim/dates`);
+    const d = await r.json();
+    if(!d.dates||!d.dates.length){bar.innerHTML='<span style="font-size:11px;color:var(--muted)">No sim data yet</span>';return;}
+    bar.innerHTML = d.dates.map(dt=>`<button class="filter-chip" onclick="document.getElementById('sim-date').value='${dt}';renderSim()" style="font-family:var(--font)">${dt}</button>`).join('');
+  } catch(e){ bar.innerHTML='<span style="font-size:11px;color:var(--miss)">Error</span>'; }
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
