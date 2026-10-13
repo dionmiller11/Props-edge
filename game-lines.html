@@ -326,9 +326,11 @@ async function fetchESPNGames(sport){
   try{
     // NCAAFB: fetch all groups (80=FBS, 81=FCS) with high limit to get all games
     const isNCAAFB = sport.path.includes('college-football');
+    // Add today's date param so ESPN returns the full slate (not just a small default window)
+    const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
     const url = isNCAAFB
-      ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=80`
-      : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100`;
+      ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=80&dates=${todayStr}`
+      : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&dates=${todayStr}`;
     const res = await fetch(url);
     if(!res.ok) return [];
     const data = await res.json();
