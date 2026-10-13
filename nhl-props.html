@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NHL Props Edge Finder — Linemate</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00cfff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--teal:#00e5cc;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;} .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal);animation:pulse 2s infinite;flex-shrink:0;} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} .logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--teal);}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 9px;border:1px solid var(--border);border-radius:4px;}
+.btn{border:none;padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--teal);color:#000;} .btn-primary:hover{background:#33eedc;transform:translateY(-1px);} .btn-primary:disabled{background:var(--muted);cursor:not-allowed;transform:none;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+.btn-purple{background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35);}
+.btn-obsidian{background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.35);}
+.api-banner{background:rgba(0,207,255,.05);border-bottom:1px solid rgba(0,207,255,.12);padding:9px 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted);}
+.api-row{display:flex;align-items:center;gap:8px;}
+.api-banner input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:5px;font-family:var(--font);font-size:11px;outline:none;}
+.api-status{font-size:10px;font-family:var(--font);padding:3px 7px;border-radius:3px;white-space:nowrap;}
+.api-status.connected{color:var(--accent2);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2);}
+.api-status.missing{color:var(--warn);background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);}
+.data-banner{background:rgba(0,229,204,.04);border-bottom:1px solid rgba(0,229,204,.1);padding:7px 20px;font-size:11px;font-family:var(--font);color:var(--muted);display:flex;align-items:center;gap:8px;}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
+.tab{padding:11px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal);}
+main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+.filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
+select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
+.chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.chip.active{background:var(--teal);color:#000;border-color:var(--teal);font-weight:700;}
+.status-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--font);font-size:12px;color:var(--muted);min-height:20px;}
+.status-bar.running{color:var(--teal);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
+.progress-wrap{margin-bottom:14px;display:none;} .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;} .progress-fill{height:100%;background:var(--teal);border-radius:2px;transition:width .3s;width:0%;} .progress-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:4px;}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;} @keyframes spin{to{transform:rotate(360deg);}}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+.stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--teal);line-height:1;margin-bottom:3px;} .stat-card .val.green{color:var(--accent2);} .stat-card .val.gold{color:var(--gold);} .stat-card .val.purple{color:var(--purple);} .stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+.parlay-panel{background:var(--surface);border:1px solid rgba(0,207,255,.3);border-radius:10px;padding:16px 18px;margin-bottom:16px;display:none;} .parlay-panel.open{display:block;}
+.parlay-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;} .parlay-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.06em;}
+.parlay-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;} .parlay-odds{font-family:var(--font);font-size:18px;font-weight:700;color:var(--gold);} .parlay-count{font-family:var(--font);font-size:11px;color:var(--muted);}
+.parlay-legs{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.parlay-leg{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);} .parlay-leg-info{flex:1;}
+.parlay-leg-player{font-family:var(--sans);font-weight:600;color:var(--text);font-size:12px;} .parlay-leg-prop{color:var(--muted);font-size:10px;font-family:var(--font);margin-top:1px;}
+.parlay-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;} .parlay-remove:hover{color:var(--miss);}
+.parlay-empty{text-align:center;padding:16px;color:var(--muted);font-size:12px;} .parlay-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.add-parlay-btn{font-size:10px;padding:2px 8px;border-radius:3px;background:rgba(0,207,255,.1);color:var(--teal);border:1px solid rgba(0,207,255,.2);cursor:pointer;font-family:var(--font);transition:all .15s;} .add-parlay-btn:hover{background:rgba(0,207,255,.2);} .add-parlay-btn.added{background:rgba(0,207,255,.3);color:#000;}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
+.table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;} .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:540px;}
+thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;} tbody tr:hover{background:var(--surface2);} tbody tr:last-child{border-bottom:none;}
+td{padding:9px 10px;white-space:nowrap;font-family:var(--font);vertical-align:middle;}
+.player-name{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--text);} .sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
+.lm-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(0,207,255,.1);color:var(--teal);border:1px solid rgba(0,207,255,.2);margin-left:4px;font-family:var(--font);}
+.prop-type{color:var(--teal);font-size:11px;}
+.hit-rate{font-size:13px;font-weight:700;} .hit-rate.elite{color:var(--gold);} .hit-rate.strong{color:var(--accent2);} .hit-rate.solid{color:var(--teal);}
+.sparkline{display:flex;gap:3px;align-items:center;} .spark-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;} .spark-dot.hit{background:var(--hit);} .spark-dot.miss{background:rgba(255,77,109,.4);}
+.streak-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;} .streak-badge.hot{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);} .streak-badge.cold{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+.edge-badge{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;} .edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);} .edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);} .edge-badge.ok{background:rgba(0,207,255,.08);color:var(--teal);border:1px solid rgba(0,207,255,.2);}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);} .empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;} .empty p{font-size:13px;line-height:1.6;}
+.loading-row td{padding:32px;text-align:center;color:var(--muted);font-size:13px;}
+.error-box{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);border-radius:8px;padding:12px 16px;color:var(--miss);font-size:13px;margin-bottom:14px;}
+footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;} .toast.show{transform:translateY(0);opacity:1;}
+.sgp-leg{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);margin-bottom:6px;}
+.sgp-leg-info{flex:1;} .sgp-leg-player{font-weight:700;font-size:13px;} .sgp-leg-prop{font-size:11px;color:var(--muted);font-family:var(--font);margin-top:2px;} .sgp-leg-rate{font-family:var(--font);font-weight:700;font-size:15px;color:var(--accent2);} .sgp-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:2px 6px;}
+.corr-chip{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--font);margin-left:6px;} .corr-chip.pos{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);} .corr-chip.neg{background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.2);} .corr-chip.neutral{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
+.sgp-result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;} .sgp-stat{background:var(--surface2);border-radius:6px;padding:10px;text-align:center;} .sgp-stat-val{font-size:22px;font-weight:700;font-family:var(--font);} .sgp-stat-lbl{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:2px;}
+.edge-positive{color:var(--accent2)!important;} .edge-negative{color:var(--miss)!important;}
+.line-spark{display:inline-flex;align-items:flex-end;gap:2px;height:16px;margin-left:6px;vertical-align:middle;}
+.line-spark-bar{width:3px;border-radius:1px;background:var(--muted);transition:height .2s;}
+.line-spark-label{font-size:9px;font-family:var(--font);color:var(--muted);margin-left:3px;vertical-align:middle;}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+.search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+.search-input:focus{border-color:var(--teal);}
+.search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
+@media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 6px;font-size:11px;}.hide-mobile{display:none;}.hide-mobile-sm{display:none;}.api-banner{grid-template-columns:1fr;}.table-scroll::after{content:'← swipe to see more →';display:block;text-align:center;font-size:10px;color:var(--muted);padding:6px;font-family:var(--font);}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><a href="https://dionmiller11.github.io/Props-edge/dashboard.html" style="color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;letter-spacing:.04em;">⌂ HOME</a><div class="logo-dot"></div><h1>NHL <span>PROPS</span> EDGE FINDER</h1></div>
+  <div class="header-right">
+    <div class="date-badge" id="dateBadge">—</div>
+    <button class="btn btn-green" id="exportBtn" onclick="exportCSV()" style="display:none">📊 CSV</button>
+    <button class="btn btn-purple" id="parlayBtn" onclick="toggleParlay()" style="display:none">🎰 Parlay</button>
+    <button class="btn btn-obsidian" id="obsidianBtn" onclick="exportObsidian()" style="display:none">🟣 Obsidian</button>
+    <button class="btn btn-primary" id="runBtn" onclick="runScan()">⚡ RUN SCAN</button>
+  </div>
+</header>
+<div class="api-banner">
+  <div class="api-row"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="Paste JWT token from linemate.io DevTools…" oninput="saveKey('lmToken',this.value)"><span class="api-status missing" id="lmStatus">NOT SET</span></div>
+  <div class="api-row"><span style="white-space:nowrap;font-size:11px">📡 Odds API:</span><input type="password" id="oddsApiKey" placeholder="the-odds-api.com key…" oninput="saveKey('oddsApiKey',this.value)"><span class="api-status missing" id="oddsStatus">NOT SET</span></div>
+</div>
+<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;flex-shrink:0"></span>LINEMATE MODE — real hit rates + lines from 20+ sportsbooks</div>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('all')">🏒 ALL</button>
+  <button class="tab" onclick="switchTab('goals')">🥅 GOALS</button>
+  <button class="tab" onclick="switchTab('assists')">🎯 ASSISTS</button>
+  <button class="tab" onclick="switchTab('points')">⭐ POINTS</button>
+  <button class="tab" onclick="switchTab('shots')">🏒 SHOTS</button>
+  <button class="tab" onclick="switchTab('saves')">🧤 SAVES</button>
+  <button class="tab" onclick="switchTab('powerplay')">⚡ POWER PLAY</button>
+  <button class="tab" onclick="switchTab('sgp')" id="sgpTab">🎰 SGP <span id="sgpCount" style="background:var(--teal);color:#000;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
+</div>
+<main>
+  <div class="filters">
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="50" max="100" step="5" oninput="renderTable()"> %</div>
+    <div class="filter-group"><span class="filter-label">SORT</span><select id="sortBy" onchange="renderTable()"><option value="rate">Hit Rate</option><option value="streak">Streak</option><option value="edge">Edge</option><option value="time">Game Time</option></select></div>
+    <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
+    <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
+    <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
+    <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
+      <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button></div>
+  </div>
+  <div class="status-bar" id="statusBar">Ready — paste your Linemate token then click ⚡ RUN SCAN</div>
+  <div class="progress-wrap" id="progressWrap"><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div><div class="progress-label" id="progressLabel">Starting…</div></div>
+  <div class="summary" id="summary" style="display:none">
+    <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL EDGES</div></div>
+    <div class="stat-card"><div class="val gold" id="s-fire">0</div><div class="lbl">🔥 ELITE 90%+</div></div>
+    <div class="stat-card"><div class="val" id="s-strong">0</div><div class="lbl">STRONG 80–89%</div></div>
+    <div class="stat-card"><div class="val purple" id="s-goalies">0</div><div class="lbl">🧤 GOALIE EDGES</div></div>
+  </div>
+  <div id="errorBox" style="display:none" class="error-box"></div>
+  <div class="parlay-panel" id="parlayPanel">
+    <div class="parlay-header"><span class="parlay-title">🎰 PARLAY BUILDER</span><div class="parlay-meta"><span class="parlay-count" id="parlayCount">0 legs</span><span class="parlay-odds" id="parlayOdds">—</span><div class="parlay-actions"><button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button><button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="logParlay()">📋 Log All</button><button class="btn btn-purple" style="padding:4px 10px;font-size:11px" onclick="correlateParlay()">🔗 Correlate</button><button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button><button class="btn btn-obsidian" style="padding:4px 10px;font-size:11px" onclick="exportObsidian()">🟣 Obsidian</button></div></div></div>
+    <div class="parlay-legs" id="parlayLegsEl"><div class="parlay-empty">Add plays using + on each row</div></div>
+  </div>
+  <div id="sgpPanel" style="display:none">
+    <div style="background:var(--surface);border:1px solid rgba(0,207,255,.3);border-radius:10px;padding:16px 18px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div><div style="font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.06em">🎰 SAME GAME PARLAY BUILDER</div><div style="font-size:10px;color:var(--muted);margin-top:2px">Add props using the 🎰 button on any row · Monte Carlo sim models correlation</div></div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="clearSGP()" style="font-size:10px;padding:4px 10px;border-radius:4px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer">Clear</button>
+          <button onclick="runSGPSim()" id="sgpSimBtn" style="font-size:11px;padding:5px 12px;border-radius:5px;background:var(--teal);color:#000;border:none;cursor:pointer;font-weight:700">⚡ Run Sim</button>
+        </div>
+      </div>
+      <div id="sgpLegs" style="margin-bottom:12px"><div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Add props using the 🎰 button on any prop row</div></div>
+      <div id="sgpResult" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:4px"></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-header"><span class="table-title" id="tableTitle">🏒 ALL NHL PROPS — TODAY</span><span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
+          <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th>
+          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
+        </tr></thead>
+        <tbody id="tableBody"><tr class="loading-row"><td colspan="11"><div class="empty"><div class="empty-icon">🏒</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<footer><span id="lastRun">Never run</span><span style="color:var(--teal)">● LINEMATE · REAL HIT RATES</span></footer>
+<div class="toast" id="toast"></div>
+<script>
+const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
+const LINEMATE_URL='https://api.linemate.io/api/nhl/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
+
+const PROP_LABELS={
+  goals:'Goals',
+  assists:'Assists',
+  points:'Points',
+  shotsOnGoal:'Shots on Goal',
+  saves:'Saves',
+  powerPlayPoints:'Power Play Points',
+  powerPlayAssists:'PP Assists',
+  powerPlayGoals:'PP Goals',
+  blockedShots:'Blocked Shots',
+  hits:'Hits',
+  faceoffsWon:'Faceoffs Won',
+  timeOnIce:'Time on Ice',
+  goalsAssists:'Goals+Assists',
+  anytimeGoalScorer:'Anytime Goalscorer',
+};
+
+// Goalie props (shown differently in UI)
+const GOALIE_PROPS=['saves'];
+
+const TAB_PROPS={
+  all:null,
+  goals:['goals','anytimeGoalScorer'],
+  assists:['assists','powerPlayAssists'],
+  points:['points','goalsAssists'],
+  shots:['shotsOnGoal','blockedShots'],
+  saves:['saves'],
+  powerplay:['powerPlayPoints','powerPlayGoals','powerPlayAssists'],
+};
+
+const TAB_TITLES={
+  all:'🏒 ALL NHL PROPS',
+  goals:'🥅 GOALS',
+  assists:'🎯 ASSISTS',
+  points:'⭐ POINTS',
+  shots:'🏒 SHOTS ON GOAL',
+  saves:'🧤 SAVES (GOALIES)',
+  powerplay:'⚡ POWER PLAY',
+};
+
+const today=new Date(),todayStr=today.toISOString().split('T')[0];
+let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[],searchQuery='';
+document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+
+const _up=new URLSearchParams(window.location.search),_ut=_up.get('token')||_up.get('lmToken');
+if(_ut){try{localStorage.setItem('lmToken',_ut);}catch(e){}}
+['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
+
+function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
+function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
+function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach(t=>{const oc=t.getAttribute('onclick')||'';t.classList.toggle('active',oc.includes("'"+tab+"'"));});const isSGP=tab==='sgp';const sp=document.getElementById('sgpPanel');const tw=document.querySelector('.table-wrap');if(sp)sp.style.display=isSGP?'block':'none';if(tw)tw.style.display=isSGP?'none':'block';if(!isSGP)renderTable();}
+function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
+function resetFilters(){['sortBy','dirFilter','teamFilter','timeFilter'].forEach(id=>document.getElementById(id).value=id==='sortBy'?'rate':'all');document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');searchQuery='';if(document.getElementById('playerSearch'))document.getElementById('playerSearch').value='';if(document.getElementById('searchClear'))document.getElementById('searchClear').style.display='none';renderTable();}
+function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
+function hideProgress(){document.getElementById('progressWrap').style.display='none';}
+function populateTeamFilter(){const sel=document.getElementById('teamFilter');const cur=sel.value;const teams=[...new Set(allData.map(p=>p.team).filter(Boolean))].sort();sel.innerHTML='<option value="all">All</option>'+teams.map(t=>'<option value="'+t+'">'+t+'</option>').join('');if(teams.includes(cur))sel.value=cur;}
+function toMarketKey(name){return name.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');}
+
+async function runScan(){
+  const token=getStored('lmToken');if(!token){showError('Paste your Linemate JWT token above first.');return;}
+  const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
+  btn.disabled=true;btn.textContent='⏳ Scanning...';
+  document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
+  ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
+  setStatus('running','📡 Fetching NHL props from Linemate…');setLoadingRow();
+  try{
+    setProgress(20,'Fetching Linemate NHL trends…');
+    const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
+    if(res.status===401)throw new Error('Token expired — get a new one from linemate.io DevTools');
+    if(!res.ok)throw new Error('Linemate API error: '+res.status);
+    const data=await res.json();setProgress(60,'Processing '+data.length+' props…');
+    const results=[];
+    for(const item of data){
+      try{
+        const playerName=item.player?.fullName||'Unknown',team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=item.player?.position||'';
+        const propType=toMarketKey(item.market?.name||''),propLabel=PROP_LABELS[propType]||item.market?.name||propType;
+        const isGoalie=GOALIE_PROPS.includes(propType);
+        const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+        const books=item.market?.books||{},bookKeys=Object.keys(books);
+        let bestLine=null,bestOverOdds=null,bestUnderOdds=null,bookOverCount=0,bookUnderCount=0;
+        for(const bk of bookKeys){const b=books[bk];const ol=b?.over?.current?.value;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))bestOverOdds=oo;}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))bestUnderOdds=uo;}}
+        if(!bestLine)continue;
+        const allTrends=item.trends||{},lineTrends=allTrends[String(bestLine)]||{};
+        const overTrend=lineTrends['CUSTOM_RECENT_FORM_OVER']||lineTrends['LAST_10']||{};
+        const underTrend=lineTrends['CUSTOM_RECENT_FORM_UNDER']||{};
+        const overRate=Math.round(overTrend?.all?.hitRate||0),underRate=Math.round(underTrend?.all?.hitRate||0);
+        const overHits=overTrend?.all?.hits||0,underHits=underTrend?.all?.hits||0;
+        const overGames=overTrend?.all?.games||10,underGames=underTrend?.all?.games||10;
+        const l10=allTrends[String(bestLine)]?.['LAST_10']?.all;
+        const last10=l10?Array(Math.min(l10.hits,10)).fill(1).concat(Array(Math.min(l10.misses,10)).fill(0)).slice(0,10):[];
+        const streak=calcStreak(last10);
+        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:bookOverCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookOverCount/(bookOverCount+bookUnderCount)*100):null,sport:'NHL',category:propType};
+        if(overRate>=minRate)results.push({...base,prop:propLabel+' O'+bestLine,direction:'OVER',rate:overRate,hits:overHits,games:overGames,last10,streak,hotStreak:streak>=3,matchupGrade:overRate>=90?'A':overRate>=80?'B':'C',bestOdds:bestOverOdds});
+        if(underRate>=minRate)results.push({...base,prop:propLabel+' U'+bestLine,direction:'UNDER',rate:underRate,hits:underHits,games:underGames,last10:last10.map(v=>1-v),streak:calcStreak(last10.map(v=>1-v)),hotStreak:underRate>=80,matchupGrade:underRate>=90?'A':underRate>=80?'B':'C',bestOdds:bestUnderOdds});
+      }catch(e){}
+    }
+    setProgress(95,'Sorting…');
+    const seen={};allData=results.filter(p=>{const k=p.player+p.propKey+p.direction;if(seen[k]&&seen[k]>=p.rate)return false;seen[k]=p.rate;return true;}).sort((a,b)=>(b.rate||0)-(a.rate||0));
+    hideProgress();populateTeamFilter();renderTable();updateSummary();
+    document.getElementById('summary').style.display='grid';
+    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
+    document.getElementById('dataTs').textContent='Linemate · '+new Date().toLocaleTimeString();
+    setStatus('done','✅ '+allData.length+' NHL prop edges from Linemate — '+new Date().toLocaleTimeString());
+    document.getElementById('lastRun').textContent='Last run: '+new Date().toLocaleString();
+    // ── SAVE SNAPSHOT FOR DAILY RECAP / QUICK PICKS ──
+    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NHL');
+    saveLineHistory(allData);
+  }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);}
+  btn.disabled=false;btn.textContent='⚡ RUN SCAN';
+}
+
+function calcStreak(r){let s=0;for(let i=0;i<r.length;i++){if(r[i]===1)s++;else break;}return s;}
+function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
+
+function renderTable(){
+  const tbody=document.getElementById('tableBody');const minRate=parseInt(document.getElementById('minRate').value)||70;const sortBy=document.getElementById('sortBy')?.value||'rate';const dirFilter=document.getElementById('dirFilter')?.value||'all';const teamFilter=document.getElementById('teamFilter')?.value||'all';const timeFilter=document.getElementById('timeFilter')?.value||'all';
+  const allowedProps=TAB_PROPS[activeTab];
+  const ttl=TAB_TITLES[activeTab]||'🏒 NHL PROPS';
+  document.getElementById('tableTitle').textContent=ttl+' — TODAY';
+  let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery)&&!p.team.toLowerCase().includes(searchQuery))return false;return true;});
+  data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
+  if(!data.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
+  tbody.innerHTML=data.map(p=>{
+    const rate=p.rate||0,ig=p.isGoalie,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok';
+    const _cs=(()=>{const streak=p.streak||0,odds=p.bestOdds,goodOdds=!odds||odds>=-130,bookSignal=!p.bookCount||p.bookCount>=8,bookAgree=!p.bookAgreePct||p.bookAgreePct>=60;if(rate>=80&&streak>=2&&goodOdds&&bookSignal&&bookAgree){return(p.bookCount>=15&&p.bookAgreePct>=75)||rate>=90?'sharp':'standard';}return null;})();
+    const el=_cs==='sharp'?'🔥 SHARP':_cs==='standard'?'⚡ CONSENSUS':rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
+    const ecFinal=_cs==='sharp'?'fire':_cs==='standard'?'ok':ec;
+    const spark=`<div class="sparkline">${(p.last10||[]).map(v=>`<div class="spark-dot ${v?'hit':'miss'}"></div>`).join('')}</div>`;
+    const st=(p.streak||0)>=3?`<span class="streak-badge hot">🔥${p.streak}G</span>`:(p.streak>0?`<span class="streak-badge hot">${p.streak}G</span>`:'<span class="streak-badge cold">—</span>');
+    const dir=p.direction||'OVER',dc=dir==='OVER'?'var(--accent2)':'var(--miss)',op=p.bestOdds;
+    const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
+    const goalieBadge=ig?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.3);margin-left:4px;font-family:var(--font)">G</span>`:'';
+    return`<tr><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${goalieBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ig?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ig?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,207,255,.1);color:var(--teal);border-color:rgba(0,207,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL",propType:p.propKey||p.category})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
+  }).join('');
+}
+
+function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-goalies').textContent=q.filter(p=>p.isGoalie).length;}
+function toggleParlay(){const p=document.getElementById('parlayPanel');p.classList.toggle('open');document.getElementById('parlayBtn').textContent=p.classList.contains('open')?'🎰 Hide':'🎰 Parlay';}
+function addToParlay(play){if(parlayLegs.find(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in parlay');return;}if(parlayLegs.length>=10){showToast('Max 10 legs');return;}parlayLegs.push(play);const b=document.getElementById('pb-'+esc(play.player+play.prop));if(b){b.textContent='✓';b.classList.add('added');b.disabled=true;}renderParlay();if(!document.getElementById('parlayPanel').classList.contains('open'))toggleParlay();}
+function removeFromParlay(i){const l=parlayLegs[i];parlayLegs.splice(i,1);const b=document.getElementById('pb-'+esc(l.player+l.prop));if(b){b.textContent='+';b.classList.remove('added');b.disabled=false;}renderParlay();}
+function clearParlay(){parlayLegs.forEach(l=>{const b=document.getElementById('pb-'+esc(l.player+l.prop));if(b){b.textContent='+';b.classList.remove('added');b.disabled=false;}});parlayLegs=[];renderParlay();}
+function calcParlayOdds(legs){let d=1;legs.forEach(()=>{d*=(110/210+1);});const a=d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));return(a>0?'+':'')+a;}
+function renderParlay(){document.getElementById('parlayCount').textContent=parlayLegs.length+(parlayLegs.length===1?' leg':' legs');document.getElementById('parlayOdds').textContent=parlayLegs.length>=2?calcParlayOdds(parlayLegs):'—';const c=document.getElementById('parlayLegsEl');if(!parlayLegs.length){c.innerHTML='<div class="parlay-empty">Add plays using + on each row</div>';return;}c.innerHTML=parlayLegs.map((l,i)=>`<div class="parlay-leg"><div class="parlay-leg-info"><div class="parlay-leg-player">${esc(l.player)} <span style="color:var(--muted);font-size:10px">${esc(l.team)}</span></div><div class="parlay-leg-prop">${esc(l.prop)} <span style="color:${l.direction==='UNDER'?'var(--miss)':'var(--accent2)'}">${l.direction==='UNDER'?'▼':'▲'} ${l.direction}</span> ${l.rate}%</div></div><button class="parlay-remove" onclick="removeFromParlay(${i})">✕</button></div>`).join('');}
+function copyParlay(){if(!parlayLegs.length){showToast('No legs');return;}const t=parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.team}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');navigator.clipboard.writeText(`🎰 NHL PARLAY — ${today.toLocaleDateString()}\n${calcParlayOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${t}`).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));}
+function exportCSV(){const rows=allData;const csv=['Player,Team,Prop,Direction,Line,Rate%,Hits,Games,Opp,GameTime,Streak',...rows.map(p=>[`"${p.player}"`,p.team,`"${p.prop}"`,p.direction,p.line,p.rate,p.hits,p.games,p.opposingTeam||'',p.gameTime||'',p.streak||0].join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`nhl-props-${todayStr}.csv`;a.click();URL.revokeObjectURL(url);showToast('📊 Exported');}
+function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏒 Player Props\n\n| Player | Team | Prop | Dir | Rate | Opp | Time | Streak |\n|--------|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}G |`).join('\n')}\n`;const md=`---\ntags: [props, nhl, betting, linemate]\ndate: ${todayStr}\nsport: NHL\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏒 NHL Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NHL Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
+function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="11"><span class="spinner"></span> Fetching NHL props from Linemate…</td></tr>`;}
+function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
+function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function getStored(k){try{return localStorage.getItem(k)||'';}catch(e){return'';}}
+
+// ── SNAPSHOT SAVER (feeds quick-picks & daily recap) ──
+window.savePropsSnapshot=function(plays,sport){const ds=new Date().toISOString().split('T')[0];const key='propsSnapshot_'+ds;let existing;try{existing=JSON.parse(localStorage.getItem(key)||'null');}catch(e){existing=null;}const current=existing||{date:ds,plays:[]};const seen=new Set(current.plays.map(p=>p.player+'|'+p.prop));const newPlays=[];plays.filter(p=>(p.rate||0)>=80).forEach(p=>{const k=p.player+'|'+p.prop;if(!seen.has(k)){const np={...p,sport:p.sport||sport,savedAt:Date.now()};current.plays.push(np);seen.add(k);newPlays.push(np);}});current.updatedAt=Date.now();try{localStorage.setItem(key,JSON.stringify(current));}catch(e){};if(newPlays.length>0){try{fetch('https://line-monitor.dion-miller11.workers.dev/snapshot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:ds,plays:newPlays})}).catch(()=>{});}catch(e){}}};
+
+// ── AUTO-RUN ON PAGE OPEN ──
+(function(){
+  function autoRun(){
+    setTimeout(function(){
+      const token=getStored('lmToken');
+      if(token&&document.getElementById('runBtn')&&!document.getElementById('runBtn').disabled){
+        runScan();
+      }
+    },800);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',autoRun);
+  } else {
+    autoRun();
+  }
+})();
+
+// ── LOG BET TO TRACKER ──
+function logBet(p){
+  const params=new URLSearchParams({player:p.player||'',prop:p.prop||'',propType:p.propKey||p.category||'',sport:p.sport||'NHL',odds:p.bestOdds||'-110',rate:p.rate||'',direction:p.direction||'OVER'});
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
+}
+
+// ── LINE HISTORY SPARKLINES ──
+const LH_KEY='lineHistory_nhl-props';
+const MAX_LH_SNAPSHOTS=6;
+function saveLineHistory(data){const ds=new Date().toISOString().split('T')[0];let hist;try{hist=JSON.parse(localStorage.getItem(LH_KEY)||'{}');}catch(e){hist={};}if(hist.date!==ds){hist={date:ds,snaps:[]};}const snap={ts:Date.now(),lines:{}};data.forEach(p=>{const k=p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');snap.lines[k]=parseFloat(p.line)||0;});hist.snaps.push(snap);if(hist.snaps.length>MAX_LH_SNAPSHOTS)hist.snaps=hist.snaps.slice(-MAX_LH_SNAPSHOTS);try{localStorage.setItem(LH_KEY,JSON.stringify(hist));}catch(e){}}
+function getLineHistory(p){try{const hist=JSON.parse(localStorage.getItem(LH_KEY)||'{}');if(!hist.snaps||hist.snaps.length<2)return null;const ds=new Date().toISOString().split('T')[0];if(hist.date!==ds)return null;const k=p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');const vals=hist.snaps.map(s=>s.lines[k]).filter(v=>v!=null&&v>0);if(vals.length<2)return null;return vals;}catch(e){return null;}}
+function lineSparkHtml(p){const vals=getLineHistory(p);if(!vals||vals.length<2)return'';const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn;if(range<0.5)return'';const first=vals[0],last=vals[vals.length-1];const moved=last-first;const color=moved>0?'var(--miss)':moved<0?'var(--accent2)':'var(--muted)';const arrow=moved>0?'▲':moved<0?'▼':'';const bars=vals.map(v=>{const h=range>0?Math.max(2,Math.round(((v-mn)/range)*14)+2):8;const bc=v===mx?'var(--miss)':v===mn?'var(--accent2)':'var(--muted)';return`<div class="line-spark-bar" style="height:${h}px;background:${bc}"></div>`;}).join('');return`<span class="line-spark" title="Line history: ${vals.join(' → ')}">${bars}</span><span class="line-spark-label" style="color:${color}">${arrow}${Math.abs(moved).toFixed(1)}</span>`;}
+
+// ── PARLAY LOG ──
+function logParlay(){if(!parlayLegs.length){showToast('No legs in parlay');return;}const params=new URLSearchParams({_parlay:'1'});parlayLegs.forEach((l,i)=>{params.set('p'+i+'_player',l.player||'');params.set('p'+i+'_prop',l.prop||'');params.set('p'+i+'_sport',l.sport||'NHL');params.set('p'+i+'_odds',l.bestOdds||'-110');params.set('p'+i+'_rate',l.rate||'');params.set('p'+i+'_dir',l.direction||'OVER');params.set('p'+i+'_team',l.team||'');});params.set('count',parlayLegs.length);window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');}
+function correlateParlay(){if(!parlayLegs.length){showToast('No legs in parlay');return;}const params=new URLSearchParams();parlayLegs.forEach((l,i)=>{params.set('p'+i+'_player',l.player||'');params.set('p'+i+'_team',l.team||'');params.set('p'+i+'_prop',l.prop||'');params.set('p'+i+'_sport',l.sport||'NHL');params.set('p'+i+'_dir',l.direction||'OVER');});params.set('count',parlayLegs.length);window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');}
+
+// ── SEARCH ──
+function onSearch(val){searchQuery=val.toLowerCase().trim();document.getElementById('searchClear').style.display=val?'block':'none';renderTable();}
+function clearSearch(){searchQuery='';document.getElementById('playerSearch').value='';document.getElementById('searchClear').style.display='none';renderTable();}
+
+// ── SGP BUILDER ──
+let sgpLegs=[];
+const CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15};
+function getSGPStatKeyNHL(propKey,prop){const c=((propKey||'')+' '+(prop||'')).toLowerCase();if(/goal/.test(c)&&!/assist/.test(c)&&!/power/.test(c))return'goals';if(/assist/.test(c)&&!/power/.test(c))return'assists';if(/point/.test(c)&&!/power/.test(c))return'points';if(/shot/.test(c))return'shotsOnGoal';if(/save/.test(c))return'saves';if(/power.*point/.test(c))return'powerPlayPoints';if(/power.*goal/.test(c))return'powerPlayGoals';return'unknown';}
+function getSGPCorrNHL(kA,kB){return CORR_MAP_NHL[kA+'_'+kB]??CORR_MAP_NHL[kB+'_'+kA]??0;}
+function corrLabel(s){if(s>=0.5)return{label:'++ STRONG POS',cls:'pos'};if(s>=0.2)return{label:'+ MILD POS',cls:'pos'};if(s<=-0.3)return{label:'-- NEG',cls:'neg'};if(s<=-0.1)return{label:'- MILD NEG',cls:'neg'};return{label:'~ NEUTRAL',cls:'neutral'};}
+function randn(){const u=Math.random(),v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function addToSGP(play){if(sgpLegs.length>=8){showToast('Max 8 SGP legs');return;}if(sgpLegs.some(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in SGP');return;}sgpLegs.push(play);updateSGPLegs();showToast('Added to SGP: '+play.player);switchTab('sgp');}
+function removeSGPLeg(i){sgpLegs.splice(i,1);updateSGPLegs();}
+function clearSGP(){sgpLegs=[];updateSGPLegs();document.getElementById('sgpResult').style.display='none';}
+function updateSGPLegs(){const el=document.getElementById('sgpLegs');const cnt=document.getElementById('sgpCount');cnt.textContent=sgpLegs.length;cnt.style.display=sgpLegs.length?'inline':'none';if(!sgpLegs.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Add props using the 🎰 button on any prop row</div>';return;}el.innerHTML=sgpLegs.map((l,i)=>`<div class="sgp-leg"><div class="sgp-leg-info"><div class="sgp-leg-player">${esc(l.player)}</div><div class="sgp-leg-prop">${esc(l.prop)} · ${l.direction==='UNDER'?'▼ UNDER':'▲ OVER'}</div></div><div class="sgp-leg-rate">${l.rate||'—'}%</div><button class="sgp-remove" onclick="removeSGPLeg(${i})">✕</button></div>`).join('');}
+function runSGPSim(){const btn=document.getElementById('sgpSimBtn');if(sgpLegs.length<2){showToast('Add at least 2 legs');return;}btn.disabled=true;btn.textContent='⏳ Simulating…';setTimeout(()=>{const N=10000;const n=sgpLegs.length;const statKeys=sgpLegs.map(l=>getSGPStatKeyNHL(l.propType,l.prop));const corrMatrix=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>{if(i===j)return 1;const sp=sgpLegs[i].player===sgpLegs[j].player;return Math.min(0.95,(sp?0.15:0)+getSGPCorrNHL(statKeys[i],statKeys[j]));}));const means=sgpLegs.map(l=>{const line=parseFloat((l.prop||'').match(/[\d.]+/)?.[0])||1;const rate=(l.rate||75)/100;return l.direction==='OVER'?line*(1+(rate-0.5)*0.4):line*(1-(rate-0.5)*0.4);});const stds=means.map(m=>m*0.3);let allHit=0;for(let i=0;i<N;i++){const z=Array.from({length:n},()=>randn());const sims=means.map((m,idx)=>{let v=z[idx];for(let j=0;j<idx;j++){const c=corrMatrix[idx][j]||0;v=v*Math.sqrt(1-c*c)+z[j]*c;}return Math.max(0,m+stds[idx]*v);});let hit=true;for(let j=0;j<n;j++){const line=parseFloat((sgpLegs[j].prop||'').match(/[\d.]+/)?.[0])||1;if(sgpLegs[j].direction==='OVER'?sims[j]<=line:sims[j]>=line){hit=false;break;}}if(hit)allHit++;}const truePct=Math.round(allHit/N*100);const naivePct=Math.round(sgpLegs.reduce((p,l)=>p*(l.rate||75)/100,1)*100);const trueOdds=truePct>0?Math.round(100/truePct*100-100):9999;const naiveOdds=naivePct>0?Math.round(100/naivePct*100-100):9999;const edge=truePct-naivePct;const edgeDir=edge>=2?'POSITIVE EDGE ✅':edge<=-2?'NEGATIVE EDGE ⚠️':'ROUGHLY FAIR';const edgeCls=edge>=2?'edge-positive':edge<=-2?'edge-negative':'';const corrSummary=[];for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const s=corrMatrix[i][j];const cl=corrLabel(s);corrSummary.push(`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(30,45,69,.3)"><span style="color:var(--muted);font-family:var(--font)">${esc(sgpLegs[i].player.split(' ').pop())} ↔ ${esc(sgpLegs[j].player.split(' ').pop())}</span><span class="corr-chip ${cl.cls}">${cl.label}</span></div>`);}document.getElementById('sgpResult').style.display='block';document.getElementById('sgpResult').innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px">🎲 MONTE CARLO (${N.toLocaleString()} SIMS)</div><div class="sgp-result-grid"><div class="sgp-stat"><div class="sgp-stat-val" style="color:var(--gold)">${truePct}%</div><div class="sgp-stat-lbl">TRUE SGP PROB</div></div><div class="sgp-stat"><div class="sgp-stat-val" style="color:var(--muted)">${naivePct}%</div><div class="sgp-stat-lbl">NAIVE PROB</div></div><div class="sgp-stat"><div class="sgp-stat-val ${edgeCls}">${edge>=0?'+':''}${edge}%</div><div class="sgp-stat-lbl">CORR BOOST</div></div></div><div style="background:var(--surface2);border-radius:6px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><div><div style="font-size:10px;color:var(--muted);font-family:var(--font)">ADJUSTED ODDS</div><div style="font-size:22px;font-weight:700;font-family:var(--font);color:var(--gold)">+${trueOdds}</div></div><div><div style="font-size:10px;color:var(--muted);font-family:var(--font)">NAIVE ODDS</div><div style="font-size:18px;font-weight:700;font-family:var(--font);color:var(--muted)">+${naiveOdds}</div></div><div style="text-align:right"><div style="font-size:10px;color:var(--muted);font-family:var(--font)">ASSESSMENT</div><div style="font-size:13px;font-weight:700">${edgeDir}</div></div></div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">CORRELATION MATRIX</div><div>${corrSummary.join('')}</div>`;btn.disabled=false;btn.textContent='⚡ Run Sim';},50);}
+</script>
+</body>
+</html>

@@ -328,7 +328,7 @@ async function fetchESPNGames(sport){
     const isNCAAFB = sport.path.includes('college-football');
     const url = isNCAAFB
       ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=80`
-      : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard`;
+      : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100`;
     const res = await fetch(url);
     if(!res.ok) return [];
     const data = await res.json();
