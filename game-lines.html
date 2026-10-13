@@ -363,8 +363,10 @@ async function fetchESPNGames(sport){
         gameTime: evt.date?new Date(evt.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'',
         spread: odds?.spread!=null?parseFloat(odds.spread):null,
         total: odds?.overUnder!=null?parseFloat(odds.overUnder):null,
-        ml_home: odds?.homeTeamOdds?.moneyLine!=null?parseInt(odds.homeTeamOdds.moneyLine):null,
-        ml_away: odds?.awayTeamOdds?.moneyLine!=null?parseInt(odds.awayTeamOdds.moneyLine):null,
+        ml_home: odds?.homeTeamOdds?.moneyLine!=null?parseInt(odds.homeTeamOdds.moneyLine)
+                 : home?.odds?.moneyLine!=null?parseInt(home.odds.moneyLine):null,
+        ml_away: odds?.awayTeamOdds?.moneyLine!=null?parseInt(odds.awayTeamOdds.moneyLine)
+                 : away?.odds?.moneyLine!=null?parseInt(away.odds.moneyLine):null,
         venue: venue?.fullName||'',
         isOutdoor,
         status: evt.status?.type?.shortDetail||'',
@@ -381,12 +383,15 @@ async function fetchESPNGames(sport){
           if(!r.ok) return;
           const d = await r.json();
           const items = d.items||[];
-          const o = items.find(i=>i.provider?.id===1001)||items[0];
+          const o = items.find(i=>i.provider?.id===1001)||items.find(i=>i.provider?.name?.toLowerCase().includes('consensus'))||items[0];
           if(!o) return;
           if(g.spread==null && o.spread!=null) g.spread = parseFloat(o.spread);
           if(g.total==null && o.overUnder!=null) g.total = parseFloat(o.overUnder);
-          if(g.ml_home==null && o.homeTeamOdds?.moneyLine!=null) g.ml_home = parseInt(o.homeTeamOdds.moneyLine);
-          if(g.ml_away==null && o.awayTeamOdds?.moneyLine!=null) g.ml_away = parseInt(o.awayTeamOdds.moneyLine);
+          // Try multiple paths ESPN uses for moneyline
+          const hML = o.homeTeamOdds?.moneyLine ?? o.homeTeamOdds?.current?.moneyLine ?? o.homeMoneyLine;
+          const aML = o.awayTeamOdds?.moneyLine ?? o.awayTeamOdds?.current?.moneyLine ?? o.awayMoneyLine;
+          if(g.ml_home==null && hML!=null) g.ml_home = parseInt(hML);
+          if(g.ml_away==null && aML!=null) g.ml_away = parseInt(aML);
         }catch(e){}
       }));
     }
