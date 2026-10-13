@@ -472,6 +472,17 @@ async function runSimsForGames(games, sportObj){
 
   for(const g of games){
     try{
+      const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:22;
+      const defaultTotal = sport==='NHL'?5.5:sport==='MLB'?8.5:44;
+
+      // NHL team stats endpoint blocks CORS from browser — use ESPN odds total directly
+      // and fall back to league-average goals (3.0) for both teams
+      if(sport === 'NHL'){
+        const sim = simGame(sportDefault, sportDefault, sportDefault, sportDefault, g.total||defaultTotal, g.spread, MC_N, sport);
+        g.sim = sim;
+        continue;
+      }
+
       const ids = await fetchTeamIds(sportObj, g.id);
       if(!ids?.homeId||!ids?.awayId) continue;
 
@@ -480,7 +491,6 @@ async function runSimsForGames(games, sportObj){
         fetchTeamStats(sportObj, ids.homeId),
       ]);
 
-      const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:22;
       const awayOff = awayStats?.[statNames.off] || awayStats?.['pointsPerGame'] || awayStats?.['avgPoints'] || awayStats?.['avgGoals'] || sportDefault;
       const awayDef = awayStats?.[statNames.def] || awayStats?.['opponentPointsPerGame'] || awayStats?.['avgPointsAllowed'] || awayStats?.['avgGoalsAllowed'] || sportDefault;
       const homeOff = homeStats?.[statNames.off] || homeStats?.['pointsPerGame'] || homeStats?.['avgPoints'] || homeStats?.['avgGoals'] || sportDefault;
@@ -488,7 +498,6 @@ async function runSimsForGames(games, sportObj){
 
       if(!awayOff||!homeOff) continue;
 
-      const defaultTotal = sport==='NHL'?5.5:sport==='MLB'?8.5:44;
       const sim = simGame(awayOff, homeOff, awayDef, homeDef, g.total||defaultTotal, g.spread, MC_N, sport);
       g.sim = sim;
     }catch(e){ continue; }
