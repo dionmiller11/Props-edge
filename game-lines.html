@@ -656,10 +656,10 @@ function renderLines(){
       }
       if(homeFavored){
         spreadTeam = g.home;
-        spreadVal = -Math.abs(g.spread);
+        spreadVal = -Math.abs(g.spread); // home fav gets negative
       } else {
         spreadTeam = g.away;
-        spreadVal = Math.abs(g.spread);
+        spreadVal = -Math.abs(g.spread); // away fav also gets negative
       }
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
     } else { spreadTeam = g.home; spreadDisplay = '—'; }
