@@ -363,20 +363,30 @@ async function fetchESPNGames(sport){
         gameTime: evt.date?new Date(evt.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'',
         spread: odds?.spread!=null?parseFloat(odds.spread):null,
         total: odds?.overUnder!=null?parseFloat(odds.overUnder):null,
-        ml_home: odds?.homeTeamOdds?.moneyLine!=null?parseInt(odds.homeTeamOdds.moneyLine)
-                 : home?.odds?.moneyLine!=null?parseInt(home.odds.moneyLine)
-                 : (()=>{ // parse from details string e.g. "DET -115"
-                     const abbr = home?.team?.abbreviation||'';
-                     const m = (odds?.details||'').match(new RegExp(abbr+'\\s*([+-]?\\d+)','i'));
-                     return m?parseInt(m[1]):null;
-                   })(),
-        ml_away: odds?.awayTeamOdds?.moneyLine!=null?parseInt(odds.awayTeamOdds.moneyLine)
-                 : away?.odds?.moneyLine!=null?parseInt(away.odds.moneyLine)
-                 : (()=>{ // parse from details string
-                     const abbr = away?.team?.abbreviation||'';
-                     const m = (odds?.details||'').match(new RegExp(abbr+'\\s*([+-]?\\d+)','i'));
-                     return m?parseInt(m[1]):null;
-                   })(),
+        ml_home: (()=>{
+                   if(odds?.homeTeamOdds?.moneyLine!=null) return parseInt(odds.homeTeamOdds.moneyLine);
+                   if(home?.odds?.moneyLine!=null) return parseInt(home.odds.moneyLine);
+                   // ESPN details = "ABBR ML" for the FAVORITE only — derive both sides
+                   const det = odds?.details||'';
+                   const m = det.match(/([A-Z]+)\s*([+-]?\d+)/);
+                   if(!m) return null;
+                   const favAbbr = m[1], favML = parseInt(m[2]);
+                   const homeAbbr = home?.team?.abbreviation||'';
+                   if(favAbbr.toUpperCase()===homeAbbr.toUpperCase()) return favML;
+                   // home is underdog — flip the juice (~10pt vig)
+                   return favML < 0 ? Math.round(-favML - 10) : Math.round(-favML + 10);
+                 })(),
+        ml_away: (()=>{
+                   if(odds?.awayTeamOdds?.moneyLine!=null) return parseInt(odds.awayTeamOdds.moneyLine);
+                   if(away?.odds?.moneyLine!=null) return parseInt(away.odds.moneyLine);
+                   const det = odds?.details||'';
+                   const m = det.match(/([A-Z]+)\s*([+-]?\d+)/);
+                   if(!m) return null;
+                   const favAbbr = m[1], favML = parseInt(m[2]);
+                   const awayAbbr = away?.team?.abbreviation||'';
+                   if(favAbbr.toUpperCase()===awayAbbr.toUpperCase()) return favML;
+                   return favML < 0 ? Math.round(-favML - 10) : Math.round(-favML + 10);
+                 })(),
         venue: venue?.fullName||'',
         isOutdoor,
         status: evt.status?.type?.shortDetail||'',
@@ -574,6 +584,11 @@ async function fetchPublicPct(anKey, dateStr){
         total_under: lines?.total?.under?.bets_pct||null,
         ml_away:     lines?.ml?.away?.bets_pct||null,
         ml_home:     lines?.ml?.home?.bets_pct||null,
+        // Actual ML odds from Action Network
+        ml_away_odds: lines?.ml?.away?.line!=null ? parseInt(lines.ml.away.line) : null,
+        ml_home_odds: lines?.ml?.home?.line!=null ? parseInt(lines.ml.home.line) : null,
+        spread_line:  lines?.spread?.line!=null ? parseFloat(lines.spread.line) : null,
+        total_line:   lines?.total?.line!=null ? parseFloat(lines.total.line) : null,
       };
     }
     return splits;
@@ -595,7 +610,15 @@ async function loadAll(){
     const splits = sport.an ? await fetchPublicPct(sport.an, todayStr) : {};
     return games.map(g=>{
       const splitKey = `${g.away}@${g.home}`.toLowerCase();
-      return {...g, public: splits[splitKey]||null};
+      const pub = splits[splitKey]||null;
+      // Fill missing ESPN odds from Action Network
+      if(pub){
+        if(g.ml_home==null && pub.ml_home_odds!=null) g.ml_home = pub.ml_home_odds;
+        if(g.ml_away==null && pub.ml_away_odds!=null) g.ml_away = pub.ml_away_odds;
+        if(g.spread==null  && pub.spread_line!=null)  g.spread  = pub.spread_line;
+        if(g.total==null   && pub.total_line!=null)   g.total   = pub.total_line;
+      }
+      return {...g, public: pub};
     });
   }));
 
