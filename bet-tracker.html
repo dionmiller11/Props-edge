@@ -252,9 +252,9 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
-            <th>GAME</th><th>TYPE</th><th>LINE</th><th>SIM EDGE</th><th>RESULT</th><th>FINAL</th>
+            <th>GAME</th><th>LINE · EDGE</th><th>RESULT</th><th class="hide-mobile">FINAL</th>
           </tr></thead>
-          <tbody id="sim-body"><tr><td colspan="6"><div class="empty"><div class="empty-icon">🎲</div><p>Select a date to load sim predictions.</p></div></td></tr></tbody>
+          <tbody id="sim-body"><tr><td colspan="4"><div class="empty"><div class="empty-icon">🎲</div><p>Select a date to load sim predictions.</p></div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -817,14 +817,14 @@ function setSimSport(sport, el){
 async function renderSim(){
   const date = document.getElementById('sim-date').value;
   if(!date) return;
-  document.getElementById('sim-body').innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">⏳ Loading…</td></tr>`;
+  document.getElementById('sim-body').innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">⏳ Loading…</td></tr>`;
   document.getElementById('sim-accuracy').innerHTML='';
   document.getElementById('sim-count').textContent='';
   try{
     const r = await fetch(`${KV_BASE}/sim/results?date=${date}`);
     const d = await r.json();
     if(!d.predictions||!d.predictions.length){
-      document.getElementById('sim-body').innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for ${date}.</p></div></td></tr>`;
+      document.getElementById('sim-body').innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for ${date}.</p></div></td></tr>`;
       return;
     }
     const preds = simSportFilter==='ALL' ? d.predictions : d.predictions.filter(p=>(p.sport||'').toUpperCase()===simSportFilter);
@@ -860,23 +860,27 @@ async function renderSim(){
     document.getElementById('sim-body').innerHTML = preds.map(p=>{
       const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
       const favors = p.betType==='total'?(p.simOverPct>50?'OVER':'UNDER'):(p.simAwayPct>50?p.away:p.home);
-      const edgePct = conf ? `${conf}%` : '—';
       const confColor = conf>=70?'var(--accent2)':conf>=60?'var(--gold)':'var(--muted)';
       const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':'<span class="result-badge pending">⏳</span>';
       const finalStr = p.betType==='total'&&p.finalTotal!=null?`${p.finalTotal}`:
         p.homeScore!=null?`${p.away} ${p.awayScore}–${p.homeScore} ${p.home}`:'—';
       const lineStr = p.betType==='total'?`O/U ${p.line}`:p.betType==='spread'?`${p.away} ${p.spread>0?'+':''}${p.spread}`:`ML`;
+      const typeColor = p.betType==='total'?'var(--accent)':p.betType==='spread'?'var(--gold)':'var(--purple)';
       return`<tr>
-        <td><div class="player-name" style="font-size:12px">${esc(p.away)} @ ${esc(p.home)}</div><div class="sub-text">${esc(p.sport)} · ${esc(p.betType)}</div></td>
-        <td><span class="sport-badge" style="font-size:10px">${esc(p.betType.toUpperCase())}</span></td>
-        <td style="color:var(--muted)">${esc(lineStr)}</td>
-        <td><span style="color:${confColor};font-weight:700">${edgePct}</span><div class="sub-text">→ ${esc(favors)}</div></td>
+        <td style="min-width:110px;max-width:140px">
+          <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.away)} @ ${esc(p.home)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px"><span style="color:${typeColor};font-weight:700">${esc(p.betType.toUpperCase())}</span> · ${esc(p.sport)}</div>
+        </td>
+        <td style="white-space:nowrap">
+          <div style="font-size:11px;color:var(--muted)">${esc(lineStr)}</div>
+          <div style="font-size:11px;color:${confColor};font-weight:700;margin-top:2px">${conf}% → ${esc(favors)}</div>
+        </td>
         <td>${resultBadge}</td>
-        <td style="font-size:11px;color:var(--muted)">${esc(finalStr)}</td>
+        <td class="hide-mobile" style="font-size:10px;color:var(--muted)">${esc(finalStr)}</td>
       </tr>`;
     }).join('');
   } catch(e){
-    document.getElementById('sim-body').innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--miss);padding:20px">Error loading sim results</td></tr>`;
+    document.getElementById('sim-body').innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--miss);padding:20px">Error loading sim results</td></tr>`;
   }
 }
 async function loadSimDates(){
