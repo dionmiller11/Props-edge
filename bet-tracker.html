@@ -235,6 +235,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="loadSimDates()" style="font-size:11px">📅 Dates</button>
         <button class="btn btn-primary" onclick="renderSim()" style="font-size:11px">↻ Refresh</button>
+        <button id="simAutoGradeBtn" onclick="simAutoGrade()" style="font-size:11px;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.3);font-family:var(--sans);">⚡ Auto-Grade</button>
       </div>
     </div>
     <div id="sim-dates-bar" style="display:none;margin-bottom:12px;gap:6px;flex-wrap:wrap"></div>
@@ -661,6 +662,233 @@ async function fetchBTBoxScores(date, sport){
   }catch(e){ return {}; }
 }
 
+// ── FETCH GAME SCORES FOR SIM GRADING ──
+// Returns array of {homeTeam, awayTeam, homeScore, awayScore, total, status}
+async function fetchGameScores(date, sport){
+  try{
+    const paths={NFL:'football/nfl',NBA:'basketball/nba',WNBA:'basketball/wnba',MLB:'baseball/mlb',NCAAFB:'football/college-football',NHL:'hockey/nhl'};
+    const path=paths[sport]; if(!path) return [];
+    const ds=(date||'').replace(/-/g,'');
+    const res=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${ds}`);
+    if(!res.ok) return [];
+    const data=await res.json();
+    return (data.events||[]).map(evt=>{
+      const comp = evt.competitions?.[0];
+      if(!comp) return null;
+      const home = comp.competitors?.find(c=>c.homeAway==='home');
+      const away = comp.competitors?.find(c=>c.homeAway==='away');
+      const homeScore = parseFloat(home?.score)||0;
+      const awayScore = parseFloat(away?.score)||0;
+      const status = evt.status?.type?.completed ? 'final' : (evt.status?.type?.name||'');
+      // Team abbreviations
+      const homeAbbr = (home?.team?.abbreviation||home?.team?.shortDisplayName||'').toUpperCase();
+      const awayAbbr = (away?.team?.abbreviation||away?.team?.shortDisplayName||'').toUpperCase();
+      const homeName = (home?.team?.displayName||home?.team?.name||'').toLowerCase();
+      const awayName = (away?.team?.displayName||away?.team?.name||'').toLowerCase();
+      return {
+        homeAbbr, awayAbbr, homeName, awayName,
+        homeScore, awayScore,
+        total: homeScore + awayScore,
+        status,
+        isCompleted: status === 'final'
+      };
+    }).filter(Boolean);
+  }catch(e){ return []; }
+}
+
+function matchSimGame(prediction, games){
+  // prediction has p.home and p.away (team abbreviations or names from the sim)
+  const ph = (prediction.home||'').toUpperCase().trim();
+  const pa = (prediction.away||'').toUpperCase().trim();
+  // Try abbreviation match first
+  let match = games.find(g => g.homeAbbr===ph && g.awayAbbr===pa);
+  if(match) return match;
+  // Partial name match
+  match = games.find(g =>
+    (g.homeName.includes(ph.toLowerCase()) || g.homeAbbr.includes(ph)) &&
+    (g.awayName.includes(pa.toLowerCase()) || g.awayAbbr.includes(pa))
+  );
+  return match||null;
+}
+
+function gradeSimPrediction(prediction, game){
+  if(!game||!game.isCompleted) return null;
+  const {homeScore, awayScore, total} = game;
+  if(prediction.betType==='total'){
+    const line = parseFloat(prediction.line)||0;
+    const simFavors = prediction.simOverPct > 50 ? 'OVER' : 'UNDER';
+    if(total > line) return simFavors==='OVER' ? 'W' : 'L';
+    if(total < line) return simFavors==='UNDER' ? 'W' : 'L';
+    return 'P'; // push
+  }
+  if(prediction.betType==='spread'){
+    // p.spread is ESPN home-team spread (negative = home favored)
+    const spread = parseFloat(prediction.spread)||0;
+    // sim favors: if simAwayPct > 50, away team is the edge
+    const simFavors = prediction.simAwayPct > 50 ? 'away' : 'home';
+    // home ATS: homeScore + spread vs awayScore
+    const homeATS = homeScore + spread;
+    if(simFavors==='home'){
+      if(homeATS > awayScore) return 'W';
+      if(homeATS < awayScore) return 'L';
+      return 'P';
+    } else {
+      // away covers: awayScore > homeScore + spread
+      if(awayScore > homeATS) return 'W';
+      if(awayScore < homeATS) return 'L';
+      return 'P';
+    }
+  }
+  if(prediction.betType==='ml'){
+    const simFavors = prediction.simAwayPct > 50 ? 'away' : 'home';
+    if(simFavors==='home'){
+      if(homeScore > awayScore) return 'W';
+      if(homeScore < awayScore) return 'L';
+      return 'P';
+    } else {
+      if(awayScore > homeScore) return 'W';
+      if(awayScore < homeScore) return 'L';
+      return 'P';
+    }
+  }
+  return null;
+}
+
+// ── SIM AUTO-GRADER ──
+async function simAutoGrade(){
+  const btn = document.getElementById('simAutoGradeBtn');
+  const date = document.getElementById('sim-date').value;
+  if(!date){ showToast('Select a date first'); return; }
+  btn.disabled=true; btn.textContent='⏳ Grading…';
+
+  try{
+    const r = await fetch(`${KV_BASE}/sim/results?date=${date}`);
+    const d = await r.json();
+    if(!d.predictions||!d.predictions.length){
+      showToast('No sim predictions for this date');
+      btn.disabled=false; btn.textContent='⚡ Auto-Grade'; return;
+    }
+
+    // Group ungraded predictions by sport
+    const ungraded = d.predictions.filter(p=>!p.result);
+    if(!ungraded.length){
+      showToast('All predictions already graded');
+      btn.disabled=false; btn.textContent='⚡ Auto-Grade'; return;
+    }
+
+    // Fetch scores per sport
+    const sports = [...new Set(ungraded.map(p=>p.sport||'NFL').filter(Boolean))];
+    const scoresBySport = {};
+    for(const sport of sports){
+      btn.textContent=`⏳ Fetching ${sport}…`;
+      scoresBySport[sport] = await fetchGameScores(date, sport);
+    }
+
+    let graded=0, notFound=0, notFinal=0;
+    for(const pred of ungraded){
+      const sport = pred.sport||'NFL';
+      const games = scoresBySport[sport]||[];
+      const game = matchSimGame(pred, games);
+      if(!game){ notFound++; continue; }
+      if(!game.isCompleted){ notFinal++; continue; }
+      const result = gradeSimPrediction(pred, game);
+      if(result){
+        pred.result = result;
+        pred.homeScore = game.homeScore;
+        pred.awayScore = game.awayScore;
+        pred.finalTotal = game.total;
+        graded++;
+      }
+    }
+
+    if(graded===0){
+      const reason = notFinal>0 ? `${notFinal} game(s) not final yet` : notFound>0 ? `${notFound} game(s) not found` : 'no gradeable predictions';
+      showToast(`Nothing graded — ${reason}`);
+      btn.disabled=false; btn.textContent='⚡ Auto-Grade'; return;
+    }
+
+    // Save graded predictions back to KV
+    btn.textContent='⏳ Saving…';
+    const saveRes = await fetch(`${KV_BASE}/sim/save`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date, predictions: d.predictions})
+    });
+
+    btn.disabled=false; btn.textContent='⚡ Auto-Grade';
+
+    if(saveRes.ok){
+      showToast(`⚡ Graded ${graded}${notFinal?` · ${notFinal} not final`:''}${notFound?` · ${notFound} not found`:''}`);
+      renderSim(); // Refresh table to show updated results
+    } else {
+      // Save failed — still show results in the current render by forcing a re-render with patched data
+      showToast(`⚡ Graded ${graded} (save to KV failed — refresh to reload)`);
+      // Temporarily patch the in-memory data and re-render
+      renderSimWithData(d.predictions);
+    }
+  } catch(e){
+    btn.disabled=false; btn.textContent='⚡ Auto-Grade';
+    showToast('Error grading: '+e.message);
+  }
+}
+
+// Render sim table with pre-fetched predictions (used after local grading when KV save fails)
+function renderSimWithData(preds){
+  const filtered = simSportFilter==='ALL' ? preds : preds.filter(p=>(p.sport||'').toUpperCase()===simSportFilter);
+  const buckets={'50-59':{label:'50–59%',w:0,l:0},'60-69':{label:'60–69%',w:0,l:0},'70+':{label:'70%+',w:0,l:0}};
+  const byType={total:{w:0,l:0},spread:{w:0,l:0},ml:{w:0,l:0}};
+  for(const p of filtered){
+    if(!p.result) continue;
+    const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
+    const bkt = conf>=70?'70+':conf>=60?'60-69':'50-59';
+    if(p.result==='W') buckets[bkt].w++; else if(p.result==='L') buckets[bkt].l++;
+    const bt=byType[p.betType]||{w:0,l:0};
+    if(p.result==='W') bt.w++; else if(p.result==='L') bt.l++;
+    byType[p.betType]=bt;
+  }
+  const graded = filtered.filter(p=>p.result);
+  const totalW = graded.filter(p=>p.result==='W').length;
+  const winPct = graded.length ? Math.round(totalW/graded.length*100) : 0;
+  const accHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:4px">
+      <div class="stat-card"><div class="stat-val ${winPct>=55?'green':winPct>=45?'gold':'red'}">${winPct}%</div><div class="stat-lbl">OVERALL ACC (${totalW}/${graded.length})</div></div>
+      ${Object.entries(buckets).map(([k,b])=>{
+        const tot=b.w+b.l; const pct=tot?Math.round(b.w/tot*100):0;
+        return`<div class="stat-card"><div class="stat-val ${pct>=55?'green':pct>=45?'gold':'red'}">${pct}%</div><div class="stat-lbl">${b.label} CONF (${b.w}/${tot})</div></div>`;
+      }).join('')}
+      ${Object.entries(byType).map(([bt,v])=>{
+        const tot=v.w+v.l; const pct=tot?Math.round(v.w/tot*100):0;
+        return tot?`<div class="stat-card"><div class="stat-val ${pct>=55?'green':pct>=45?'gold':'red'}">${pct}%</div><div class="stat-lbl">${bt.toUpperCase()} (${v.w}/${tot})</div></div>`:'';
+      }).join('')}
+    </div>`;
+  document.getElementById('sim-accuracy').innerHTML=accHtml;
+  document.getElementById('sim-count').textContent=`${filtered.length} predictions · ${graded.length} graded`;
+  document.getElementById('sim-body').innerHTML = filtered.map(p=>{
+    const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
+    const favors = p.betType==='total'?(p.simOverPct>50?'OVER':'UNDER'):(p.simAwayPct>50?p.away:p.home);
+    const confColor = conf>=70?'var(--accent2)':conf>=60?'var(--gold)':'var(--muted)';
+    const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':p.result==='P'?'<span class="result-badge push">🟡 P</span>':'<span class="result-badge pending">⏳</span>';
+    const finalStr = p.betType==='total'&&p.finalTotal!=null?`${p.finalTotal}`:
+      p.homeScore!=null?`${p.away} ${p.awayScore}–${p.homeScore} ${p.home}`:'—';
+    const lineStr = p.betType==='total'?`O/U ${p.line}`:p.betType==='spread'?(
+      p.spread > 0 ? `${p.away} -${p.spread}` : `${p.home} ${p.spread}`
+    ):`ML`;
+    const typeColor = p.betType==='total'?'var(--accent)':p.betType==='spread'?'var(--gold)':'var(--purple)';
+    return`<tr>
+      <td style="min-width:110px;max-width:140px">
+        <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.away)} @ ${esc(p.home)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px"><span style="color:${typeColor};font-weight:700">${esc(p.betType.toUpperCase())}</span> · ${esc(p.sport)}</div>
+      </td>
+      <td style="white-space:nowrap">
+        <div style="font-size:11px;color:var(--muted)">${esc(lineStr)}</div>
+        <div style="font-size:11px;color:${confColor};font-weight:700;margin-top:2px">${conf}% → ${esc(favors)}</div>
+      </td>
+      <td>${resultBadge}</td>
+      <td class="hide-mobile" style="font-size:10px;color:var(--muted)">${esc(finalStr)}</td>
+    </tr>`;
+  }).join('');
+}
+
 function normalizeName(n){
   return (n||'').toLowerCase()
     .replace(/\b(ii|iii|iv|jr|sr|jr\.|sr\.)\b/g,'')
@@ -835,9 +1063,9 @@ async function renderSim(){
       if(!p.result) continue;
       const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
       const bkt = conf>=70?'70+':conf>=60?'60-69':'50-59';
-      if(p.result==='W') buckets[bkt].w++; else buckets[bkt].l++;
+      if(p.result==='W') buckets[bkt].w++; else if(p.result==='L') buckets[bkt].l++;
       const bt=byType[p.betType]||{w:0,l:0};
-      if(p.result==='W') bt.w++; else bt.l++;
+      if(p.result==='W') bt.w++; else if(p.result==='L') bt.l++;
       byType[p.betType]=bt;
     }
     const graded = preds.filter(p=>p.result);
@@ -861,7 +1089,7 @@ async function renderSim(){
       const conf = p.betType==='total'?(p.simOverPct>50?p.simOverPct:p.simUnderPct):(p.simAwayPct>50?p.simAwayPct:p.simHomePct);
       const favors = p.betType==='total'?(p.simOverPct>50?'OVER':'UNDER'):(p.simAwayPct>50?p.away:p.home);
       const confColor = conf>=70?'var(--accent2)':conf>=60?'var(--gold)':'var(--muted)';
-      const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':'<span class="result-badge pending">⏳</span>';
+      const resultBadge = p.result==='W'?'<span class="result-badge win">✅ W</span>':p.result==='L'?'<span class="result-badge loss">❌ L</span>':p.result==='P'?'<span class="result-badge push">🟡 P</span>':'<span class="result-badge pending">⏳</span>';
       const finalStr = p.betType==='total'&&p.finalTotal!=null?`${p.finalTotal}`:
         p.homeScore!=null?`${p.away} ${p.awayScore}–${p.homeScore} ${p.home}`:'—';
       // p.spread is ESPN home-team spread. positive = home is dog (away is fav).
