@@ -453,33 +453,90 @@ return { rate, hits, games: results.length, last10: results, streak, hotStreak: 
 function calcStreak(r){let s=0;for(let i=r.length-1;i>=0;i--){if(r[i]===1)s++;else break;}return s;}
 // ── MAIN SCAN ──
 // ── MLB DEFENSIVE MATCHUP GRADES ──
+// defRankings[team][propKey] = {rank, total, avg, label, color}
+// Higher allowed = better matchup for hitters; lower allowed = better for pitchers taking UNDER props
 let defRankings = {};
+
+// propKey → MLB team stats field (what the opposing TEAM allows)
+const DEF_STAT_MAP = {
+  hits:        {field:'hits',       perGame:true,  higherIsBetter:true},   // hits allowed/g → higher = softer D
+  total_bases: {field:'totalBases', perGame:true,  higherIsBetter:true},
+  rbi:         {field:'rbi',        perGame:true,  higherIsBetter:true},
+  runs:        {field:'runs',       perGame:true,  higherIsBetter:true},
+  h_r_rbi:     {field:'hits',       perGame:true,  higherIsBetter:true},   // proxy
+  strikeouts:  {field:'strikeOuts', perGame:true,  higherIsBetter:true},   // K's allowed by offense = good for pitcher K prop
+  outs:        {field:'strikeOuts', perGame:true,  higherIsBetter:true},
+  hits_allowed:{field:'hits',       perGame:true,  higherIsBetter:false},  // UNDER hits — lower opp hits = tougher
+  walks:       {field:'baseOnBalls',perGame:true,  higherIsBetter:false},
+  earned_runs: {field:'earnedRuns', perGame:true,  higherIsBetter:false},
+};
+
 async function fetchMLBDefense(){
   try{
-    const res = await fetch('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2025&standingsTypes=regularSeason');
+    const yr = new Date().getFullYear();
+    const url = `https://statsapi.mlb.com/api/v1/teams/stats?season=${yr}&group=hitting&stats=season&gameType=R&limit=40`;
+    const res = await fetch(url);
     if(!res.ok) return;
     const data = await res.json();
-    const teams=[];
-    for(const record of (data.records||[])){
-      for(const tr of (record.teamRecords||[])){
-        const wins=tr.wins||0,losses=tr.losses||0,total=wins+losses;
-        const abbr=tr.team?.abbreviation?.toUpperCase();
-        if(abbr&&total>0) teams.push({abbr,winPct:wins/total});
-      }
+    const records = data.stats?.[0]?.splits || [];
+
+    // Build per-team stat totals
+    const teamStats = {}; // abbr → {hits, totalBases, rbi, runs, strikeOuts, baseOnBalls, earnedRuns, gamesPlayed}
+    for(const s of records){
+      const abbr = s.team?.abbreviation?.toUpperCase();
+      if(!abbr) continue;
+      const st = s.stat || {};
+      teamStats[abbr] = {
+        hits: st.hits||0, totalBases: st.totalBases||0, rbi: st.rbi||0,
+        runs: st.runs||0, strikeOuts: st.strikeOuts||0, baseOnBalls: st.baseOnBalls||0,
+        earnedRuns: st.earnedRuns||0, gamesPlayed: st.gamesPlayed||1
+      };
     }
-    teams.sort((a,b)=>b.winPct-a.winPct);
-    const n=teams.length;
-    teams.forEach((t,i)=>{
-      const pct=i/n;
-      defRankings[t.abbr]={label:pct<0.25?'TOUGH':pct<0.5?'AVG':pct<0.75?'SOFT':'EASY',color:pct<0.25?'var(--miss)':pct<0.5?'var(--muted)':pct<0.75?'var(--accent2)':'var(--gold)',rank:i+1,total:n};
-    });
+
+    const teams = Object.keys(teamStats);
+    if(!teams.length) return;
+
+    // For each propKey, rank teams by how much of that stat they allow (their offense produces)
+    defRankings = {};
+    for(const [propKey, cfg] of Object.entries(DEF_STAT_MAP)){
+      const vals = teams.map(abbr => {
+        const st = teamStats[abbr];
+        const raw = st[cfg.field]||0;
+        const v = cfg.perGame ? raw/(st.gamesPlayed||1) : raw;
+        return {abbr, v};
+      }).filter(x=>x.v>0);
+      // sort descending (most allowed first)
+      vals.sort((a,b)=>b.v-a.v);
+      const n = vals.length;
+      vals.forEach(({abbr,v},i)=>{
+        if(!defRankings[abbr]) defRankings[abbr]={};
+        // pct: 0=worst allowed (best D), 1=most allowed (softest D)
+        const pct = i/n; // i=0 means most allowed = softest D
+        let label, color;
+        if(cfg.higherIsBetter){
+          // higher allowed = better matchup for prop
+          label = pct<0.25?'SOFT':pct<0.5?'AVG':pct<0.75?'TOUGH':'HARD';
+          color = pct<0.25?'var(--gold)':pct<0.5?'var(--muted)':pct<0.75?'var(--warn)':'var(--miss)';
+        } else {
+          // lower allowed = better matchup (UNDER props)
+          label = pct<0.25?'FAV':pct<0.5?'AVG':pct<0.75?'TOUGH':'HARD';
+          color = pct<0.25?'var(--gold)':pct<0.5?'var(--muted)':pct<0.75?'var(--warn)':'var(--miss)';
+        }
+        defRankings[abbr][propKey]={rank:i+1,total:n,avg:v.toFixed(2),label,color};
+      });
+    }
   }catch(e){console.warn('MLB def failed:',e.message);}
 }
-function defBadge(opp){
-  if(!opp) return '';
-  const d=defRankings[opp.toUpperCase()];
+
+function getMatchupGrade(opp, propKey){
+  if(!opp||!propKey) return null;
+  return defRankings[opp.toUpperCase()]?.[propKey] || null;
+}
+
+function defBadge(opp, propKey){
+  const d = getMatchupGrade(opp, propKey);
   if(!d) return '';
-  return '<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:'+d.color+';background:rgba(0,0,0,.2);border:1px solid '+d.color+';margin-left:3px" title="Pitching rank '+d.rank+'/'+d.total+'">'+d.label+'</span>';
+  return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Rank ${d.rank}/${d.total} · ${d.avg}/g allowed">${d.label}</span>`;
 }
 async function runScan() {
 const btn=document.getElementById('runBtn');
@@ -491,7 +548,7 @@ document.getElementById('errorBox').style.display='none';
 ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
 setStatus('running','📅 Fetching today\'s MLB schedule…');
 setLoadingRow();
-fetchMLBDefense();
+await fetchMLBDefense();
 try {
 setProgress(5, 'Connecting to MLB Stats API…');
 const games = await getTodaySchedule();
@@ -528,7 +585,8 @@ allHitters.push({
 player: player.person.fullName, team: team.abbr, propKey: pk,
 prop: `${cfg.label.replace(/^[^ ]+ /,'')} ${stats.direction==='OVER'?'O':'U'}${stats.line}`,
 line: stats.line, direction: stats.direction, ...stats,
-matchupGrade: stats.rate>=90?'A':stats.rate>=80?'B':'C',
+matchupGrade: (()=>{const d=getMatchupGrade(team.opp,pk);return d?d.label:'—';})(),
+matchupGradeColor: (()=>{const d=getMatchupGrade(team.opp,pk);return d?d.color:'var(--muted)';})(),
 matchupNote: `vs ${team.opp}`,
 opposingPitcher: team.oppPitcher || `${team.opp} starter`,
 oppPitcherHand: _ph, batHand: _bh, platoon: _platoon,
@@ -742,7 +800,7 @@ const dir=p.direction||'OVER';const dc=dir==='OVER'?'var(--accent2)':'var(--miss
 const od=getOdds(p.player,cfg.mkt);const op=dir==='OVER'?od?.over:od?.under;
 const bookStr=od?.books?` <span style="font-size:9px;color:var(--muted)">${od.books}bks</span>`:"";const bestBookName=p.bestBook||'';const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:'';const moveBadge=lineMoveBadge(p);const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${od?.line||p.line}</span>${moveBadge}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}${bookStr}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
 const ec2=ip?'purple':ec;
-const mc=ip?`<div style="font-size:11px">${esc(p.opposingTeam||'—')}</div>`:`<span class="grade ${p.matchupGrade||'C'}">${p.matchupGrade||'C'}</span><div class="sub-text" style="max-width:65px;white-space:normal;font-size:9px">${esc(p.matchupNote||'')}${defBadge(p.opposingTeam)}</div>`;
+const mc=ip?`<div style="font-size:11px">${esc(p.opposingTeam||'—')}</div>`:`<span class="grade" style="background:${p.matchupGradeColor||'var(--muted)'};color:#000;font-size:9px;padding:2px 5px;border-radius:3px;font-weight:700">${p.matchupGrade||'—'}</span><div class="sub-text" style="max-width:65px;white-space:normal;font-size:9px">${esc(p.matchupNote||'')}${defBadge(p.opposingTeam,p.propKey)}</div>`;
 const gtColor=gameTimeColor(p.gameTime); const timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
 const sub=ip?`${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}`:`${esc(p.team)}${p.opposingPitcher?' · vs '+esc(p.opposingPitcher):''}${timeStr}`;
 return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
