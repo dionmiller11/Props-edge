@@ -386,14 +386,16 @@ async function runScan(){
         // Build sparkline from LAST_10
         const l10=allTrends[String(bestLine)]?.['LAST_10']?.all;
         const last10=l10?Array(Math.min(l10.hits,10)).fill(1).concat(Array(Math.min(l10.misses,10)).fill(0)).slice(0,10):[];
-        const streak=calcStreak(last10);
+        // Only show streak if 100% hit rate — synthetic array fabricates consecutive streaks
+        const overStreak=(overHits===overGames&&overGames>=2)?Math.min(overGames,10):0;
+        const underStreak=(underHits===underGames&&underGames>=2)?Math.min(underGames,10):0;
 
         if(overRate>=minRate){
           results.push({
             player:playerName,team,position:pos,propKey:propType,isPitcher,
             prop:propLabel+' O'+bestLine,line:String(bestLine),direction:'OVER',
             rate:overRate,hits:overHits,games:overGames,
-            last10,streak,hotStreak:streak>=3,
+            last10,streak:overStreak,hotStreak:overStreak>=3,
             opposingTeam:opp,gameTime,
             matchupGrade:overRate>=90?'A':overRate>=80?'B':'C',
             matchupNote:'vs '+opp,bestOdds:bestOverOdds,
@@ -404,7 +406,7 @@ async function runScan(){
             player:playerName,team,position:pos,propKey:propType,isPitcher,
             prop:propLabel+' U'+bestLine,line:String(bestLine),direction:'UNDER',
             rate:underRate,hits:underHits,games:underGames,
-            last10:last10.map(v=>1-v),streak:calcStreak(last10.map(v=>1-v)),hotStreak:underRate>=80,
+            last10:last10.map(v=>1-v),streak:underStreak,hotStreak:underStreak>=3,
             opposingTeam:opp,gameTime,
             matchupGrade:underRate>=90?'A':underRate>=80?'B':'C',
             matchupNote:'vs '+opp,bestOdds:bestUnderOdds,
@@ -431,7 +433,7 @@ async function runScan(){
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
 
-function calcStreak(r){let s=0;for(let i=0;i<r.length;i++){if(r[i]===1)s++;else break;}return s;}
+function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
 
 function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
 

@@ -277,7 +277,9 @@ async function runScan(){
         if(hitRate===0)continue; // skip if no signal data
         // Build last10 approximation from hitHits/hitGames
         const last10=Array(Math.min(hitHits,10)).fill(1).concat(Array(Math.max(0,Math.min(hitGames,10)-Math.min(hitHits,10))).fill(0)).slice(0,10);
-        const streak=calcStreak(direction==='UNDER'?last10:last10);
+        // Only show streak if ALL games hit (hits===games) — otherwise the synthetic array
+        // puts hits first and would fabricate a fake consecutive streak
+        const streak=(hitHits===hitGames&&hitGames>=2)?hitGames:0;
         const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType};
         if(hitRate>=minRate){
           const dirLabel=direction==='UNDER'?'U':'O';
@@ -300,7 +302,7 @@ async function runScan(){
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
 
-function calcStreak(r){let s=0;for(let i=0;i<r.length;i++){if(r[i]===1)s++;else break;}return s;}
+function calcStreak(hits,games){return(hits===games&&games>=2)?games:0;}
 function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
 
 function renderTable(){

@@ -427,8 +427,7 @@ async function runScan() {
         const games = parts ? parseInt(parts[2]) : 10;
         const misses = games - hits;
         const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
-        const rawStreak = calcStreak(last10);
-        const streak = (hits===games && games>5) ? 5 : Math.min(rawStreak, games);
+        const streak = (hits===games && games>=2) ? Math.min(games,10) : 0;
 
         const h2h = signals.find(s => s.type==='HEAD_TO_HEAD');
         const matchupNote = h2h ? h2h.description : ('vs '+opp);
@@ -720,12 +719,7 @@ function exportCSV() {
 // ─────────────────────────────────────────────
 //  UTILS
 // ─────────────────────────────────────────────
-function calcStreak(last10) {
-  if (!last10||!last10.length) return 0;
-  let s=0,v=last10[0];
-  for(const x of last10){if(x===v)s+=v?1:-1;else break;}
-  return s;
-}
+function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
 function calcImplied(odds) {
   if (!odds) return 52;
   const o=parseInt(odds);if(isNaN(o))return 52;

@@ -361,7 +361,7 @@ async function runScan(){
         const parts=desc.match(/Hit in (\d+) of last (\d+)/i)||desc.match(/(\d+)\/(\d+)/);
         const hits=parts?parseInt(parts[1]):Math.round(hitRate/100*10),games=parts?parseInt(parts[2]):10;
         const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
-        const streak=calcStreak(last10);
+        const streak=(hits===games&&games>=2)?Math.min(games,10):0;
         const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote=h2h?h2h.description:('vs '+opp);
         const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
@@ -381,7 +381,7 @@ async function runScan(){
   }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);document.getElementById('tokenBox').style.display='block';}
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
-function calcStreak(r){let s=0;for(let i=0;i<r.length;i++){if(r[i]===1)s++;else break;}return s;}
+function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
 function renderTable(){
   const tbody=document.getElementById('tableBody');const minRate=parseInt(document.getElementById('minRate').value)||70;const sortBy=document.getElementById('sortBy')?.value||'rate';const dirFilter=document.getElementById('dirFilter')?.value||'all';const teamFilter=document.getElementById('teamFilter')?.value||'all';const now=new Date();
   let data=allData.filter(p=>{
