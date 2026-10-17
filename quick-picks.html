@@ -57,6 +57,27 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .chip.wnba.active{background:#ff69b4;color:#fff;border-color:#ff69b4;}
 .chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
 .chip.nhl.active{background:#00e5ff;color:#000;border-color:#00e5ff;}
+/* ── SPORT TABS ── */
+.sport-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.sport-tab-btn{display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);transition:all .15s;}
+.sport-tab-btn:hover{color:var(--text);border-color:rgba(255,255,255,.2);}
+.sport-tab-btn .tab-count{font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,.08);color:var(--muted);}
+.sport-tab-btn.active{color:var(--text);border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.07);}
+.sport-tab-btn.active .tab-count{background:rgba(255,255,255,.15);color:var(--text);}
+.sport-tab-btn.active.t-nfl{border-color:#ff6b35;background:rgba(255,107,53,.12);color:#ff6b35;}
+.sport-tab-btn.active.t-nfl .tab-count{background:rgba(255,107,53,.2);color:#ff6b35;}
+.sport-tab-btn.active.t-nba{border-color:#00d4ff;background:rgba(0,212,255,.1);color:#00d4ff;}
+.sport-tab-btn.active.t-nba .tab-count{background:rgba(0,212,255,.18);color:#00d4ff;}
+.sport-tab-btn.active.t-mlb{border-color:#00ff88;background:rgba(0,255,136,.08);color:#00ff88;}
+.sport-tab-btn.active.t-mlb .tab-count{background:rgba(0,255,136,.15);color:#00ff88;}
+.sport-tab-btn.active.t-wnba{border-color:#ff69b4;background:rgba(255,105,180,.1);color:#ff69b4;}
+.sport-tab-btn.active.t-wnba .tab-count{background:rgba(255,105,180,.18);color:#ff69b4;}
+.sport-tab-btn.active.t-ncaafb{border-color:#ffd700;background:rgba(255,215,0,.08);color:#ffd700;}
+.sport-tab-btn.active.t-ncaafb .tab-count{background:rgba(255,215,0,.15);color:#ffd700;}
+.sport-tab-btn.active.t-nhl{border-color:#00e5ff;background:rgba(0,229,255,.08);color:#00e5ff;}
+.sport-tab-btn.active.t-nhl .tab-count{background:rgba(0,229,255,.15);color:#00e5ff;}
+.sport-tab-btn.active.t-all{border-color:var(--accent);background:rgba(0,212,255,.08);color:var(--accent);}
+.sport-tab-btn.active.t-all .tab-count{background:rgba(0,212,255,.18);color:var(--accent);}
 .chip.sport-tab.active:not(.nfl):not(.nba):not(.mlb):not(.wnba):not(.ncaafb):not(.nhl){background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
 
 /* ── DATE BANNER ── */
@@ -278,16 +299,6 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
         <option value="UNDER">Under Only</option>
       </select>
     </div>
-    <div class="filter-group" style="gap:4px;flex-wrap:wrap;">
-      <span class="filter-label">SPORT</span>
-      <button class="chip sport-tab active" id="tab-ALL" onclick="setSportTab('ALL',this)">ALL</button>
-      <button class="chip sport-tab nfl" id="tab-NFL" onclick="setSportTab('NFL',this)">🏈 NFL</button>
-      <button class="chip sport-tab nba" id="tab-NBA" onclick="setSportTab('NBA',this)">🏀 NBA</button>
-      <button class="chip sport-tab mlb" id="tab-MLB" onclick="setSportTab('MLB',this)">⚾ MLB</button>
-      <button class="chip sport-tab wnba" id="tab-WNBA" onclick="setSportTab('WNBA',this)">🏀 WNBA</button>
-      <button class="chip sport-tab ncaafb" id="tab-NCAAFB" onclick="setSportTab('NCAAFB',this)">🏈 CFB</button>
-      <button class="chip sport-tab nhl" id="tab-NHL" onclick="setSportTab('NHL',this)">🏒 NHL</button>
-    </div>
     <div style="margin-left:auto">
       <button class="chip" onclick="resetFilters()">↺ RESET</button>
     </div>
@@ -312,6 +323,17 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
       <span class="best-subtitle" id="bestSubtitle">ranked by confidence score</span>
     </div>
     <div class="best-strip" id="bestStrip"></div>
+  </div>
+
+  <!-- Sport tabs -->
+  <div class="sport-tabs" id="sportTabs">
+    <button class="sport-tab-btn t-all active" id="tab-ALL" onclick="setSportTab('ALL',this)">ALL <span class="tab-count" id="cnt-ALL">—</span></button>
+    <button class="sport-tab-btn t-nfl" id="tab-NFL" onclick="setSportTab('NFL',this)">🏈 NFL <span class="tab-count" id="cnt-NFL">—</span></button>
+    <button class="sport-tab-btn t-nba" id="tab-NBA" onclick="setSportTab('NBA',this)">🏀 NBA <span class="tab-count" id="cnt-NBA">—</span></button>
+    <button class="sport-tab-btn t-mlb" id="tab-MLB" onclick="setSportTab('MLB',this)">⚾ MLB <span class="tab-count" id="cnt-MLB">—</span></button>
+    <button class="sport-tab-btn t-wnba" id="tab-WNBA" onclick="setSportTab('WNBA',this)">🏀 WNBA <span class="tab-count" id="cnt-WNBA">—</span></button>
+    <button class="sport-tab-btn t-ncaafb" id="tab-NCAAFB" onclick="setSportTab('NCAAFB',this)">🏈 CFB <span class="tab-count" id="cnt-NCAAFB">—</span></button>
+    <button class="sport-tab-btn t-nhl" id="tab-NHL" onclick="setSportTab('NHL',this)">🏒 NHL <span class="tab-count" id="cnt-NHL">—</span></button>
   </div>
 
   <!-- Main plays grid -->
@@ -662,6 +684,7 @@ function renderPlays() {
     return scorePlay(b).score - scorePlay(a).score;
   });
 
+  updateTabCounts();
   lbl.style.display = data.length ? 'block' : 'none';
   const sportLbl = activeSportTab === 'ALL' ? 'all sports' : activeSportTab;
   lbl.textContent = `${data.length} play${data.length!==1?'s':''} · ${sportLbl} · sorted by confidence`;
@@ -1020,9 +1043,34 @@ function updateStaleWarn() {
 // ─────────────────────────────────────────────
 function setSportTab(sport, el) {
   activeSportTab = sport;
-  document.querySelectorAll('.sport-tab').forEach(c => c.classList.remove('active'));
-  if (el) el.classList.add('active');
+  document.querySelectorAll('.sport-tab-btn').forEach(c => c.classList.remove('active'));
+  const btn = el || document.getElementById('tab-'+sport);
+  if (btn) btn.classList.add('active');
   renderPlays();
+}
+function updateTabCounts() {
+  const verdictFilter = document.getElementById('verdictFilter')?.value || 'actionable';
+  const dirFilter = document.getElementById('dirFilter')?.value || 'all';
+  const counts = {};
+  let total = 0;
+  allPlays.forEach(p => {
+    if (dirFilter !== 'all' && (p.direction||'OVER') !== dirFilter) return;
+    const v = scorePlay(p).verdict;
+    if (verdictFilter === 'BET' && v !== 'BET') return;
+    if (verdictFilter === 'actionable' && v === 'SKIP') return;
+    const s = (p.sport||'').toUpperCase();
+    counts[s] = (counts[s]||0) + 1;
+    total++;
+  });
+  const cntAll = document.getElementById('cnt-ALL');
+  if (cntAll) cntAll.textContent = total || '—';
+  ['NFL','NBA','MLB','WNBA','NCAAFB','NHL'].forEach(s => {
+    const el = document.getElementById('cnt-'+s);
+    if (el) el.textContent = counts[s] || '—';
+    // hide tab if no plays for this sport
+    const tab = document.getElementById('tab-'+s);
+    if (tab) tab.style.display = counts[s] ? '' : 'none';
+  });
 }
 function toggleSport(sport, el) {
   setSportTab(sport, document.getElementById('tab-'+sport));
@@ -1034,7 +1082,7 @@ function resetFilters() {
   document.getElementById('dirFilter').value = 'all';
   activeSports = new Set(SPORTS);
   activeSportTab = 'ALL';
-  document.querySelectorAll('.sport-tab').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.sport-tab-btn').forEach(c => c.classList.remove('active'));
   const allTab = document.getElementById('tab-ALL');
   if (allTab) allTab.classList.add('active');
   renderPlays();
