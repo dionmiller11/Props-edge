@@ -268,6 +268,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
       <span class="grade-title">📊 YESTERDAY'S RESULTS</span>
       <span class="grade-meta" id="gradeMeta">—</span>
     </div>
+    <div id="gradeSportChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
     <div class="grade-grid" id="gradeGrid"></div>
     <div class="grade-summary" id="gradeSummary"></div>
   </div>
@@ -973,42 +974,73 @@ function findPlayerFuzzy(boxScores, name) {
   return null;
 }
 
+let activeGradeSport = 'ALL';
+let _gradedCache = [];
+
 function renderGradePanel(results, date) {
   const panel = document.getElementById('gradePanel');
   const meta = document.getElementById('gradeMeta');
-  const grid = document.getElementById('gradeGrid');
   const summary = document.getElementById('gradeSummary');
 
   const graded = results.filter(r => r.gradeResult !== 'pending');
   if (!graded.length) return;
 
+  _gradedCache = graded;
   panel.style.display = 'block';
   meta.textContent = date + ' · ' + graded.length + '/' + results.length + ' graded';
 
-  const wins = graded.filter(r => r.gradeResult === 'win').length;
-  const losses = graded.filter(r => r.gradeResult === 'loss').length;
-  const pushes = graded.filter(r => r.gradeResult === 'push').length;
-  const pct = graded.length ? Math.round(wins/graded.length*100) : 0;
+  // Build sport chips
+  const sports = [...new Set(graded.map(r => (r.sport||'').toUpperCase()).filter(Boolean))].sort();
+  const chipsEl = document.getElementById('gradeSportChips');
+  if (sports.length > 1) {
+    chipsEl.style.display = 'flex';
+    chipsEl.innerHTML = ['ALL', ...sports].map(s => {
+      const cnt = s === 'ALL' ? graded.length : graded.filter(r => (r.sport||'').toUpperCase() === s).length;
+      return `<button class="chip grade-sport-chip${s===activeGradeSport?' active':''}" onclick="setGradeSport('${s}',this)" style="font-size:10px;padding:3px 8px">${s} <span style="opacity:.6">${cnt}</span></button>`;
+    }).join('');
+  } else {
+    chipsEl.style.display = 'none';
+  }
 
-  setEl('s-grade', `${wins}-${losses}`);
+  renderGradeGrid(graded, summary);
+}
 
-  grid.innerHTML = graded.map(r => {
+function setGradeSport(sport, el) {
+  activeGradeSport = sport;
+  document.querySelectorAll('.grade-sport-chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderGradeGrid(_gradedCache, document.getElementById('gradeSummary'));
+}
+
+function renderGradeGrid(graded, summary) {
+  const grid = document.getElementById('gradeGrid');
+  const filtered = activeGradeSport === 'ALL' ? graded : graded.filter(r => (r.sport||'').toUpperCase() === activeGradeSport);
+
+  const wins = filtered.filter(r => r.gradeResult === 'win').length;
+  const losses = filtered.filter(r => r.gradeResult === 'loss').length;
+  const pushes = filtered.filter(r => r.gradeResult === 'push').length;
+  const pct = filtered.length ? Math.round(wins/filtered.length*100) : 0;
+
+  if (activeGradeSport === 'ALL') setEl('s-grade', `${wins}-${losses}`);
+
+  grid.innerHTML = filtered.map(r => {
     const dir = r.direction||'OVER';
     const dirArrow = dir==='OVER'?'▲':'▼';
     const rIcon = r.gradeResult==='win'?'✅':r.gradeResult==='loss'?'❌':'↔️';
+    const sportBadge = r.sport ? `<span style="font-size:9px;color:var(--muted);font-family:var(--font);margin-left:5px">${r.sport.toUpperCase()}</span>` : '';
     return `<div class="grade-row">
-      <div class="grade-player">${esc(r.player)}</div>
+      <div class="grade-player">${esc(r.player)}${sportBadge}</div>
       <div class="grade-prop">${dirArrow} ${dir} ${r.line!=null?r.line:''} ${esc(r.prop||'')}</div>
       <div class="grade-result ${r.gradeResult}">${rIcon} ${r.gradeResult.toUpperCase()}${r.gradeActual!=null?' · actual: '+r.gradeActual:''}</div>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="color:var(--muted);font-size:11px;padding:8px">No graded plays for this sport.</div>';
 
   summary.innerHTML = `
     <span class="grade-stat">W: <span class="w">${wins}</span></span>
     <span class="grade-stat">L: <span class="l">${losses}</span></span>
     ${pushes?`<span class="grade-stat">P: <span class="p">${pushes}</span></span>`:''}
     <span class="grade-stat">HIT RATE: <span class="${pct>=60?'w':pct>=50?'p':'l'}">${pct}%</span></span>
-    <span class="grade-stat" style="color:var(--muted)">(${graded.length} graded of ${results.length})</span>
+    <span class="grade-stat" style="color:var(--muted)">(${filtered.length}${activeGradeSport!=='ALL'?' '+activeGradeSport:''} graded)</span>
   `;
 }
 
