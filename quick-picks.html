@@ -265,6 +265,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
         <option value="score">Score (Best first)</option>
         <option value="rate">Hit Rate</option>
         <option value="sharp">Sharp Signal</option>
+        <option value="sport">Sport</option>
       </select>
     </div>
     <div class="filter-group">
@@ -644,6 +645,10 @@ function renderPlays() {
 
   data = [...data].sort((a,b) => {
     if (sortBy === 'rate') return (b.rate||0) - (a.rate||0);
+    if (sortBy === 'sport') {
+      const sc = (a.sport||'').localeCompare(b.sport||'');
+      return sc !== 0 ? sc : scorePlay(b).score - scorePlay(a).score;
+    }
     if (sortBy === 'sharp') {
       const aSig = a.sharpSignal ? 1 : 0;
       const bSig = b.sharpSignal ? 1 : 0;
