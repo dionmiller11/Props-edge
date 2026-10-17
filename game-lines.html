@@ -363,29 +363,35 @@ async function fetchESPNGames(sport){
         gameTime: evt.date?new Date(evt.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'',
         spread: odds?.spread!=null?parseFloat(odds.spread):null,
         total: odds?.overUnder!=null?parseFloat(odds.overUnder):null,
+        _oddsDetails: odds?.details||'',
         ml_home: (()=>{
                    if(odds?.homeTeamOdds?.moneyLine!=null) return parseInt(odds.homeTeamOdds.moneyLine);
                    if(home?.odds?.moneyLine!=null) return parseInt(home.odds.moneyLine);
                    // ESPN details = "ABBR ML" for the FAVORITE only — derive both sides
                    const det = odds?.details||'';
-                   const m = det.match(/([A-Z]+)\s*([+-]?\d+)/);
+                   const m = det.match(/([A-Za-z]+)\s*([+-]?\d+)/);
                    if(!m) return null;
                    const favAbbr = m[1], favML = parseInt(m[2]);
                    const homeAbbr = home?.team?.abbreviation||'';
                    if(favAbbr.toUpperCase()===homeAbbr.toUpperCase()) return favML;
-                   // home is underdog — standard vig flip: -155 fav → +130 dog
-                   return favML < 0 ? Math.round(-favML - 25) : Math.round(-favML + 25);
+                   // home is underdog — use implied probability vig flip
+                   const imp = favML < 0 ? (-favML)/(-favML+100) : 100/(favML+100);
+                   const dog = 1 - imp;
+                   return dog >= 0.5 ? -Math.round(dog/(1-dog)*100) : Math.round((1-dog)/dog*100);
                  })(),
         ml_away: (()=>{
                    if(odds?.awayTeamOdds?.moneyLine!=null) return parseInt(odds.awayTeamOdds.moneyLine);
                    if(away?.odds?.moneyLine!=null) return parseInt(away.odds.moneyLine);
                    const det = odds?.details||'';
-                   const m = det.match(/([A-Z]+)\s*([+-]?\d+)/);
+                   const m = det.match(/([A-Za-z]+)\s*([+-]?\d+)/);
                    if(!m) return null;
                    const favAbbr = m[1], favML = parseInt(m[2]);
                    const awayAbbr = away?.team?.abbreviation||'';
                    if(favAbbr.toUpperCase()===awayAbbr.toUpperCase()) return favML;
-                   return favML < 0 ? Math.round(-favML - 25) : Math.round(-favML + 25);
+                   // away is underdog — use implied probability vig flip
+                   const imp = favML < 0 ? (-favML)/(-favML+100) : 100/(favML+100);
+                   const dog = 1 - imp;
+                   return dog >= 0.5 ? -Math.round(dog/(1-dog)*100) : Math.round((1-dog)/dog*100);
                  })(),
         venue: venue?.fullName||'',
         isOutdoor,
@@ -725,12 +731,22 @@ function renderLines(){
     const pub = g.public;
     const cardClass = g.rlm?'rlm':g.steam?'steam':'';
 
-    // Use moneyline to determine favorite — negative ML = favored team
-    // Fall back to spread sign if no ML available
+    // Determine favorite: ESPN odds.details = "ABBR ML" names the favorite explicitly
+    // Use that as primary source; fall back to ML comparison, then spread sign
     let spreadVal, spreadTeam, spreadDisplay;
     if(g.spread!=null){
       let homeFavored;
-      if(g.ml_home!=null && g.ml_away!=null){
+      const detM = (g._oddsDetails||'').match(/([A-Za-z]+)\s*([+-]?\d+)/);
+      if(detM){
+        // details string names the favorite — check if it matches home or away abbr
+        const favAbbr = detM[1].toUpperCase();
+        homeFavored = favAbbr === g.home.toUpperCase();
+        // If neither matches exactly, fall through to ML comparison
+        if(!homeFavored && favAbbr !== g.away.toUpperCase()){
+          if(g.ml_home!=null && g.ml_away!=null) homeFavored = g.ml_home < g.ml_away;
+          else homeFavored = g.spread < 0;
+        }
+      } else if(g.ml_home!=null && g.ml_away!=null){
         homeFavored = g.ml_home < g.ml_away;
       } else {
         // No ML — use spread sign: ESPN tends to show negative for home favorite
@@ -738,10 +754,10 @@ function renderLines(){
       }
       if(homeFavored){
         spreadTeam = g.home;
-        spreadVal = -Math.abs(g.spread); // home fav gets negative
+        spreadVal = -Math.abs(g.spread);
       } else {
         spreadTeam = g.away;
-        spreadVal = -Math.abs(g.spread); // away fav also gets negative
+        spreadVal = -Math.abs(g.spread);
       }
       spreadDisplay = (spreadVal>0?'+':'')+spreadVal;
     } else { spreadTeam = g.home; spreadDisplay = '—'; }
