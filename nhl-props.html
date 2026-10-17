@@ -111,6 +111,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   <button class="tab" onclick="switchTab('shots')">🏒 SHOTS</button>
   <button class="tab" onclick="switchTab('saves')">🧤 SAVES</button>
   <button class="tab" onclick="switchTab('powerplay')">⚡ POWER PLAY</button>
+  <button class="tab" onclick="switchTab('icetime')">⏱️ ICE TIME</button>
   <button class="tab" onclick="switchTab('sgp')" id="sgpTab">🎰 SGP <span id="sgpCount" style="background:var(--teal);color:#000;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
 </div>
 <main>
@@ -202,6 +203,7 @@ const TAB_PROPS={
   shots:['shotsOnGoal','blockedShots'],
   saves:['saves'],
   powerplay:['powerPlayPoints','powerPlayGoals','powerPlayAssists'],
+  icetime:['timeOnIce'],
 };
 
 const TAB_TITLES={
@@ -212,6 +214,7 @@ const TAB_TITLES={
   shots:'🏒 SHOTS ON GOAL',
   saves:'🧤 SAVES (GOALIES)',
   powerplay:'⚡ POWER PLAY',
+  icetime:'⏱️ MINUTES ON ICE',
 };
 
 const today=new Date(),todayStr=today.toISOString().split('T')[0];
@@ -383,8 +386,8 @@ function clearSearch(){searchQuery='';document.getElementById('playerSearch').va
 
 // ── SGP BUILDER ──
 let sgpLegs=[];
-const CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15};
-function getSGPStatKeyNHL(propKey,prop){const c=((propKey||'')+' '+(prop||'')).toLowerCase();if(/goal/.test(c)&&!/assist/.test(c)&&!/power/.test(c))return'goals';if(/assist/.test(c)&&!/power/.test(c))return'assists';if(/point/.test(c)&&!/power/.test(c))return'points';if(/shot/.test(c))return'shotsOnGoal';if(/save/.test(c))return'saves';if(/power.*point/.test(c))return'powerPlayPoints';if(/power.*goal/.test(c))return'powerPlayGoals';return'unknown';}
+const CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15,timeOnIce_goals:0.35,timeOnIce_assists:0.40,timeOnIce_points:0.45,timeOnIce_shotsOnGoal:0.50,timeOnIce_powerPlayPoints:0.55};
+function getSGPStatKeyNHL(propKey,prop){const c=((propKey||'')+' '+(prop||'')).toLowerCase();if(/time.on.ice|timeonice|minutes.on.ice|toi|ice.time/.test(c))return'timeOnIce';if(/goal/.test(c)&&!/assist/.test(c)&&!/power/.test(c))return'goals';if(/assist/.test(c)&&!/power/.test(c))return'assists';if(/point/.test(c)&&!/power/.test(c))return'points';if(/shot/.test(c))return'shotsOnGoal';if(/save/.test(c))return'saves';if(/power.*point/.test(c))return'powerPlayPoints';if(/power.*goal/.test(c))return'powerPlayGoals';return'unknown';}
 function getSGPCorrNHL(kA,kB){return CORR_MAP_NHL[kA+'_'+kB]??CORR_MAP_NHL[kB+'_'+kA]??0;}
 function corrLabel(s){if(s>=0.5)return{label:'++ STRONG POS',cls:'pos'};if(s>=0.2)return{label:'+ MILD POS',cls:'pos'};if(s<=-0.3)return{label:'-- NEG',cls:'neg'};if(s<=-0.1)return{label:'- MILD NEG',cls:'neg'};return{label:'~ NEUTRAL',cls:'neutral'};}
 function randn(){const u=Math.random(),v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
