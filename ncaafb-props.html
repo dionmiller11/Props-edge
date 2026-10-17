@@ -3,647 +3,779 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NCAAFB Props Edge Finder</title>
+<title>CFB Props Edge Finder</title>
 <style>
-:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#ff6b35;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
-.logo{display:flex;align-items:center;gap:8px;}
-.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;flex-shrink:0;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--accent);}
-.home-btn{color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;letter-spacing:.04em;}
-.btn{border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
-.btn-primary{background:var(--accent);color:#fff;} .btn-primary:hover{background:#ff8c5a;}
-.btn-primary:disabled{background:var(--muted);cursor:not-allowed;}
-.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
-.btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
-.btn-purple{background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35);}
-.data-banner{background:rgba(255,107,53,.04);border-bottom:1px solid rgba(255,107,53,.1);padding:7px 20px;font-size:11px;font-family:var(--font);color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
-.tab{padding:11px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
-main{max-width:1140px;margin:0 auto;padding:18px 16px;}
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
-.filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
-.filter-group{display:flex;align-items:center;gap:6px;}
-input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
-select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
-.chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
-.chip.active{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;}
-.status-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--font);font-size:12px;color:var(--muted);min-height:20px;}
-.status-bar.running{color:var(--accent);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
-.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.progress-wrap{margin-bottom:14px;display:none;}
-.progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
-.progress-fill{height:100%;background:var(--accent2);border-radius:2px;transition:width .3s;width:0%;}
-.progress-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:4px;}
-.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
-.stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--accent);line-height:1;margin-bottom:3px;}
-.stat-card .val.green{color:var(--accent2);} .stat-card .val.gold{color:var(--gold);} .stat-card .val.purple{color:var(--purple);}
-.stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
-.table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;}
-.table-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
-table{width:100%;border-collapse:collapse;font-size:12px;min-width:600px;}
-thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
-tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;}
-tbody tr:hover{background:var(--surface2);} tbody tr:last-child{border-bottom:none;}
-td{padding:9px 10px;white-space:nowrap;font-family:var(--font);vertical-align:middle;}
-.player-name{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--text);}
-.sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
-.prob-badge{font-size:13px;font-weight:700;}
-.prob-badge.elite{color:var(--gold);} .prob-badge.strong{color:var(--accent2);} .prob-badge.solid{color:var(--accent);}
-.edge-badge{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;}
-.edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
-.edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
-.edge-badge.ok{background:rgba(255,107,53,.1);color:var(--accent);border:1px solid rgba(255,107,53,.2);}
-.edge-badge.limited{background:rgba(107,122,150,.1);color:var(--muted);border:1px solid rgba(107,122,150,.2);}
-.pp-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,107,53,.1);color:var(--accent);border:1px solid rgba(255,107,53,.2);margin-left:4px;font-family:var(--font);}
-.odds-badge{font-size:9px;padding:1px 5px;border-radius:3px;font-family:var(--font);font-weight:700;margin-left:3px;}
-.odds-badge.goblin{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
-.odds-badge.demon{background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.2);}
-.sim-bar{display:flex;align-items:center;gap:4px;}
-.sim-fill{height:4px;border-radius:2px;background:var(--accent2);}
-.sim-bg{height:4px;border-radius:2px;background:var(--border);flex:1;}
-.empty{padding:44px 20px;text-align:center;color:var(--muted);}
-.empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
-.empty p{font-size:13px;line-height:1.6;}
-.info-box{background:rgba(255,107,53,.05);border:1px solid rgba(255,107,53,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.7;}
-.info-box strong{color:var(--accent);}
-footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
-.toast.show{transform:translateY(0);opacity:1;}
-@media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 6px;font-size:11px;}.hide-mobile{display:none;}}
+  :root {
+    --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
+    --accent:#ffd700;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;
+    --text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;
+    --font:'DM Mono','Fira Code','Courier New',monospace;
+    --sans:'DM Sans','Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+  .logo{display:flex;align-items:center;gap:8px;}
+  .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;flex-shrink:0;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;}
+  .logo span{color:var(--accent);}
+  .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 9px;border:1px solid var(--border);border-radius:4px;}
+  .btn{border:none;padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+  .btn-primary{background:var(--accent);color:#000;}
+  .btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);}
+  .btn-primary:disabled{background:var(--muted);cursor:not-allowed;transform:none;}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+  .btn-purple{background:rgba(176,110,255,.15);color:#b06eff;border:1px solid rgba(176,110,255,.35);}
+  .api-banner{background:rgba(255,215,0,.03);border-bottom:1px solid rgba(255,215,0,.1);padding:9px 20px;font-size:12px;color:var(--muted);}
+  .api-row{display:flex;align-items:center;gap:8px;}
+  .api-banner input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:5px;font-family:var(--font);font-size:11px;outline:none;max-width:480px;}
+  .api-banner input:focus{border-color:var(--accent);}
+  .api-status{font-size:10px;font-family:var(--font);padding:3px 7px;border-radius:3px;white-space:nowrap;}
+  .api-status.connected{color:var(--accent2);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2);}
+  .api-status.missing{color:var(--warn);background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);}
+  .data-banner{background:rgba(255,215,0,.03);border-bottom:1px solid rgba(255,215,0,.08);padding:7px 20px;font-size:11px;font-family:var(--font);color:var(--muted);display:flex;align-items:center;gap:8px;}
+  .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{padding:11px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+  .filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
+  .filter-group{display:flex;align-items:center;gap:6px;}
+  input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
+  select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
+  .chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+  .chip.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .status-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--font);font-size:12px;color:var(--muted);min-height:20px;}
+  .status-bar.running{color:var(--accent);}
+  .status-bar.done{color:var(--accent2);}
+  .status-bar.error{color:var(--miss);}
+  .progress-wrap{margin-bottom:14px;display:none;}
+  .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%;}
+  .progress-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:4px;}
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--accent);line-height:1;margin-bottom:3px;}
+  .stat-card .val.green{color:var(--accent2);}
+  .stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+  .parlay-panel{background:var(--surface);border:1px solid rgba(255,215,0,.3);border-radius:10px;padding:16px 18px;margin-bottom:16px;display:none;}
+  .parlay-panel.open{display:block;}
+  .parlay-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .parlay-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;}
+  .parlay-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .parlay-odds{font-family:var(--font);font-size:18px;font-weight:700;color:var(--gold);}
+  .parlay-count{font-family:var(--font);font-size:11px;color:var(--muted);}
+  .parlay-legs{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .parlay-leg{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);}
+  .parlay-leg-info{flex:1;}
+  .parlay-leg-player{font-family:var(--sans);font-weight:600;color:var(--text);font-size:12px;}
+  .parlay-leg-prop{color:var(--muted);font-size:10px;font-family:var(--font);margin-top:1px;}
+  .parlay-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;}
+  .parlay-remove:hover{color:var(--miss);}
+  .parlay-empty{text-align:center;padding:16px;color:var(--muted);font-size:12px;}
+  .parlay-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .add-parlay-btn{font-size:10px;padding:2px 8px;border-radius:3px;background:rgba(255,215,0,.1);color:var(--accent);border:1px solid rgba(255,215,0,.2);cursor:pointer;font-family:var(--font);transition:all .15s;}
+  .add-parlay-btn:hover{background:rgba(255,215,0,.2);}
+  .add-parlay-btn.added{background:rgba(255,215,0,.3);color:#000;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;}
+  .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;color:var(--accent);}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:560px;}
+  thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+  tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;}
+  tbody tr:hover{background:var(--surface2);}
+  tbody tr:last-child{border-bottom:none;}
+  td{padding:9px 10px;white-space:nowrap;font-family:var(--font);vertical-align:middle;}
+  .player-name{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--text);}
+  .sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
+  .pos-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,215,0,.08);color:var(--accent);border:1px solid rgba(255,215,0,.15);margin-right:4px;font-family:var(--font);}
+  .school-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,215,0,.06);color:var(--gold);border:1px solid rgba(255,215,0,.12);font-family:var(--font);}
+  .prop-type{color:var(--accent);font-size:11px;}
+  .hit-rate{font-size:13px;font-weight:700;}
+  .hit-rate.elite{color:var(--gold);}
+  .hit-rate.strong{color:var(--accent2);}
+  .hit-rate.solid{color:var(--accent);}
+  .sparkline{display:flex;gap:3px;align-items:center;}
+  .spark-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;}
+  .spark-dot.hit{background:var(--hit);}
+  .spark-dot.miss{background:rgba(255,77,109,.4);}
+  .streak-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;}
+  .streak-badge.hot{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
+  .streak-badge.cold{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+  .edge-badge{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;}
+  .edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);}
+  .edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
+  .edge-badge.ok{background:rgba(255,215,0,.06);color:var(--accent);border:1px solid rgba(255,215,0,.15);}
+  .empty{padding:44px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;}
+  .empty p{font-size:13px;line-height:1.6;}
+  .empty a{color:var(--accent);text-decoration:none;}
+  .loading-row td{padding:32px;text-align:center;color:var(--muted);font-size:13px;}
+  .error-box{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);border-radius:8px;padding:12px 16px;color:var(--miss);font-size:13px;margin-bottom:14px;display:none;}
+  .token-box{background:rgba(255,215,0,.04);border:1px solid rgba(255,215,0,.15);border-radius:8px;padding:14px 16px;margin-bottom:14px;font-size:12px;display:none;}
+  .token-box p{color:var(--muted);line-height:1.6;margin-bottom:8px;}
+  .token-box ol{color:var(--muted);padding-left:16px;line-height:1.8;}
+  .token-box li{font-family:var(--font);font-size:11px;}
+  .thin-market-warn{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--gold);display:none;}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;}
+  .toast.show{transform:translateY(0);opacity:1;}
+  .search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+  .search-input:focus{border-color:var(--accent);}
+  .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+  .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
+  footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
+  @media(max-width:700px){
+    .summary{grid-template-columns:repeat(2,1fr);}
+    .filters{flex-direction:column;align-items:flex-start;}
+    header,main{padding-left:12px;padding-right:12px;}
+    td,th{padding:7px 6px;font-size:11px;}
+    .hide-mobile{display:none;}
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="logo">
-    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" class="home-btn">⌂ HOME</a>
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" style="color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;">⌂ HOME</a>
     <div class="logo-dot"></div>
-    <h1>NCAAFB <span>PROPS</span> EDGE FINDER</h1>
+    <h1>CFB <span>PROPS</span> EDGE FINDER</h1>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-    <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="dateBadge">—</span>
+  <div class="header-right">
+    <div class="date-badge" id="dateBadge">—</div>
     <button class="btn btn-green" id="exportBtn" onclick="exportCSV()" style="display:none">📊 CSV</button>
+    <button class="btn btn-purple" id="parlayBtn" onclick="toggleParlay()" style="display:none">🎰 Parlay</button>
     <button class="btn btn-primary" id="runBtn" onclick="runScan()">⚡ RUN SCAN</button>
   </div>
 </header>
+
+<div class="api-banner">
+  <div class="api-row">
+    <span style="white-space:nowrap;font-size:11px">🔑 Linemate Token:</span>
+    <input type="password" id="lmToken" placeholder="Same JWT token as NFL props — shared from linemate.io DevTools" oninput="saveKey('lmToken',this.value)">
+    <span class="api-status missing" id="lmStatus">NOT SET</span>
+  </div>
+</div>
+
 <div class="data-banner">
   <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
-  PRIZEPICKS LINES · MONTE CARLO SIM (ESPN CFB STATS) · NO API KEY REQUIRED
+  CFB PROP MARKETS ARE THINNER THAN NFL — EXPECT FEWER RESULTS, MARQUEE GAMES ONLY
+  <span id="dataTs" style="margin-left:auto"></span>
 </div>
+
 <div class="tabs">
-  <button class="tab active" onclick="switchTab('all',this)">🏈 ALL</button>
-  <button class="tab" onclick="switchTab('qb',this)">📡 QB</button>
-  <button class="tab" onclick="switchTab('rb',this)">🏃 RB</button>
-  <button class="tab" onclick="switchTab('wr',this)">🎯 WR/TE</button>
-  <button class="tab" onclick="switchTab('pass_yds',this)">Pass Yds</button>
-  <button class="tab" onclick="switchTab('rush_yds',this)">Rush Yds</button>
-  <button class="tab" onclick="switchTab('rec_yds',this)">Rec Yds</button>
-  <button class="tab" onclick="switchTab('tds',this)">TDs</button>
+  <button class="tab active" onclick="switchTab('all')">🏈 ALL PROPS</button>
+  <button class="tab" onclick="switchTab('passing')">🎯 PASSING</button>
+  <button class="tab" onclick="switchTab('rushing')">💨 RUSHING</button>
+  <button class="tab" onclick="switchTab('receiving')">✋ RECEIVING</button>
+  <button class="tab" onclick="switchTab('td')">⭐ TDs</button>
 </div>
+
 <main>
-  <div class="info-box">
-    <strong>HOW THIS WORKS:</strong> Pulls live NCAAFB lines from PrizePicks (free). Fetches each player's season stats from ESPN CFB API. Runs <strong>10,000 Monte Carlo simulations</strong> per player using their actual stat distribution to generate a hit probability. No Linemate token needed.
-    <br><strong>GOBLIN</strong> lines = easier to hit (lower line). <strong>DEMON</strong> lines = harder to hit (higher line). <strong>STANDARD</strong> = base line.
-  </div>
-  <div class="filters">
-    <div class="filter-group"><span class="filter-label">MIN PROB</span><input type="number" id="minProb" value="60" min="50" max="95" step="5" oninput="renderTable()">%</div>
-    <div class="filter-group"><span class="filter-label">SORT</span>
-      <select id="sortBy" onchange="renderTable()">
-        <option value="prob">Hit Probability</option>
-        <option value="edge">Edge Score</option>
-        <option value="games">Games Simulated</option>
-      </select>
-    </div>
-    <div class="filter-group"><span class="filter-label">ODDS TYPE</span>
-      <select id="oddsFilter" onchange="renderTable()">
-        <option value="all">All</option>
-        <option value="standard">Standard Only</option>
-        <option value="goblin">Goblin (Easy)</option>
-        <option value="demon">Demon (Hard)</option>
-      </select>
-    </div>
-    <div class="filter-group" style="margin-left:auto">
-      <button class="chip" id="upcomingChip" onclick="toggleUpcoming(this)">⏰ UPCOMING ONLY</button>
-      <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
-    </div>
-  </div>
-  <div class="status-bar" id="statusBar">Ready — click ⚡ RUN SCAN to fetch PrizePicks lines and run Monte Carlo simulations</div>
+  <div class="status-bar" id="statusBar"></div>
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="progress-label" id="progressLabel">Starting…</div>
+    <div class="progress-label" id="progressLabel"></div>
   </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Token instructions -->
+  <div class="token-box" id="tokenBox">
+    <p>🔑 <strong>Linemate JWT token required</strong> — same token as your NFL props tool (already saved if you've used NFL props).</p>
+    <p>To get a new token:</p>
+    <ol>
+      <li>Open <a href="https://linemate.io/ncaafb/trends" target="_blank" style="color:var(--accent)">linemate.io/ncaafb/trends</a> in your browser</li>
+      <li>Open DevTools → Network tab → filter "trends"</li>
+      <li>Click Headers → copy the Authorization Bearer token</li>
+      <li>Paste it above (expires ~1hr)</li>
+    </ol>
+  </div>
+
+  <!-- Thin market warning -->
+  <div class="thin-market-warn" id="thinMarketWarn">
+    ⚠️ <strong>Thin market:</strong> Only <span id="thinCount">0</span> props found above your min rate. CFB props are only posted for marquee matchups — try lowering the min rate or check back closer to game time.
+  </div>
+
+  <!-- Summary -->
   <div class="summary" id="summary" style="display:none">
-    <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL PROPS</div></div>
-    <div class="stat-card"><div class="val gold" id="s-fire">0</div><div class="lbl">🔥 80%+ PROB</div></div>
-    <div class="stat-card"><div class="val" id="s-strong">0</div><div class="lbl">65-79% PROB</div></div>
-    <div class="stat-card"><div class="val purple" id="s-limited">0</div><div class="lbl">⚠️ LIMITED DATA</div></div>
+    <div class="stat-card"><div class="val" id="s-total">0</div><div class="lbl">PROPS SCANNED</div></div>
+    <div class="stat-card"><div class="val green" id="s-elite">0</div><div class="lbl">90%+ HIT RATE</div></div>
+    <div class="stat-card"><div class="val" id="s-streak">0</div><div class="lbl">ACTIVE STREAKS</div></div>
+    <div class="stat-card"><div class="val" id="s-games">0</div><div class="lbl">GAMES WITH PROPS</div></div>
   </div>
+
+  <!-- Parlay panel -->
+  <div class="parlay-panel" id="parlayPanel">
+    <div class="parlay-header">
+      <span class="parlay-title">🎰 CFB PARLAY BUILDER</span>
+      <div class="parlay-meta">
+        <span class="parlay-count" id="parlayCount">0 legs</span>
+        <span class="parlay-odds" id="parlayOdds">—</span>
+        <div class="parlay-actions">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:11px" onclick="logParlayAll()">📒 Log All</button>
+        </div>
+      </div>
+    </div>
+    <div class="parlay-legs" id="parlayLegs">
+      <div class="parlay-empty">Add props using the + button on any row</div>
+    </div>
+  </div>
+
+  <!-- Table -->
   <div class="table-wrap">
     <div class="table-header">
-      <span class="table-title" id="tableTitle">🏈 ALL NCAAFB PROPS</span>
-      <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span>
+      <span class="table-title" id="tableTitle">🏈 ALL CFB PROPS — THIS WEEK</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--font)" id="lastRun"></span>
+      </div>
     </div>
     <div class="table-scroll">
       <table>
-        <thead><tr>
-          <th>PLAYER</th>
-          <th>PROP</th>
-          <th>LINE</th>
-          <th>SIM PROB</th>
-          <th class="hide-mobile">AVG / GAME</th>
-          <th class="hide-mobile">GAMES</th>
-          <th class="hide-mobile">STD DEV</th>
-          <th>EDGE</th>
-          <th>+</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th>PLAYER / SCHOOL</th>
+            <th>PROP</th>
+            <th>LINE</th>
+            <th>HIT RATE</th>
+            <th>LAST 10</th>
+            <th>STREAK</th>
+            <th>EDGE</th>
+            <th>ODDS</th>
+            <th class="hide-mobile">MATCHUP</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody id="tableBody">
-          <tr><td colspan="9"><div class="empty"><div class="empty-icon">🏈</div><p>Click ⚡ RUN SCAN to fetch PrizePicks NCAAFB lines and run Monte Carlo simulations.</p></div></td></tr>
+          <tr><td colspan="10" style="padding:32px;text-align:center;color:var(--muted)">
+            Hit ⚡ RUN SCAN to load this week's CFB props
+          </td></tr>
         </tbody>
       </table>
     </div>
   </div>
 </main>
+
 <footer>
-  <span id="lastRun">Never run</span>
-  <span style="color:var(--accent)">● PRIZEPICKS · ESPN CFB · MONTE CARLO</span>
+  <span>Props Edge · CFB Props</span>
+  <span id="footerStatus" style="color:var(--muted)">—</span>
 </footer>
 <div class="toast" id="toast"></div>
 
 <script>
-// ── CONFIG ──
-// League IDs to try for NCAAFB (PrizePicks changes these occasionally)
-const PP_LEAGUE_IDS = [182, 183, 184, 272, 273];
-const PP_BASE = 'https://partner-api.prizepicks.com/projections?per_page=250&single_stat=true';
-const PP_URL = PP_BASE + '&league_id=182';
-const ESPN_CFB = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football';
-const PROXY = 'https://sports-proxy.dion-miller11.workers.dev';
-const MC_SIMULATIONS = 10000;
+// ─────────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────────
+const LINEMATE_PROVIDERS = 'betmgm,betrivers,fanduel,caesars,draftkings,fanatics,novig,prizepicks,underdog,bet365,williamhill';
+const LINEMATE_BASE = 'https://api.linemate.io/api/ncaafb/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER';
+const LINEMATE_ENDPOINTS = [
+  LINEMATE_BASE + '&limit=200&offset=0',
+  LINEMATE_BASE + '&limit=200&offset=200',
+  LINEMATE_BASE + '&limit=200&offset=400',
+];
+const KV = 'https://line-monitor.dion-miller11.workers.dev';
 
-// PrizePicks stat type → ESPN stat mapping
-const STAT_MAP = {
-  'Passing Yards':      {espn:'passing',    key:'passingYards',    pos:'QB'},
-  'Completions':        {espn:'passing',    key:'completions',     pos:'QB'},
-  'Pass Attempts':      {espn:'passing',    key:'passingAttempts', pos:'QB'},
-  'Passing TDs':        {espn:'passing',    key:'passingTouchdowns',pos:'QB'},
-  'Rushing Yards':      {espn:'rushing',    key:'rushingYards',    pos:'RB'},
-  'Rush Attempts':      {espn:'rushing',    key:'rushingAttempts', pos:'RB'},
-  'Receiving Yards':    {espn:'receiving',  key:'receivingYards',  pos:'WR'},
-  'Receptions':         {espn:'receiving',  key:'receptions',      pos:'WR'},
-  'Receiving TDs':      {espn:'receiving',  key:'receivingTouchdowns',pos:'WR'},
-  'Rushing TDs':        {espn:'rushing',    key:'rushingTouchdowns',pos:'RB'},
-  'Touchdowns':         {espn:'general',    key:'touchdowns',      pos:'ANY'},
+const PROP_CATS = {
+  passing:   ['passingYards','passingAttempts','passingCompletions','passingTouchdowns','interceptions'],
+  rushing:   ['rushingYards','rushingAttempts','rushingTouchdowns'],
+  receiving: ['receptions','receivingYards','receivingTouchdowns','targets','receivingTargets'],
+  td:        ['passingTouchdowns','rushingTouchdowns','receivingTouchdowns','anytimeTouchdown','touchdowns'],
 };
 
-// Tab filtering
-const TAB_FILTER = {
-  all: null,
-  qb: ['Passing Yards','Completions','Pass Attempts','Passing TDs'],
-  rb: ['Rushing Yards','Rush Attempts','Receiving Yards','Receptions','Rushing TDs'],
-  wr: ['Receiving Yards','Receptions','Receiving TDs'],
-  pass_yds: ['Passing Yards'],
-  rush_yds: ['Rushing Yards'],
-  rec_yds: ['Receiving Yards'],
-  tds: ['Passing TDs','Rushing TDs','Receiving TDs','Touchdowns'],
+const PROP_LABELS = {
+  passingYards:'Pass Yds', passingAttempts:'Pass Att', passingCompletions:'Completions',
+  passingTouchdowns:'Pass TDs', interceptions:'INTs',
+  rushingYards:'Rush Yds', rushingAttempts:'Rush Att', rushingTouchdowns:'Rush TD',
+  receptions:'Receptions', receivingYards:'Rec Yds', receivingTouchdowns:'Rec TD',
+  targets:'Targets', receivingTargets:'Targets',
+  anytimeTouchdown:'Anytime TD', touchdowns:'TDs',
+  rushingReceivingYards:'Rush+Rec Yds', rushingPlusReceivingYards:'Rush+Rec Yds',
+  longestReception:'Longest Rec', longestRush:'Longest Rush',
 };
 
-let allData = [], activeTab = 'all', upcomingOnly = false, parlayLegs = [];
+function cleanPropName(rawName) {
+  if (!rawName) return rawName;
+  return rawName
+    .replace(/_PLUS_/gi,'+').replace(/_/g,' ')
+    .split(' ').map(w=>w?w[0].toUpperCase()+w.slice(1).toLowerCase():'').join(' ')
+    .replace(/Yards/g,'Yds').replace(/Attempts/g,'Att').replace(/Touchdowns/g,'TDs')
+    .replace(/Completions/g,'Comp').replace(/Receptions/g,'Rec')
+    .replace(/Rushing/g,'Rush').replace(/Passing/g,'Pass').replace(/Receiving/g,'Rec');
+}
+
 const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+let allData = [], activeTab = 'all', edgeOnly = false, parlayLegs = [];
+
 document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 
-// ── MONTE CARLO ENGINE ──
-function monteCarloSim(avg, stdDev, line, direction, n=MC_SIMULATIONS){
-  if(avg === null || stdDev === null || n === 0) return null;
-  // Use log-normal distribution for counting stats (can't go below 0)
-  // Convert to log-normal params
-  const variance = stdDev * stdDev;
-  const mu = Math.log((avg * avg) / Math.sqrt(variance + avg * avg));
-  const sigma = Math.sqrt(Math.log(1 + variance / (avg * avg)));
-  let hits = 0;
-  for(let i = 0; i < n; i++){
-    // Box-Muller transform for normal random
-    const u1 = Math.random(), u2 = Math.random();
-    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    const val = Math.exp(mu + sigma * z);
-    if(direction === 'OVER' ? val > line : val < line) hits++;
-  }
-  return Math.round(hits / n * 100);
+// Load saved token
+const _urlParams = new URLSearchParams(window.location.search);
+const _urlToken = _urlParams.get('token')||_urlParams.get('lmToken');
+if (_urlToken) { try{localStorage.setItem('lmToken',_urlToken);}catch(e){} }
+const _saved = getStored('lmToken');
+if (_saved) { document.getElementById('lmToken').value=_saved; updateStatus(true); }
+
+function getStored(k){ try{return localStorage.getItem(k)||'';}catch(e){return '';} }
+function saveKey(k,v){ try{localStorage.setItem(k,v.trim());}catch(e){} updateStatus(!!v.trim()); }
+function updateStatus(ok){
+  const el=document.getElementById('lmStatus');
+  el.textContent=ok?'CONNECTED':'NOT SET';
+  el.className='api-status '+(ok?'connected':'missing');
 }
 
-// ── FETCH PRIZEPICKS NCAAFB ──
-async function fetchPrizePicks(){
-  // Try proxy first (sports-proxy allowlist needs partner-api.prizepicks.com)
-  const proxyUrl = `${PROXY}?url=${encodeURIComponent(PP_URL)}`;
-  try {
-    const res = await fetch(proxyUrl);
-    if(res.ok){
-      const text = await res.text();
-      // Check if proxy returned an error page or JSON
-      if(text.startsWith('{')||text.startsWith('[')){
-        const data = JSON.parse(text);
-        if(data.data) return data;
-      }
-    }
-  } catch(e){ console.warn('Proxy failed:', e.message); }
-  
-  // Try alternate PrizePicks endpoints
-  const endpoints = [
-    'https://partner-api.prizepicks.com/projections?league_id=182&per_page=250&single_stat=true',
-    'https://api.prizepicks.com/projections?league_id=182&per_page=250&single_stat=true',
-  ];
-  
-  for(const url of endpoints){
-    try {
-      const res = await fetch(url, {
-        headers:{
-          'Accept':'application/json',
-          'Accept-Language':'en-US,en;q=0.9',
-          'Origin':'https://app.prizepicks.com',
-          'Referer':'https://app.prizepicks.com/',
-        },
-        mode:'cors',
-      });
-      if(res.ok){
-        const data = await res.json();
-        if(data.data) return data;
-      }
-    } catch(e){ console.warn('Direct fetch failed:', e.message); }
-  }
-  
-  throw new Error('PrizePicks API blocked by browser CORS policy. Add partner-api.prizepicks.com to your Cloudflare proxy allowlist.');
-}
-
-// ── FETCH PLAYER STATS FROM ESPN CFB ──
-async function fetchPlayerStats(playerName, statType){
-  try {
-    const encoded = encodeURIComponent(playerName);
-    // Search for player
-    const searchUrl = `https://site.api.espn.com/apis/common/v3/search?query=${encoded}&limit=5&type=athlete&sport=football&league=college-football`;
-    const searchRes = await fetch(searchUrl);
-    if(!searchRes.ok) return null;
-    const searchData = await searchRes.json();
-    const athlete = searchData.results?.[0]?.items?.[0];
-    if(!athlete) return null;
-    const athleteId = athlete.id;
-    // Get stats
-    const statsUrl = `https://site.api.espn.com/apis/site/v2/sports/football/college-football/athletes/${athleteId}/stats`;
-    const statsRes = await fetch(statsUrl);
-    if(!statsRes.ok) return null;
-    const statsData = await statsRes.json();
-    return parsePlayerStats(statsData, statType, athleteId);
-  } catch(e){ return null; }
-}
-
-function parsePlayerStats(data, statType, athleteId){
-  const mapping = STAT_MAP[statType];
-  if(!mapping) return null;
-  const splits = data.splits?.categories || [];
-  // Find the right category
-  const cat = splits.find(c => c.name?.toLowerCase().includes(mapping.espn));
-  if(!cat) return null;
-  const labels = cat.labels || [];
-  const statIdx = labels.findIndex(l => l.toLowerCase().replace(/\s/g,'') === mapping.key.toLowerCase().replace(/\s/g,''));
-  if(statIdx === -1) return null;
-  const rows = cat.athletes || [];
-  const row = rows[0]; // first/only athlete
-  if(!row) return null;
-  const stats = row.stats || [];
-  const gamesIdx = labels.findIndex(l => l.toLowerCase() === 'gp' || l.toLowerCase() === 'g');
-  const games = gamesIdx !== -1 ? parseInt(stats[gamesIdx]) || 0 : 0;
-  const total = parseFloat(stats[statIdx]) || 0;
-  if(!games || !total) return null;
-  const avg = total / games;
-  // Estimate std dev from typical CV for this stat type
-  const cvMap = {
-    passingYards: 0.35, completions: 0.32, passingAttempts: 0.28, passingTouchdowns: 0.75,
-    rushingYards: 0.55, rushingAttempts: 0.40, receivingYards: 0.65, receptions: 0.52,
-    rushingTouchdowns: 0.90, receivingTouchdowns: 0.90, touchdowns: 0.80,
+// ─────────────────────────────────────────────
+//  TABS
+// ─────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  const tabs = ['all','passing','rushing','receiving','td'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===tab));
+  const titles = {
+    all:'🏈 ALL CFB PROPS', passing:'🎯 PASSING PROPS',
+    rushing:'💨 RUSHING PROPS', receiving:'✋ RECEIVING PROPS', td:'⭐ TOUCHDOWN PROPS'
   };
-  const cv = cvMap[mapping.key] || 0.50;
-  const stdDev = avg * cv;
-  return {avg, stdDev, games, total, athleteId};
+  document.getElementById('tableTitle').textContent = (titles[tab]||'🏈 CFB PROPS') + ' — THIS WEEK';
+  renderTable();
 }
 
-// ── MAIN SCAN ──
-async function runScan(){
+// ─────────────────────────────────────────────
+//  SCAN
+// ─────────────────────────────────────────────
+async function runScan() {
+  const token = getStored('lmToken');
+  if (!token) {
+    document.getElementById('tokenBox').style.display = 'block';
+    showError('Paste your Linemate JWT token above first.');
+    return;
+  }
   const btn = document.getElementById('runBtn');
+  const minRate = parseInt(document.getElementById('minRate').value)||70;
   btn.disabled = true; btn.textContent = '⏳ Scanning…';
   document.getElementById('summary').style.display = 'none';
-  document.getElementById('exportBtn').style.display = 'none';
-  setStatus('running','📡 Fetching PrizePicks NCAAFB lines…');
-  setProgress(5, 'Connecting to PrizePicks…');
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('tokenBox').style.display = 'none';
+  document.getElementById('thinMarketWarn').style.display = 'none';
+  ['exportBtn','parlayBtn'].forEach(id => document.getElementById(id).style.display='none');
+  setStatus('running','📡 Fetching CFB props from Linemate…');
+  setLoadingRow();
 
   try {
-    // 1. Fetch PrizePicks
-    const ppData = await fetchPrizePicks();
-    const projections = ppData.data || [];
-    // Pull player info from included
-    const included = ppData.included || [];
-    const playerMap = {};
-    const leagueMap = {};
-    included.forEach(item => {
-      if(item.type === 'new_player') playerMap[item.id] = item.attributes;
-      if(item.type === 'league') leagueMap[item.id] = item.attributes;
-    });
+    setProgress(20, 'Fetching Linemate NCAAFB trends…');
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
 
-    // Filter to NCAAFB — try by league name, ppid, or known IDs
-    let cfbProjs = projections.filter(p => {
-      const leagueId = p.relationships?.league?.data?.id;
-      const league = leagueMap[leagueId];
-      return league?.name?.toLowerCase().includes('college football') ||
-             league?.abbreviation?.toLowerCase() === 'cfb' ||
-             p.attributes?.league_ppid === 'CFB' ||
-             ['182','183','184','272','273'].includes(leagueId);
-    });
+    setProgress(40, 'Fetching player props…');
+    const responses = await Promise.all(LINEMATE_ENDPOINTS.map(url =>
+      fetch(url, {headers}).then(r => {
+        if (r.status===401) throw new Error('Token expired — get a new one from linemate.io/ncaafb/trends DevTools');
+        if (!r.ok) throw new Error('Linemate API error: '+r.status);
+        return r.json();
+      }).catch(e => { console.warn('Endpoint failed:', e.message); return []; })
+    ));
 
-    // If nothing found, try fetching without league_id filter to find CFB
-    if(!cfbProjs.length){
-      setStatus('running','🔍 Searching all PrizePicks leagues for CFB…');
-      try {
-        const allUrl = `${PP_BASE}&per_page=500`;
-        const proxyAll = `${PROXY}?url=${encodeURIComponent(allUrl)}`;
-        const allRes = await fetch(proxyAll);
-        if(allRes.ok){
-          const allData = await allRes.json();
-          const allIncluded = allData.included || [];
-          const allLeagues = {};
-          allIncluded.forEach(item => { if(item.type==='league') allLeagues[item.id]=item.attributes; });
-          // Find CFB league ID
-          const cfbLeague = Object.entries(allLeagues).find(([id,l])=>
-            l.name?.toLowerCase().includes('college football')||l.abbreviation?.toLowerCase()==='cfb'
-          );
-          if(cfbLeague){
-            const cfbId = cfbLeague[0];
-            cfbProjs = (allData.data||[]).filter(p=>p.relationships?.league?.data?.id===cfbId);
-            // Update included maps
-            allIncluded.forEach(item=>{
-              if(item.type==='new_player') playerMap[item.id]=item.attributes;
-              if(item.type==='league') leagueMap[item.id]=item.attributes;
-            });
-          }
-        }
-      } catch(e){ console.warn('All-league search failed:', e.message); }
-    }
+    const data = responses.flat();
+    setProgress(70, 'Processing '+data.length+' props…');
 
-    if(!cfbProjs.length){
-      setStatus('error','❌ No NCAAFB props found on PrizePicks today — check back closer to kickoff (usually 9-10am Saturday)');
-      btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
-      return;
-    }
-
-    setProgress(20, `Found ${cfbProjs.length} NCAAFB props — running simulations…`);
-
-    // 2. Process each prop
     const results = [];
-    let done = 0;
+    for (const item of data) {
+      try {
+        const playerName = item.player?.fullName || 'Unknown';
+        const team = item.team?.code || item.team?.name || '—';
+        const opp  = item.opposingTeam?.code || item.opposingTeam?.name || '—';
+        const pos  = item.player?.position || '';
+        const rawName = item.market?.name || '';
+        const propType = rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
+        const propLabel = PROP_LABELS[propType] || cleanPropName(rawName) || propType;
+        const gameTime = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : '';
+        const direction = (item.outcome||'over').toUpperCase();
 
-    // Group by player to avoid duplicate ESPN lookups
-    const playerGroups = {};
-    cfbProjs.forEach(p => {
-      const pid = p.relationships?.new_player?.data?.id;
-      if(!playerGroups[pid]) playerGroups[pid] = [];
-      playerGroups[pid].push(p);
-    });
-
-    const playerIds = Object.keys(playerGroups);
-    for(let pi = 0; pi < playerIds.length; pi++){
-      const pid = playerIds[pi];
-      const group = playerGroups[pid];
-      const playerInfo = playerMap[pid] || {};
-      const playerName = playerInfo.display_name || playerInfo.name || 'Unknown';
-      const team = playerInfo.team || '';
-
-      setProgress(20 + Math.round((pi/playerIds.length)*70), `Simulating: ${playerName} (${pi+1}/${playerIds.length})…`);
-
-      for(const proj of group){
-        const attr = proj.attributes;
-        const statType = attr.stat_type || attr.stat_display_name || '';
-        if(!STAT_MAP[statType]) continue; // skip unmapped stats
-
-        const line = parseFloat(attr.line_score) || 0;
-        const oddsType = attr.odds_type || 'standard';
-        const startTime = attr.start_time ? new Date(attr.start_time) : null;
-        const gameTime = startTime ? startTime.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : '';
-        const trendingCount = attr.trending_count || 0;
-        const direction = 'OVER'; // PrizePicks is always bet over or under vs the line
-
-        // Fetch ESPN stats
-        const statsData = await fetchPlayerStats(playerName, statType);
-
-        let prob = null, avg = null, stdDev = null, games = 0, limitedData = false;
-
-        if(statsData && statsData.avg > 0){
-          avg = statsData.avg;
-          stdDev = statsData.stdDev;
-          games = statsData.games;
-          // Run OVER simulation
-          prob = monteCarloSim(avg, stdDev, line, 'OVER');
-        } else {
-          limitedData = true;
-          prob = null;
+        const books = item.market?.books || {};
+        let bestLine=null, bestOverOdds=null, bestUnderOdds=null, bookOverCount=0, bookUnderCount=0;
+        for (const bk of Object.keys(books)) {
+          const b = books[bk];
+          const ol = b?.over?.current?.value;
+          const oo = b?.over?.current?.odds?.american;
+          const uo = b?.under?.current?.odds?.american;
+          if (ol && !bestLine) bestLine = ol;
+          if (oo) { bookOverCount++; if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)) bestOverOdds=oo; }
+          if (uo) { bookUnderCount++; if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)) bestUnderOdds=uo; }
         }
+        if (!bestLine) continue;
+
+        const signals = item.signals || [];
+        const recentForm = signals.find(s => s.type==='RECENT_FORM');
+        if (!recentForm) continue;
+        const hitRate = parseInt((recentForm.annotation||'0').replace('%',''))||0;
+        if (hitRate < minRate) continue;
+
+        const desc = recentForm.description || '';
+        const parts = desc.match(/Hit in (\d+) of last (\d+)/i);
+        const hits  = parts ? parseInt(parts[1]) : 0;
+        const games = parts ? parseInt(parts[2]) : 10;
+        const misses = games - hits;
+        const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
+        const rawStreak = calcStreak(last10);
+        const streak = (hits===games && games>5) ? 5 : Math.min(rawStreak, games);
+
+        const h2h = signals.find(s => s.type==='HEAD_TO_HEAD');
+        const matchupNote = h2h ? h2h.description : ('vs '+opp);
+        const bestOdds = direction==='OVER' ? bestOverOdds : bestUnderOdds;
 
         results.push({
-          player: playerName, team, statType, line, oddsType,
-          prob, avg, stdDev, games, limitedData,
-          gameTime, startTime, trendingCount,
-          direction: 'OVER',
+          player: playerName, team, position: pos, propKey: propType,
+          prop: propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
+          line: String(bestLine), direction, rate: hitRate,
+          hits, games, last10, streak, hotStreak: streak>=2,
+          bookCount: direction==='OVER' ? bookOverCount : bookUnderCount,
+          opposingTeam: opp, gameTime, matchupNote, bestOdds, realData: true, source: 'linemate',
+          sport: 'NCAAFB',
+          category: Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other',
         });
-
-        // Also add UNDER
-        let probUnder = null;
-        if(!limitedData && avg !== null){
-          probUnder = monteCarloSim(avg, stdDev, line, 'UNDER');
-        }
-        results.push({
-          player: playerName, team, statType, line, oddsType,
-          prob: probUnder, avg, stdDev, games, limitedData,
-          gameTime, startTime, trendingCount,
-          direction: 'UNDER',
-        });
-      }
-      done++;
+      } catch(e) { console.warn('Parse error:', e); }
     }
 
-    // Filter out nulls and sort
-    allData = results.filter(p => p.prob !== null || p.limitedData);
-    allData.sort((a,b) => (b.prob||0) - (a.prob||0));
+    setProgress(95, 'Sorting…');
+    const seen = {};
+    allData = results.filter(p => {
+      const k = p.player+p.propKey+p.direction;
+      if (seen[k] && seen[k]>=p.rate) return false;
+      seen[k] = p.rate; return true;
+    }).sort((a,b) => (b.rate||0)-(a.rate||0));
 
     hideProgress();
     renderTable();
     updateSummary();
     document.getElementById('summary').style.display = 'grid';
-    document.getElementById('exportBtn').style.display = 'inline-block';
-    document.getElementById('dataTs').textContent = 'PrizePicks + ESPN CFB · ' + new Date().toLocaleTimeString();
-    setStatus('done', `✅ ${allData.filter(p=>!p.limitedData).length} props simulated · ${allData.filter(p=>p.limitedData).length} limited data · ${new Date().toLocaleTimeString()}`);
-    document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
-    if(window.savePropsSnapshot) window.savePropsSnapshot(allData.filter(p=>!p.limitedData&&(p.prob||0)>=80).map(p=>({...p,rate:p.prob,sport:'NCAAFB'})),'NCAAFB');
+    ['exportBtn','parlayBtn'].forEach(id => document.getElementById(id).style.display='inline-block');
+    document.getElementById('dataTs').textContent = `Linemate · ${new Date().toLocaleTimeString()}`;
+    document.getElementById('lastRun').textContent = `Last run: ${new Date().toLocaleString()}`;
+    setStatus('done', `✅ ${allData.length} CFB prop edges found — ${new Date().toLocaleTimeString()}`);
 
-  } catch(err){
+    // Thin market warning
+    if (allData.length < 5) {
+      document.getElementById('thinCount').textContent = allData.length;
+      document.getElementById('thinMarketWarn').style.display = 'block';
+    }
+
+    // Save to snapshot (for Sharp Props)
+    if (window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NCAAFB');
+    else saveSnapshot(allData);
+
+  } catch(err) {
     hideProgress();
-    setStatus('error','❌ ' + err.message);
+    showError(err.message);
+    setStatus('error', '❌ '+err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
   }
-  btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
 }
 
-// ── SNAPSHOT SAVER ──
-window.savePropsSnapshot=function(plays,sport){
-  var ds=new Date().toISOString().split('T')[0];
-  var key='propsSnapshot_'+ds;
-  var ex;try{ex=JSON.parse(localStorage.getItem(key)||'null');}catch(e){ex=null;}
-  var cur=ex||{date:ds,plays:[]};
-  var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
-  var newPlays=[];
-  plays.filter(function(p){return(p.rate||0)>=80;}).forEach(function(p){
-    var k=p.player+'|'+p.prop;
-    if(!seen.has(k)){var np=Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()});cur.plays.push(np);seen.add(k);newPlays.push(np);}
-  });
-  cur.updatedAt=Date.now();
-  try{localStorage.setItem(key,JSON.stringify(cur));}catch(e){}
-  if(newPlays.length>0){try{fetch('https://line-monitor.dion-miller11.workers.dev/snapshot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:ds,plays:newPlays})}).catch(function(){});}catch(e){}}
-};
+// ─────────────────────────────────────────────
+//  SNAPSHOT SAVE (same format as other tools)
+// ─────────────────────────────────────────────
+function saveSnapshot(data) {
+  try {
+    const plays = data.filter(p => p.rate >= 80).map(p => ({
+      player: p.player, team: p.team, prop: p.prop, propKey: p.propKey,
+      direction: p.direction, rate: p.rate, hits: p.hits, games: p.games,
+      streak: p.streak, bestOdds: p.bestOdds, sport: 'NCAAFB',
+      gameTime: p.gameTime, opposingTeam: p.opposingTeam, line: p.line,
+      bookCount: p.bookCount,
+    }));
+    const snap = {plays, ts: Date.now(), date: todayStr};
+    const existing = JSON.parse(localStorage.getItem('propsSnapshot_'+todayStr)||'{"plays":[]}');
+    const merged = [...(existing.plays||[]),...plays];
+    const seen = new Set();
+    snap.plays = merged.filter(p=>{const k=(p.player+'|'+p.prop+'|'+(p.direction||'OVER')).toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
+    localStorage.setItem('propsSnapshot_'+todayStr, JSON.stringify(snap));
+    // Sync to KV
+    fetch(KV+'/snapshot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:todayStr,plays:snap.plays})}).catch(()=>{});
+  } catch(e) {}
+}
 
-// ── RENDER TABLE ──
-function renderTable(){
+// ─────────────────────────────────────────────
+//  RENDER TABLE
+// ─────────────────────────────────────────────
+function renderTable() {
   const tbody = document.getElementById('tableBody');
-  const minProb = parseInt(document.getElementById('minProb').value)||60;
-  const sortBy = document.getElementById('sortBy').value;
-  const oddsFilter = document.getElementById('oddsFilter').value;
-  const tabFilter = TAB_FILTER[activeTab];
+  const minRate = parseInt(document.getElementById('minRate').value)||70;
+  const sortBy  = document.getElementById('sortBy').value;
+  const dirFilter = document.getElementById('dirFilter').value;
+  const teamFilter = document.getElementById('teamFilter').value;
+  const searchQ = (document.getElementById('playerSearch').value||'').toLowerCase().trim();
 
   let data = allData.filter(p => {
-    if(p.limitedData) return minProb <= 50; // only show limited if filter is low
-    if((p.prob||0) < minProb) return false;
-    if(tabFilter && !tabFilter.includes(p.statType)) return false;
-    if(oddsFilter !== 'all' && p.oddsType !== oddsFilter) return false;
-    if(upcomingOnly && p.startTime && p.startTime <= new Date()) return false;
+    if (activeTab !== 'all' && p.category !== activeTab) return false;
+    if ((p.rate||0) < minRate) return false;
+    if (edgeOnly && (p.streak||0) < 2) return false;
+    if (dirFilter !== 'all' && p.direction !== dirFilter) return false;
+    if (teamFilter !== 'all' && p.team !== teamFilter) return false;
+    if (searchQ && !p.player.toLowerCase().includes(searchQ) && !p.team.toLowerCase().includes(searchQ)) return false;
     return true;
   });
 
   data = [...data].sort((a,b) => {
-    if(sortBy === 'prob') return (b.prob||0) - (a.prob||0);
-    if(sortBy === 'games') return (b.games||0) - (a.games||0);
-    return (b.prob||0) - (a.prob||0);
+    if (sortBy==='streak') return (b.streak||0)-(a.streak||0);
+    if (sortBy==='edge') return impliedProb(b.bestOdds,b.rate) - impliedProb(a.bestOdds,a.rate);
+    if (sortBy==='games') return (b.games||0)-(a.games||0);
+    return (b.rate||0)-(a.rate||0);
   });
 
-  document.getElementById('tableTitle').textContent = '🏈 NCAAFB PROPS' + (activeTab !== 'all' ? ' — ' + activeTab.toUpperCase() : '');
-
-  if(!data.length){
-    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minProb}%+ probability.<br>${allData.length===0?'Run the scan first.':'Try lowering the min probability or changing filters.'}</p></div></td></tr>`;
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty">
+      <div class="empty-icon">🏈</div>
+      <p>No CFB props match your filters.<br>Try lowering the min rate — CFB markets are thinner than NFL.</p>
+    </div></td></tr>`;
     return;
   }
 
   tbody.innerHTML = data.map(p => {
-    const prob = p.prob || 0;
-    const rc = prob >= 80 ? 'elite' : prob >= 65 ? 'strong' : 'solid';
-    const ec = prob >= 80 ? 'fire' : prob >= 65 ? 'strong' : p.limitedData ? 'limited' : 'ok';
-    const el = prob >= 80 ? '🔥 ELITE' : prob >= 65 ? '✅ STRONG' : p.limitedData ? '⚠️ LIMITED' : '📈 SOLID';
-    const dir = p.direction;
-    const dc = dir === 'OVER' ? 'var(--accent2)' : 'var(--miss)';
-    const dirArrow = dir === 'OVER' ? '▲' : '▼';
-    const oddsHtml = p.oddsType !== 'standard' ? `<span class="odds-badge ${p.oddsType}">${p.oddsType.toUpperCase()}</span>` : '';
-    const simBarW = prob;
-    const avgStr = p.avg !== null ? p.avg.toFixed(1) : '—';
-    const stdStr = p.stdDev !== null ? p.stdDev.toFixed(1) : '—';
-    const trendStr = p.trendingCount ? `<span style="font-size:9px;color:var(--muted)">👥${p.trendingCount}</span>` : '';
+    const rate = p.rate||0;
+    const rc = rate>=90?'elite':rate>=80?'strong':'solid';
+    const dir = p.direction||'OVER';
+    const dirColor = dir==='OVER'?'color:#00ff88':'color:#ff4d6d';
+    const dirArrow = dir==='OVER'?'▲':'▼';
+    const odds = p.bestOdds || '—';
+    const oddsStr = typeof odds==='number'?(odds>0?'+':'')+odds : odds;
+    const impl = p.bestOdds ? calcImplied(p.bestOdds) : 52;
+    const edge = rate - impl;
+    const edgeCls = edge>=15?'fire':edge>=8?'strong':'ok';
+    const sparkHtml = (p.last10||[]).map(v=>`<span class="spark-dot ${v?'hit':'miss'}"></span>`).join('');
+    const streakHtml = p.streak>=2
+      ? `<span class="streak-badge hot">🔥 ${p.streak}G</span>`
+      : (p.streak<=-2?`<span class="streak-badge cold">❄️ ${Math.abs(p.streak)}G</span>`:'—');
+    const inParlay = parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop);
 
     return `<tr>
-      <td><div class="player-name">${esc(p.player)}<span class="pp-badge">PP</span></div>
-          <div class="sub-text">${esc(p.team)}${p.gameTime?' · '+esc(p.gameTime):''}</div></td>
-      <td><span style="color:var(--accent);font-size:11px">${esc(p.statType)}</span>${oddsHtml}</td>
-      <td><span style="font-weight:700;color:${dc}">${dirArrow} ${dir} ${p.line}</span>${trendStr}</td>
       <td>
-        <span class="prob-badge ${rc}">${p.limitedData?'—':prob+'%'}</span>
-        <div class="sim-bar" style="margin-top:3px;width:60px">
-          <div class="sim-bg"><div class="sim-fill" style="width:${Math.min(100,simBarW)}%;background:${prob>=80?'var(--gold)':prob>=65?'var(--accent2)':'var(--accent)'}"></div></div>
+        <div class="player-name">
+          <span class="pos-badge">${esc(p.position||'—')}</span>${esc(p.player)}
+        </div>
+        <div class="sub-text"><span class="school-badge">${esc(p.team)}</span> vs ${esc(p.opposingTeam||'—')}${p.gameTime?' · '+esc(p.gameTime):''}</div>
+      </td>
+      <td><span class="prop-type">${esc(p.prop)}</span></td>
+      <td><span style="font-weight:700">${esc(p.line)}</span></td>
+      <td>
+        <span class="hit-rate ${rc}">${rate}%</span>
+        <div class="sub-text">${p.hits||0}/${p.games||10}</div>
+      </td>
+      <td><div class="sparkline">${sparkHtml}</div></td>
+      <td>${streakHtml}</td>
+      <td><span class="edge-badge ${edgeCls}">${edge>0?'+':''}${Math.round(edge)}%</span></td>
+      <td>
+        <span style="${dirColor};font-weight:700;font-size:11px">${dirArrow} ${dir}</span>
+        <span style="color:var(--muted);margin-left:4px">${oddsStr}</span>
+      </td>
+      <td class="hide-mobile" style="font-size:10px;color:var(--muted);max-width:140px;white-space:normal">${esc(p.matchupNote||'')}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="add-parlay-btn ${inParlay?'added':''}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,propKey:p.propKey||"",line:p.line,direction:p.direction,rate:p.rate,sport:"NCAAFB",bestOdds:p.bestOdds,hits:p.hits,games:p.games,streak:p.streak,opposingTeam:p.opposingTeam,gameTime:p.gameTime})})'>
+            ${inParlay?'✓':'+'}
+          </button>
+          <button class="add-parlay-btn" style="background:rgba(0,255,136,.08);color:var(--accent2);border-color:rgba(0,255,136,.2)" onclick='logBet(${JSON.stringify({player:p.player,prop:p.prop,propKey:p.propKey||"",direction:p.direction,line:p.line,rate:p.rate,bestOdds:p.bestOdds,sport:"NCAAFB"})})' title="Log to Bet Tracker">📋</button>
         </div>
       </td>
-      <td class="hide-mobile" style="color:var(--muted)">${avgStr}</td>
-      <td class="hide-mobile" style="color:var(--muted)">${p.games||'—'}</td>
-      <td class="hide-mobile" style="color:var(--muted)">${stdStr}</td>
-      <td><span class="edge-badge ${ec}">${el}</span></td>
-      <td><button class="add-parlay-btn" onclick="addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.statType+' '+dir+' '+p.line,line:String(p.line),direction:dir,rate:p.prob||0,sport:'NCAAFB'}).replace(/"/g,"'")})">+</button></td>
     </tr>`;
   }).join('');
 }
 
-function updateSummary(){
-  const q = allData.filter(p=>!p.limitedData);
-  document.getElementById('s-total').textContent = q.length;
-  document.getElementById('s-fire').textContent = q.filter(p=>(p.prob||0)>=80).length;
-  document.getElementById('s-strong').textContent = q.filter(p=>(p.prob||0)>=65&&(p.prob||0)<80).length;
-  document.getElementById('s-limited').textContent = allData.filter(p=>p.limitedData).length;
+// ─────────────────────────────────────────────
+//  SUMMARY
+// ─────────────────────────────────────────────
+function updateSummary() {
+  document.getElementById('s-total').textContent   = allData.length;
+  document.getElementById('s-elite').textContent   = allData.filter(p=>p.rate>=90).length;
+  document.getElementById('s-streak').textContent  = allData.filter(p=>(p.streak||0)>=2).length;
+  document.getElementById('s-games').textContent   = new Set(allData.map(p=>p.team+'|'+p.opposingTeam)).size;
 }
 
-function switchTab(tab, el){
-  activeTab = tab;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
+// ─────────────────────────────────────────────
+//  FILTERS
+// ─────────────────────────────────────────────
+function toggleEdge(el) { edgeOnly=!edgeOnly; el.classList.toggle('active',edgeOnly); renderTable(); }
+function resetFilters() {
+  document.getElementById('sortBy').value='rate';
+  document.getElementById('dirFilter').value='all';
+  document.getElementById('teamFilter').value='all';
+  document.getElementById('minRate').value=70;
+  edgeOnly=false;
+  document.getElementById('edgeChip').classList.remove('active');
   renderTable();
 }
 
-function toggleUpcoming(el){
-  upcomingOnly = !upcomingOnly;
-  el.classList.toggle('active', upcomingOnly);
+function populateTeamFilter() {
+  const sel = document.getElementById('teamFilter');
+  const teams = [...new Set(allData.map(p=>p.team).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="all">All Schools</option>' +
+    teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+}
+
+// ─────────────────────────────────────────────
+//  PARLAY
+// ─────────────────────────────────────────────
+function addToParlay(p) {
+  if (parlayLegs.some(l=>l.player===p.player&&l.prop===p.prop)) { showToast('Already in parlay'); return; }
+  if (parlayLegs.length>=8) { showToast('Max 8 legs'); return; }
+  parlayLegs.push(p);
+  updateParlayPanel();
   renderTable();
+  if (!document.getElementById('parlayPanel').classList.contains('open')) toggleParlay();
+}
+function removeFromParlay(i) { parlayLegs.splice(i,1); updateParlayPanel(); renderTable(); }
+function clearParlay() { parlayLegs=[]; updateParlayPanel(); renderTable(); }
+function toggleParlay() {
+  document.getElementById('parlayPanel').classList.toggle('open');
+}
+function calcOdds(legs) {
+  let d=1;
+  legs.forEach(l=>{const o=parseInt(l.bestOdds)||(-110);d*=o>0?(o/100+1):(1+100/Math.abs(o));});
+  const a=d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));
+  return(a>0?'+':'')+a;
+}
+function updateParlayPanel() {
+  const el = document.getElementById('parlayLegs');
+  document.getElementById('parlayCount').textContent = parlayLegs.length+(parlayLegs.length===1?' leg':' legs');
+  document.getElementById('parlayOdds').textContent = parlayLegs.length>=2?calcOdds(parlayLegs):'—';
+  if (!parlayLegs.length) { el.innerHTML='<div class="parlay-empty">Add props using the + button on any row</div>'; return; }
+  el.innerHTML = parlayLegs.map((l,i)=>`
+    <div class="parlay-leg">
+      <div class="parlay-leg-info">
+        <div class="parlay-leg-player">${esc(l.player)} <span style="font-size:10px;color:var(--muted)">${esc(l.team||'')}</span></div>
+        <div class="parlay-leg-prop">${esc(l.prop)} ${l.direction==='UNDER'?'▼ UNDER':'▲ OVER'} · ${l.rate}%</div>
+      </div>
+      <button class="parlay-remove" onclick="removeFromParlay(${i})">✕</button>
+    </div>`).join('');
+}
+function copyParlay() {
+  if (!parlayLegs.length) { showToast('No legs'); return; }
+  const text = `🏈 CFB PARLAY\n${calcOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n`+
+    parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.team||'CFB'}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');
+  navigator.clipboard.writeText(text).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));
+}
+function logParlayAll() {
+  if (!parlayLegs.length) { showToast('No legs'); return; }
+  const params = new URLSearchParams({_parlay:'1'});
+  parlayLegs.forEach((l,i)=>{
+    params.set('p'+i+'_player',l.player||'');
+    params.set('p'+i+'_prop',l.prop||'');
+    params.set('p'+i+'_sport',l.sport||'NCAAFB');
+    params.set('p'+i+'_odds',l.bestOdds||'-110');
+    params.set('p'+i+'_rate',l.rate||'');
+    params.set('p'+i+'_dir',l.direction||'OVER');
+  });
+  params.set('count',parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?'+params.toString(),'_blank');
 }
 
-function resetFilters(){
-  document.getElementById('minProb').value = 60;
-  document.getElementById('sortBy').value = 'prob';
-  document.getElementById('oddsFilter').value = 'all';
-  upcomingOnly = false;
-  document.getElementById('upcomingChip').classList.remove('active');
-  renderTable();
+// ─────────────────────────────────────────────
+//  LOG BET
+// ─────────────────────────────────────────────
+function logBet(p) {
+  const bet = {
+    id: Date.now(),
+    date: todayStr,
+    player: p.player||'',
+    prop: (p.direction||'OVER')+' '+(p.line||'')+' '+(p.prop||''),
+    propType: p.propKey||p.prop||'',
+    sport: 'NCAAFB',
+    odds: p.bestOdds||'-110',
+    units: '1',
+    rate: p.rate||'',
+    book: '',
+    result: 'pending',
+  };
+  try {
+    const stored=JSON.parse(localStorage.getItem('propsBets')||'[]');
+    stored.unshift(bet);
+    localStorage.setItem('propsBets',JSON.stringify(stored));
+    fetch(KV+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bets:stored})}).catch(()=>{});
+  } catch(e) {}
+  showToast('✅ Logged: '+bet.player);
 }
 
-function addToParlay(play){
-  showToast('📋 Add to parlay — use the NFL tool parlay builder');
+// ─────────────────────────────────────────────
+//  EXPORT CSV
+// ─────────────────────────────────────────────
+function exportCSV() {
+  const rows = [['Player','School','Pos','Prop','Line','Direction','Rate','Hits','Games','Streak','Odds','Opponent']];
+  allData.forEach(p=>rows.push([p.player,p.team,p.position,p.prop,p.line,p.direction,p.rate,p.hits,p.games,p.streak,p.bestOdds||'',p.opposingTeam]));
+  const csv = rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`cfb-props-${todayStr}.csv`;a.click();
 }
 
-function exportCSV(){
-  const csv = ['Player,Team,Stat,Direction,Line,OddsType,SimProb%,Avg,Games,GameTime',
-    ...allData.filter(p=>!p.limitedData).map(p=>[
-      `"${p.player}"`,p.team,`"${p.statType}"`,p.direction,p.line,p.oddsType,
-      p.prob||'',p.avg?.toFixed(1)||'',p.games||'',p.gameTime||''
-    ].join(','))
-  ].join('\n');
-  const blob = new Blob([csv],{type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url;
-  a.download = `ncaafb-props-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click(); URL.revokeObjectURL(url);
-  showToast('📊 Exported!');
+// ─────────────────────────────────────────────
+//  UTILS
+// ─────────────────────────────────────────────
+function calcStreak(last10) {
+  if (!last10||!last10.length) return 0;
+  let s=0,v=last10[0];
+  for(const x of last10){if(x===v)s+=v?1:-1;else break;}
+  return s;
 }
-
-function setProgress(pct, label){
-  document.getElementById('progressWrap').style.display = 'block';
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressLabel').textContent = label;
+function calcImplied(odds) {
+  if (!odds) return 52;
+  const o=parseInt(odds);if(isNaN(o))return 52;
+  return o>0?Math.round(100/(o+100)*100):Math.round(Math.abs(o)/(Math.abs(o)+100)*100);
 }
-function hideProgress(){ document.getElementById('progressWrap').style.display = 'none'; }
-function setStatus(cls, msg){
-  const b = document.getElementById('statusBar');
-  b.className = 'status-bar ' + cls;
-  b.innerHTML = cls==='running' ? `<span class="spinner"></span>${msg}` : msg;
-}
-function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function impliedProb(odds,rate){return (rate||0)-calcImplied(odds);}
+function setStatus(cls,msg){const el=document.getElementById('statusBar');el.className='status-bar '+cls;el.textContent=msg;}
+function setProgress(pct,lbl){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=lbl;}
+function hideProgress(){document.getElementById('progressWrap').style.display='none';}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML='<tr><td colspan="10" style="padding:32px;text-align:center;color:var(--muted)"><span class="spinner"></span> Fetching CFB props from Linemate…</td></tr>';}
+function showError(msg){const el=document.getElementById('errorBox');el.textContent='❌ '+msg;el.style.display='block';}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
 
-// Add parlay btn style
-const style = document.createElement('style');
-style.textContent = '.add-parlay-btn{font-size:10px;padding:2px 8px;border-radius:3px;background:rgba(255,107,53,.1);color:var(--accent);border:1px solid rgba(255,107,53,.2);cursor:pointer;font-family:var(--font);transition:all .15s;} .add-parlay-btn:hover{background:rgba(255,107,53,.2);}';
-document.head.appendChild(style);
+<!-- Filters row (below tabs / above table) -->
+<script>
+document.querySelector('main').insertAdjacentHTML('afterbegin', `
+<div class="filters" style="margin-bottom:16px">
+  <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="60" max="100" step="1" oninput="renderTable()">%</div>
+  <div class="filter-group"><span class="filter-label">SORT</span>
+    <select id="sortBy" onchange="renderTable()">
+      <option value="rate">Hit Rate</option>
+      <option value="streak">Streak</option>
+      <option value="edge">Edge %</option>
+      <option value="games">Sample Size</option>
+    </select>
+  </div>
+  <div class="filter-group"><span class="filter-label">DIRECTION</span>
+    <select id="dirFilter" onchange="renderTable()">
+      <option value="all">All</option>
+      <option value="OVER">Over Only</option>
+      <option value="UNDER">Under Only</option>
+    </select>
+  </div>
+  <div class="filter-group"><span class="filter-label">SCHOOL</span>
+    <select id="teamFilter" onchange="renderTable()"><option value="all">All Schools</option></select>
+  </div>
+  <div class="filter-group">
+    <button class="chip" id="edgeChip" onclick="toggleEdge(this)">🔥 STREAK ONLY</button>
+    <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
+  </div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" id="playerSearch" type="text" placeholder="Search player or school…" oninput="renderTable()">
+  </div>
+</div>`);
 
-// Auto-run
-window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(runScan, 800); });
+// Auto-scan if token already saved
+if (getStored('lmToken')) setTimeout(()=>runScan(), 800);
 </script>
 </body>
 </html>
