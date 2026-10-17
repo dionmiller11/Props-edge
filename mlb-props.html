@@ -588,7 +588,7 @@ setStatus('done', `✅ ${hitterData.length} hitter + ${pitcherData.length} pitch
 document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
 try{localStorage.setItem('mlbPropsLastRun',today.toDateString());}catch(e){}
     if(window.savePropsSnapshot) window.savePropsSnapshot([...hitterData,...pitcherData],'MLB');
-saveLineHistory(allData||[...((typeof hitterData!=="undefined"?hitterData:[])),((typeof pitcherData!=="undefined"?pitcherData:[]))]);
+saveLineHistory([...hitterData,...pitcherData]);
 } catch(err) {
 hideProgress();
 showError('Scan failed: ' + err.message);
