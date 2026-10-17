@@ -261,18 +261,23 @@ async function runScan(){
         if(bestLine==null)continue;
         // Direction from item.outcome
         const direction=(item.outcome||'over').toUpperCase();
-        // Hit rate: max annotation% across signals
+        // Hit rate: prefer RECENT_FORM (overall sample) over matchup/home/away splits
+        // Using max% would pick a 6/6 vs BUF split over a 15/17 overall — misleading
         const signals=item.signals||[];
+        const SIGNAL_PRIORITY=['RECENT_FORM','LAST_10','PLAYER_TREND','HEAD_TO_HEAD','HOME_AWAY','MATCHUP'];
         let hitRate=0,hitDesc='',hitGames=10,hitHits=0;
-        for(const sig of signals){
-          const pct=parseInt((sig.annotation||'').replace('%',''))||0;
-          if(pct>hitRate){
-            hitRate=pct;
-            hitDesc=sig.description||'';
-            // parse "Hit in X of last Y games" for hits/games
-            const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);
-            if(m){hitHits=parseInt(m[1]);hitGames=parseInt(m[2]);}
-          }
+        let bestSig=null;
+        for(const type of SIGNAL_PRIORITY){
+          const found=signals.find(s=>s.type===type);
+          if(found){bestSig=found;break;}
+        }
+        // Fallback: highest % if none of the priority types found
+        if(!bestSig) bestSig=signals.reduce((a,b)=>{const pa=parseInt((a?.annotation||'').replace('%',''))||0,pb=parseInt((b?.annotation||'').replace('%',''))||0;return pb>pa?b:a;},null);
+        if(bestSig){
+          hitRate=parseInt((bestSig.annotation||'').replace('%',''))||0;
+          hitDesc=bestSig.description||'';
+          const m=(bestSig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);
+          if(m){hitHits=parseInt(m[1]);hitGames=parseInt(m[2]);}
         }
         if(hitRate===0)continue; // skip if no signal data
         // Build last10 approximation from hitHits/hitGames
