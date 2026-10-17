@@ -161,6 +161,12 @@
       <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team name (e.g. Mahomes, Rams, Eagles)…" oninput="onSearch(this.value)">
       <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
+    <div class="filter-group">
+      <span class="filter-label">SHOW RATE BY</span>
+      <button class="chip sig-chip active" onclick="setSignalFilter('RECENT_FORM',this)">Overall</button>
+      <button class="chip sig-chip" onclick="setSignalFilter('HEAD_TO_HEAD',this)">vs Opp</button>
+      <button class="chip sig-chip" onclick="setSignalFilter('HOME_AWAY',this)">Home/Away</button>
+    </div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
       <button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
@@ -352,20 +358,18 @@ async function runScan(){
         for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value||b?.line;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)){bestUnderOdds=uo;bestUnderBook=bk;}}}
         if(!bestLine)continue;
         const signals=item.signals||[];
-        const recentForm=signals.find(s=>s.type==='RECENT_FORM'||s.type==='recent_form'||s.trendType==='RECENT_FORM');
-        if(!recentForm)continue;
-        // annotation like "93%" or description like "Hit in 13 of last 14 games"
-        const hitRate=parseInt((recentForm.annotation||recentForm.value||'0').toString().replace('%',''))||0;
+        const allSignals=extractAllSignals(signals);
+        const primary=allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
+        if(!primary||!primary.rate)continue;
+        const hitRate=primary.rate;
         if(hitRate<minRate)continue;
-        const desc=recentForm.description||recentForm.label||'';
-        const parts=desc.match(/Hit in (\d+) of last (\d+)/i)||desc.match(/(\d+)\/(\d+)/);
-        const hits=parts?parseInt(parts[1]):Math.round(hitRate/100*10),games=parts?parseInt(parts[2]):10;
+        const hits=primary.hits,games=primary.games;
         const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
         const streak=(hits===games&&games>=2)?Math.min(games,10):0;
         const h2h=signals.find(s=>s.type==='HEAD_TO_HEAD');
         const matchupNote=h2h?h2h.description:('vs '+opp);
         const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
-        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),bookCount:bookOverCount+bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
+        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=2,allSignals,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote,bestOdds,bestBook:direction==='OVER'?bestOverBook:bestUnderBook,b2b:b2bTeams.has(team.toUpperCase()),bookCount:bookOverCount+bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,source:'linemate',category:Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other'});
       }catch(e){console.warn(e);}
     }
     setProgress(95,'Sorting…');
@@ -382,6 +386,11 @@ async function runScan(){
   btn.disabled=false;btn.textContent='⚡ RUN SCAN';
 }
 function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
+const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+let activeSignal='RECENT_FORM';
+function extractAllSignals(signals){const out=[];for(const sig of(signals||[])){const pct=parseInt((sig.annotation||'').replace('%',''))||0;if(!pct)continue;const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);out.push({type:sig.type||'UNKNOWN',label:SIGNAL_DISPLAY[sig.type]||sig.type,rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});}const seen={};return out.filter(s=>{if(seen[s.type]&&seen[s.type]>=s.rate)return false;seen[s.type]=s.rate;return true;});}
+function getSignalForPlay(p,type){if(!p.allSignals)return null;return p.allSignals.find(s=>s.type===type)||null;}
+function setSignalFilter(type,el){activeSignal=type;document.querySelectorAll('.sig-chip').forEach(c=>c.classList.remove('active'));if(el)el.classList.add('active');renderTable();}
 function renderTable(){
   const tbody=document.getElementById('tableBody');const minRate=parseInt(document.getElementById('minRate').value)||70;const sortBy=document.getElementById('sortBy')?.value||'rate';const dirFilter=document.getElementById('dirFilter')?.value||'all';const teamFilter=document.getElementById('teamFilter')?.value||'all';const now=new Date();
   let data=allData.filter(p=>{
@@ -392,7 +401,12 @@ function renderTable(){
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
   tbody.innerHTML=data.map(p=>{
-    const rate=p.rate||0,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok',el=rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
+    const sigData=getSignalForPlay(p,activeSignal)||(p.allSignals?(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null);
+    const dispRate=sigData?sigData.rate:(p.rate||0);
+    const dispHits=sigData?sigData.hits:(p.hits||0);
+    const dispGames=sigData?sigData.games:(p.games||10);
+    const sigLabel=sigData?(SIGNAL_DISPLAY[sigData.type]||sigData.type):'Overall';
+    const rate=dispRate,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok',el=rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
     const spark=`<div class="sparkline">${(p.last10||[]).map(v=>`<div class="spark-dot ${v?'hit':'miss'}"></div>`).join('')}</div>`;
     const st=(p.streak||0)>=2?`<span class="streak-badge hot">🔥${p.streak}W</span>`:'<span class="streak-badge cold">—</span>';
     const dir=p.direction||'OVER',dc=dir==='OVER'?'var(--accent2)':'var(--miss)',op=p.bestOdds;
@@ -405,7 +419,7 @@ function renderTable(){
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
-      <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits||''}/${p.games||5} ${dir}</span></td>
+      <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${dispHits}/${dispGames} · ${sigLabel}</span></td>
       <td>${spark}</td>
       <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>

@@ -126,6 +126,11 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
       <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team…" oninput="onSearch(this.value)">
       <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
+    <div class="filter-group"><span class="filter-label">SHOW RATE BY</span>
+      <button class="chip sig-chip active" onclick="setSignalFilter('RECENT_FORM',this)">Overall</button>
+      <button class="chip sig-chip" onclick="setSignalFilter('HEAD_TO_HEAD',this)">vs Opp</button>
+      <button class="chip sig-chip" onclick="setSignalFilter('HOME_AWAY',this)">Home/Away</button>
+    </div>
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
       <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button></div>
   </div>
@@ -261,31 +266,16 @@ async function runScan(){
         if(bestLine==null)continue;
         // Direction from item.outcome
         const direction=(item.outcome||'over').toUpperCase();
-        // Hit rate: prefer RECENT_FORM (overall sample) over matchup/home/away splits
-        // Using max% would pick a 6/6 vs BUF split over a 15/17 overall — misleading
+        // Extract all signals, store all for toggling; primary = RECENT_FORM (overall)
         const signals=item.signals||[];
-        const SIGNAL_PRIORITY=['RECENT_FORM','LAST_10','PLAYER_TREND','HEAD_TO_HEAD','HOME_AWAY','MATCHUP'];
-        let hitRate=0,hitDesc='',hitGames=10,hitHits=0;
-        let bestSig=null;
-        for(const type of SIGNAL_PRIORITY){
-          const found=signals.find(s=>s.type===type);
-          if(found){bestSig=found;break;}
-        }
-        // Fallback: highest % if none of the priority types found
-        if(!bestSig) bestSig=signals.reduce((a,b)=>{const pa=parseInt((a?.annotation||'').replace('%',''))||0,pb=parseInt((b?.annotation||'').replace('%',''))||0;return pb>pa?b:a;},null);
-        if(bestSig){
-          hitRate=parseInt((bestSig.annotation||'').replace('%',''))||0;
-          hitDesc=bestSig.description||'';
-          const m=(bestSig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);
-          if(m){hitHits=parseInt(m[1]);hitGames=parseInt(m[2]);}
-        }
-        if(hitRate===0)continue; // skip if no signal data
-        // Build last10 approximation from hitHits/hitGames
+        const allSignals=extractAllSignals(signals);
+        const primary=allSignals.find(s=>s.type==='RECENT_FORM')||allSignals.find(s=>s.type==='LAST_10')||allSignals[0];
+        if(!primary||!primary.rate)continue;
+        const hitRate=primary.rate,hitHits=primary.hits,hitGames=primary.games,hitDesc=primary.desc;
+        if(hitRate===0)continue;
         const last10=Array(Math.min(hitHits,10)).fill(1).concat(Array(Math.max(0,Math.min(hitGames,10)-Math.min(hitHits,10))).fill(0)).slice(0,10);
-        // Only show streak if ALL games hit (hits===games) — otherwise the synthetic array
-        // puts hits first and would fabricate a fake consecutive streak
         const streak=(hitHits===hitGames&&hitGames>=2)?hitGames:0;
-        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType};
+        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType,allSignals};
         if(hitRate>=minRate){
           const dirLabel=direction==='UNDER'?'U':'O';
           results.push({...base,prop:propLabel+' '+dirLabel+bestLine,direction,rate:hitRate,hits:hitHits,games:hitGames,last10,streak,hotStreak:streak>=3,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',bestOdds:null,signalDesc:hitDesc});
@@ -308,6 +298,42 @@ async function runScan(){
 }
 
 function calcStreak(hits,games){return(hits===games&&games>=2)?games:0;}
+
+// ── SIGNAL EXTRACTION (shared across all sport pages) ──
+// Maps Linemate signal types to display labels
+const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+let activeSignal='RECENT_FORM'; // which signal to show in table
+
+function extractAllSignals(signals){
+  const out=[];
+  for(const sig of (signals||[])){
+    const pct=parseInt((sig.annotation||'').replace('%',''))||0;
+    if(!pct)continue;
+    const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);
+    out.push({type:sig.type||'UNKNOWN',label:SIGNAL_DISPLAY[sig.type]||sig.type,rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});
+  }
+  // Deduplicate by type, keep highest rate
+  const seen={};return out.filter(s=>{if(seen[s.type]&&seen[s.type]>=s.rate)return false;seen[s.type]=s.rate;return true;});
+}
+
+function setSignalFilter(type,el){
+  activeSignal=type;
+  document.querySelectorAll('.sig-chip').forEach(c=>c.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderTable();
+}
+
+function getSignalForPlay(p,type){
+  if(!p.allSignals)return null;
+  return p.allSignals.find(s=>s.type===type)||null;
+}
+
+function getActiveSignalData(p){
+  const sig=getSignalForPlay(p,activeSignal);
+  if(sig)return sig;
+  // Fallback to primary (RECENT_FORM or first)
+  return p.allSignals?.(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null;
+}
 function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
 
 function renderTable(){
@@ -319,7 +345,11 @@ function renderTable(){
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
   tbody.innerHTML=data.map(p=>{
-    const rate=p.rate||0,ig=p.isGoalie,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok';
+    // Use active signal for display; fall back to primary if that signal isn't available for this play
+    const sigData=getSignalForPlay(p,activeSignal)||{rate:p.rate,hits:p.hits,games:p.games};
+    const dispRate=sigData.rate||p.rate||0,dispHits=sigData.hits||p.hits||0,dispGames=sigData.games||p.games||10;
+    const sigLabel=SIGNAL_DISPLAY[activeSignal]||'Overall';
+    const rate=dispRate,ig=p.isGoalie,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok';
     const _cs=(()=>{const streak=p.streak||0,odds=p.bestOdds,goodOdds=!odds||odds>=-130,bookSignal=!p.bookCount||p.bookCount>=8,bookAgree=!p.bookAgreePct||p.bookAgreePct>=60;if(rate>=80&&streak>=2&&goodOdds&&bookSignal&&bookAgree){return(p.bookCount>=15&&p.bookAgreePct>=75)||rate>=90?'sharp':'standard';}return null;})();
     const el=_cs==='sharp'?'🔥 SHARP':_cs==='standard'?'⚡ CONSENSUS':rate>=90?'🔥 ELITE':rate>=80?'✅ STRONG':'📈 SOLID';
     const ecFinal=_cs==='sharp'?'fire':_cs==='standard'?'ok':ec;
@@ -329,7 +359,7 @@ function renderTable(){
     const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
     const goalieBadge=ig?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.3);margin-left:4px;font-family:var(--font)">G</span>`:'';
-    return`<tr><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${goalieBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ig?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ig?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,207,255,.1);color:var(--teal);border-color:rgba(0,207,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL",propType:p.propKey||p.category})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
+    return`<tr><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${goalieBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ig?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${dispHits}/${dispGames} · ${sigLabel}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ig?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,207,255,.1);color:var(--teal);border-color:rgba(0,207,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NHL",propType:p.propKey||p.category})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
   }).join('');
 }
 

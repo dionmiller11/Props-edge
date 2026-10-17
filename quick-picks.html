@@ -124,6 +124,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .sig.streak{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.25);}
 .sig.move-down{background:rgba(0,255,136,.08);color:var(--accent2);border:1px solid rgba(0,255,136,.2);}
 .sig.move-up{background:rgba(255,77,109,.1);color:var(--miss);border:1px solid rgba(255,77,109,.25);}
+.card-sig-chip.active{background:rgba(0,212,255,.2)!important;color:var(--accent)!important;border-color:rgba(0,212,255,.4)!important;}
 
 /* ── STAT ROW ── */
 .stat-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:7px;}
@@ -669,6 +670,28 @@ function renderPlays() {
   grid.innerHTML = data.map(p => buildCard(p)).join('');
 }
 
+const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+function getCardSignal(p, type) {
+  if (!p.allSignals) return null;
+  return p.allSignals.find(s => s.type === type) || null;
+}
+function setCardSignal(idx, type, el) {
+  const card = document.getElementById('pc-'+idx);
+  if (!card) return;
+  card.querySelectorAll('.card-sig-chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const p = allPlays[idx];
+  if (!p) return;
+  const sig = getCardSignal(p, type) || (p.allSignals ? (p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]) : null);
+  const r = sig ? sig.rate : (p.rate||0);
+  const h = sig ? sig.hits : (p.hits||0);
+  const g = sig ? sig.games : (p.games||10);
+  const lbl = sig ? (SIGNAL_DISPLAY[sig.type]||sig.type) : 'Overall';
+  const rEl = card.querySelector('.card-rate-val');
+  const hgEl = card.querySelector('.card-hg-val');
+  if (rEl) rEl.textContent = r + '%';
+  if (hgEl) hgEl.textContent = h+'/'+g+' · '+lbl;
+}
 function buildCard(p) {
   const {impl, edge, score, verdict, rateScore, streakScore} = scorePlay(p);
   const sport = (p.sport||'nfl').toLowerCase();
@@ -723,12 +746,15 @@ function buildCard(p) {
 
     <!-- Stats row -->
     <div class="stat-row">
-      <span class="stat-chip">RATE <span class="${rate>=90?'g':rate>=80?'g':'y'}">${rate}%</span></span>
+      <span class="stat-chip">RATE <span class="${rate>=90?'g':rate>=80?'g':'y'} card-rate-val">${rate}%</span></span>
       <span class="stat-chip">MKT <span>${impl}%</span></span>
       <span class="stat-chip">EDGE <span class="${edgeColor}">${edge>0?'+':''}${edge}%</span></span>
       ${p.streak>=2?`<span class="stat-chip">STREAK <span class="g">${p.streak}G</span></span>`:''}
       ${p.bookCount>0?`<span class="stat-chip">BOOKS <span>${p.bookCount}</span></span>`:''}
     </div>
+    ${p.allSignals && p.allSignals.length > 1 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 2px">
+      ${['RECENT_FORM','HEAD_TO_HEAD','HOME_AWAY'].filter(t=>p.allSignals.find(s=>s.type===t)).map((t,i)=>`<button class="card-sig-chip${i===0?' active':''}" onclick="setCardSignal(${p._idx},'${t}',this)" style="padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:${i===0?'rgba(0,212,255,.15)':'transparent'};color:${i===0?'var(--accent)':'var(--muted)'};transition:all .15s">${SIGNAL_DISPLAY[t]||t}</button>`).join('')}
+    </div>` : ''}
 
     <!-- Prop line -->
     <div class="prop-line">
@@ -742,7 +768,7 @@ function buildCard(p) {
 
     <!-- Bottom row -->
     <div class="card-bot">
-      <div class="card-meta">${p.hits||0}/${p.games||10} ${dir}</div>
+      <div class="card-meta card-hg-val">${p.hits||0}/${p.games||10} ${dir}</div>
       <div class="card-actions">
         <button class="card-btn parlay ${inParlay?'active':''}" onclick="addToParlay(allPlays[${p._idx}])"
           style="${inParlay?'background:rgba(0,212,255,.3);color:#000':''}">

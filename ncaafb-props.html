@@ -416,15 +416,14 @@ async function runScan() {
         if (!bestLine) continue;
 
         const signals = item.signals || [];
-        const recentForm = signals.find(s => s.type==='RECENT_FORM');
-        if (!recentForm) continue;
-        const hitRate = parseInt((recentForm.annotation||'0').replace('%',''))||0;
+        const allSignals = extractAllSignals(signals);
+        const primary = allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
+        if (!primary || !primary.rate) continue;
+        const hitRate = primary.rate;
         if (hitRate < minRate) continue;
 
-        const desc = recentForm.description || '';
-        const parts = desc.match(/Hit in (\d+) of last (\d+)/i);
-        const hits  = parts ? parseInt(parts[1]) : 0;
-        const games = parts ? parseInt(parts[2]) : 10;
+        const hits  = primary.hits;
+        const games = primary.games;
         const misses = games - hits;
         const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
         const streak = (hits===games && games>=2) ? Math.min(games,10) : 0;
@@ -438,6 +437,7 @@ async function runScan() {
           prop: propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
           line: String(bestLine), direction, rate: hitRate,
           hits, games, last10, streak, hotStreak: streak>=2,
+          allSignals,
           bookCount: direction==='OVER' ? bookOverCount : bookUnderCount,
           opposingTeam: opp, gameTime, matchupNote, bestOdds, realData: true, source: 'linemate',
           sport: 'NCAAFB',
@@ -542,7 +542,12 @@ function renderTable() {
   }
 
   tbody.innerHTML = data.map(p => {
-    const rate = p.rate||0;
+    const sigData=getSignalForPlay(p,activeSignal)||(p.allSignals?(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null);
+    const dispRate=sigData?sigData.rate:(p.rate||0);
+    const dispHits=sigData?sigData.hits:(p.hits||0);
+    const dispGames=sigData?sigData.games:(p.games||10);
+    const sigLabel=sigData?(SIGNAL_DISPLAY[sigData.type]||sigData.type):'Overall';
+    const rate = dispRate;
     const rc = rate>=90?'elite':rate>=80?'strong':'solid';
     const dir = p.direction||'OVER';
     const dirColor = dir==='OVER'?'color:#00ff88':'color:#ff4d6d';
@@ -569,7 +574,7 @@ function renderTable() {
       <td><span style="font-weight:700">${esc(p.line)}</span></td>
       <td>
         <span class="hit-rate ${rc}">${rate}%</span>
-        <div class="sub-text">${p.hits||0}/${p.games||10}</div>
+        <div class="sub-text">${dispHits}/${dispGames} · ${sigLabel}</div>
       </td>
       <td><div class="sparkline">${sparkHtml}</div></td>
       <td>${streakHtml}</td>
@@ -720,6 +725,11 @@ function exportCSV() {
 //  UTILS
 // ─────────────────────────────────────────────
 function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
+const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+let activeSignal='RECENT_FORM';
+function extractAllSignals(signals){const out=[];for(const sig of(signals||[])){const pct=parseInt((sig.annotation||'').replace('%',''))||0;if(!pct)continue;const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);out.push({type:sig.type||'UNKNOWN',label:SIGNAL_DISPLAY[sig.type]||sig.type,rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});}const seen={};return out.filter(s=>{if(seen[s.type]&&seen[s.type]>=s.rate)return false;seen[s.type]=s.rate;return true;});}
+function getSignalForPlay(p,type){if(!p.allSignals)return null;return p.allSignals.find(s=>s.type===type)||null;}
+function setSignalFilter(type,el){activeSignal=type;document.querySelectorAll('.sig-chip').forEach(c=>c.classList.remove('active'));if(el)el.classList.add('active');renderTable();}
 function calcImplied(odds) {
   if (!odds) return 52;
   const o=parseInt(odds);if(isNaN(o))return 52;
@@ -757,6 +767,12 @@ document.querySelector('main').insertAdjacentHTML('afterbegin', `
   </div>
   <div class="filter-group"><span class="filter-label">SCHOOL</span>
     <select id="teamFilter" onchange="renderTable()"><option value="all">All Schools</option></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">SHOW RATE BY</span>
+    <button class="chip sig-chip active" onclick="setSignalFilter('RECENT_FORM',this)">Overall</button>
+    <button class="chip sig-chip" onclick="setSignalFilter('HEAD_TO_HEAD',this)">vs Opp</button>
+    <button class="chip sig-chip" onclick="setSignalFilter('HOME_AWAY',this)">Home/Away</button>
   </div>
   <div class="filter-group">
     <button class="chip" id="edgeChip" onclick="toggleEdge(this)">🔥 STREAK ONLY</button>
