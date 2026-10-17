@@ -245,6 +245,9 @@
   <button class="tab" onclick="switchTab('rushing')">💨 RUSHING</button>
   <button class="tab" onclick="switchTab('receiving')">✋ RECEIVING</button>
   <button class="tab" onclick="switchTab('td')">⭐ TDs</button>
+  <button class="tab" onclick="switchTab('kicking')">🦵 KICKING</button>
+  <button class="tab" onclick="switchTab('targets')">🎯 TARGETS</button>
+  <button class="tab" onclick="switchTab('fantasy')">💰 FANTASY</button>
   <button class="tab" onclick="switchTab('sgp')" id="sgpTab">🎰 SGP <span id="sgpCount" style="background:var(--accent);color:#000;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
 </div>
 
@@ -406,6 +409,9 @@ const PROP_CATS = {
   rushing: ['rushingYards','rushingAttempts','rushingTouchdowns'],
   receiving: ['receptions','receivingYards','receivingTouchdowns','targets'],
   td: ['passingTouchdowns','rushingTouchdowns','receivingTouchdowns','anytimeTouchdown'],
+  kicking: ['fieldGoalsMade','longestFieldGoal','extraPointsMade','kickingPoints','punts'],
+  targets: ['targets','receivingTargets'],
+  fantasy: ['fantasyScore','fantasyPoints','draftKingsPoints','fanDuelPoints'],
 };
 
 const PROP_LABELS = {
@@ -421,6 +427,11 @@ const PROP_LABELS = {
   passerRating:'Passer Rating', passingYardsPlusRushingYards:'Pass+Rush Yds',
   receivingYardsPlusRushingYards:'Rec+Rush Yds', touchdowns:'TDs',
   sacks:'Sacks', tackles:'Tackles', tacklesAssists:'Tkl+Ast',
+  fieldGoalsMade:'FG Made', longestFieldGoal:'Longest FG', extraPointsMade:'XP Made',
+  kickingPoints:'Kicking Pts', punts:'Punts',
+  receivingTargets:'Targets',
+  fantasyScore:'Fantasy Score', fantasyPoints:'Fantasy Pts',
+  draftKingsPoints:'DK Pts', fanDuelPoints:'FD Pts',
 };
 
 function cleanPropName(rawName) {
@@ -454,13 +465,13 @@ function updateStatus(k,ok){
 }
 function switchTab(tab){
   activeTab=tab;
-  const tabs=['all','passing','rushing','receiving','td','sgp'];
+  const tabs=['all','passing','rushing','receiving','td','kicking','targets','fantasy','sgp'];
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',tabs[i]===tab);});
   const isSGP = tab==='sgp';
   document.getElementById('sgpPanel').style.display = isSGP?'block':'none';
   document.querySelector('.table-wrap').style.display = isSGP?'none':'block';
   if(!isSGP){
-    document.getElementById('tableTitle').textContent={all:'🏈 ALL NFL PROPS',passing:'🎯 PASSING PROPS',rushing:'💨 RUSHING PROPS',receiving:'✋ RECEIVING PROPS',td:'⭐ TOUCHDOWN PROPS'}[tab]+' — THIS WEEK';
+    document.getElementById('tableTitle').textContent={all:'🏈 ALL NFL PROPS',passing:'🎯 PASSING PROPS',rushing:'💨 RUSHING PROPS',receiving:'✋ RECEIVING PROPS',td:'⭐ TOUCHDOWN PROPS',kicking:'🦵 KICKING PROPS',targets:'🎯 TARGETS',fantasy:'💰 FANTASY SCORE'}[tab]+' — THIS WEEK';
     renderTable();
   }
 }
@@ -661,7 +672,13 @@ function renderTable(){
   const teamFilter=document.getElementById('teamFilter')?.value||'all';
 
   let data=allData.filter(p=>{
-    if(activeTab!=='all'&&p.category!==activeTab)return false;
+    if(activeTab!=='all'){
+      // targets tab: match by propKey since 'targets' also lives in receiving category
+      if(activeTab==='targets'){
+        const pk=(p.propKey||p.propType||'').toLowerCase();
+        if(!['targets','receivingtargets'].includes(pk)) return false;
+      } else if(p.category!==activeTab) return false;
+    }
     if((p.rate||0)<minRate)return false;
     if(edgeOnly&&(p.streak||0)<2)return false;
     if(upcomingOnly&&p.gameTime){
