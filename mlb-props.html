@@ -451,6 +451,8 @@ const streak = calcStreak(results);
 return { rate, hits, games: results.length, last10: results, streak, hotStreak: streak >= 3 };
 }
 function calcStreak(r){let s=0;for(let i=r.length-1;i>=0;i--){if(r[i]===1)s++;else break;}return s;}
+function oddsToImplied(odds){if(!odds)return null;const o=parseInt(odds);if(isNaN(o))return null;return o<0?(-o)/(-o+100)*100:100/(o+100)*100;}
+function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)return null;return parseFloat((rate-imp).toFixed(1));}
 // ── MAIN SCAN ──
 // ── MLB DEFENSIVE MATCHUP GRADES ──
 // defRankings[team][propKey] = {rank, total, avg, label, color}
@@ -784,7 +786,7 @@ if(searchQuery&&!p.player.toLowerCase().includes(searchQuery))return false;
 });
 data=[...data].sort((a,b)=>{
 if(sortBy==='streak')return(b.streak||0)-(a.streak||0);
-if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);
+if(sortBy==='edge'){const ae=calcEdgePct(a.rate,a.bestOdds)||0,be=calcEdgePct(b.rate,b.bestOdds)||0;return be-ae;}
 if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);
 return(b.rate||0)-(a.rate||0);
 });
@@ -812,7 +814,7 @@ return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player
 <td>${spark}</td>
 <td class="hide-mobile-sm">${mc}</td>
 <td class="hide-mobile-sm">${st}</td>
-<td class="hide-mobile-sm">${isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():`<span class="edge-badge ${ec2}">${el}</span>`}</td>
+<td class="hide-mobile-sm">${(()=>{const ev=calcEdgePct(rate,p.bestOdds);const es=ev!=null?(ev>0?'+':'')+ev+'%':'';const ecolor=ev!=null?(ev>=10?'var(--gold)':ev>=5?'var(--accent2)':ev>=0?'var(--accent)':'var(--miss)'):'var(--muted)';const eline=ev!=null?`<div style="font-size:10px;font-weight:700;color:${ecolor};font-family:var(--font)">${es} EDGE</div>`:'';const badge=isConsensus(p)?(()=>{const cs=consensusStrength(p);return cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>';})():`<span class="edge-badge ${ec2}">${el}</span>`;return badge+eline;})()}</td>
 <td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"MLB"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"MLB",propType:p.propType||p.prop})' title="Add to SGP">🎰</button></td>
 </tr>`;
 }).join('');

@@ -578,7 +578,7 @@ function renderTable() {
       </td>
       <td><div class="sparkline">${sparkHtml}</div></td>
       <td>${streakHtml}</td>
-      <td><span class="edge-badge ${edgeCls}">${edge>0?'+':''}${Math.round(edge)}%</span></td>
+      <td><span class="edge-badge ${edgeCls}">${edge>0?'+':''}${edge.toFixed(1)}%</span></td>
       <td>
         <span style="${dirColor};font-weight:700;font-size:11px">${dirArrow} ${dir}</span>
         <span style="color:var(--muted);margin-left:4px">${oddsStr}</span>
