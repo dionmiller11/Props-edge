@@ -57,6 +57,7 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
 .chip.wnba.active{background:#ff69b4;color:#fff;border-color:#ff69b4;}
 .chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
 .chip.nhl.active{background:#00e5ff;color:#000;border-color:#00e5ff;}
+.chip.sport-tab.active:not(.nfl):not(.nba):not(.mlb):not(.wnba):not(.ncaafb):not(.nhl){background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
 
 /* ── DATE BANNER ── */
 .date-banner{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.15);border-radius:6px;padding:8px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;font-size:11px;font-family:var(--font);}
@@ -279,12 +280,13 @@ select{background:var(--bg);border:1px solid var(--border);color:var(--text);pad
     </div>
     <div class="filter-group" style="gap:4px;flex-wrap:wrap;">
       <span class="filter-label">SPORT</span>
-      <button class="chip nfl active" onclick="toggleSport('NFL',this)">🏈 NFL</button>
-      <button class="chip nba active" onclick="toggleSport('NBA',this)">🏀 NBA</button>
-      <button class="chip mlb active" onclick="toggleSport('MLB',this)">⚾ MLB</button>
-      <button class="chip wnba active" onclick="toggleSport('WNBA',this)">🏀 WNBA</button>
-      <button class="chip ncaafb active" onclick="toggleSport('NCAAFB',this)">🏈 CFB</button>
-      <button class="chip nhl active" onclick="toggleSport('NHL',this)">🏒 NHL</button>
+      <button class="chip sport-tab active" id="tab-ALL" onclick="setSportTab('ALL',this)">ALL</button>
+      <button class="chip sport-tab nfl" id="tab-NFL" onclick="setSportTab('NFL',this)">🏈 NFL</button>
+      <button class="chip sport-tab nba" id="tab-NBA" onclick="setSportTab('NBA',this)">🏀 NBA</button>
+      <button class="chip sport-tab mlb" id="tab-MLB" onclick="setSportTab('MLB',this)">⚾ MLB</button>
+      <button class="chip sport-tab wnba" id="tab-WNBA" onclick="setSportTab('WNBA',this)">🏀 WNBA</button>
+      <button class="chip sport-tab ncaafb" id="tab-NCAAFB" onclick="setSportTab('NCAAFB',this)">🏈 CFB</button>
+      <button class="chip sport-tab nhl" id="tab-NHL" onclick="setSportTab('NHL',this)">🏒 NHL</button>
     </div>
     <div style="margin-left:auto">
       <button class="chip" onclick="resetFilters()">↺ RESET</button>
@@ -385,6 +387,7 @@ const STAT_ALIASES = {
 let allPlays = [];         // enriched play objects
 let sharpAlerts = [];      // from Worker /monitor/status
 let activeSports = new Set(SPORTS);
+let activeSportTab = 'ALL';
 let parlayLegs = [];
 let isToday = false;
 let dateUsed = '';
@@ -636,7 +639,7 @@ function renderPlays() {
   const dirFilter = document.getElementById('dirFilter').value;
 
   let data = allPlays.filter(p => {
-    if (!activeSports.has(p.sport)) return false;
+    if (activeSportTab !== 'ALL' && (p.sport||'').toUpperCase() !== activeSportTab) return false;
     if (dirFilter !== 'all' && (p.direction||'OVER') !== dirFilter) return false;
     const v = scorePlay(p).verdict;
     if (verdictFilter === 'BET' && v !== 'BET') return false;
@@ -660,10 +663,11 @@ function renderPlays() {
   });
 
   lbl.style.display = data.length ? 'block' : 'none';
-  lbl.textContent = `${data.length} play${data.length!==1?'s':''} · sorted by confidence`;
+  const sportLbl = activeSportTab === 'ALL' ? 'all sports' : activeSportTab;
+  lbl.textContent = `${data.length} play${data.length!==1?'s':''} · ${sportLbl} · sorted by confidence`;
 
   if (!data.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🔍</div><p>No plays match filters. Try switching to "All" or enabling more sports.</p></div></div>';
+    grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🔍</div><p>No ${activeSportTab==='ALL'?'':''+activeSportTab+' '}plays match filters. ${activeSportTab!=='ALL'?'Try ALL to see other sports.':'Try switching to "All" in SHOW.'}</p></div></div>`;
     return;
   }
 
@@ -1014,12 +1018,14 @@ function updateStaleWarn() {
 // ─────────────────────────────────────────────
 //  FILTERS
 // ─────────────────────────────────────────────
-function toggleSport(sport, el) {
-  if (activeSports.has(sport) && activeSports.size === 1) return;
-  if (activeSports.has(sport)) activeSports.delete(sport);
-  else activeSports.add(sport);
-  el.classList.toggle('active', activeSports.has(sport));
+function setSportTab(sport, el) {
+  activeSportTab = sport;
+  document.querySelectorAll('.sport-tab').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
   renderPlays();
+}
+function toggleSport(sport, el) {
+  setSportTab(sport, document.getElementById('tab-'+sport));
 }
 
 function resetFilters() {
@@ -1027,7 +1033,10 @@ function resetFilters() {
   document.getElementById('sortBy').value = 'score';
   document.getElementById('dirFilter').value = 'all';
   activeSports = new Set(SPORTS);
-  document.querySelectorAll('.chip[onclick*="toggleSport"]').forEach(c => c.classList.add('active'));
+  activeSportTab = 'ALL';
+  document.querySelectorAll('.sport-tab').forEach(c => c.classList.remove('active'));
+  const allTab = document.getElementById('tab-ALL');
+  if (allTab) allTab.classList.add('active');
   renderPlays();
 }
 
