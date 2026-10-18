@@ -510,6 +510,8 @@ async function autoGradeSteam(){
   btn.disabled=true; btn.textContent='⏳ Grading…';
   const today=new Date().toISOString().split('T')[0];
   // Find all ungraded prop moves (any date, excluding today — scores not final yet)
+  // Regular season start dates — skip preseason games before these
+  const SEASON_START={NBA:'2026-10-22',NHL:'2026-10-08',NFL:'2026-09-04',NBA:'2026-10-22',NCAAFB:'2026-08-24',MLB:'2026-03-27',WNBA:'2026-05-16'};
   const toGrade=moves.filter(m=>{
     if(grades[m._key]) return false;
     if(!m.ts||!m.move) return false;
@@ -517,7 +519,12 @@ async function autoGradeSteam(){
     // Grade prop moves, spreads, and totals
     if(!t.includes('PROP MOVE')&&!t.includes('SPREAD')&&!t.includes('TOTAL')) return false;
     const moveDate=new Date(m.ts).toISOString().split('T')[0];
-    return moveDate < today; // only past dates
+    if(moveDate >= today) return false; // only past dates
+    // Skip preseason — ESPN scoreboard doesn't have those games
+    const sport=m.sport||'';
+    const seasonStart=SEASON_START[sport];
+    if(seasonStart && moveDate < seasonStart) return false;
+    return true;
   });
   if(!toGrade.length){
     showToast('No ungraded prop moves found', 3000);
