@@ -415,6 +415,7 @@ const PROP_TO_ESPN={
   'extra points made':['kick_xp'],
   // NFL combo
   'rushing plus receiving yards':['rush_yds','rec_yds'],
+  'passing plus rushing yards':['pass_yds','rush_yds'],
   // NBA/WNBA (no prefix — unique labels)
   'points':['pts'],
   'rebounds':['reb','tot'],
@@ -531,6 +532,10 @@ async function autoGradeSteam(){
     if(!playerMatch){debugLog.push('NO_PLAYER_MATCH: '+move.title);failed++;continue;}
     const playerName=playerMatch[1].trim();
     const bodyLine=(move.body||'').split('\n')[0];
+    // Skip first-quarter/first-half props — ESPN only has full-game box scores
+    if(/\d+[QH]:|FIRST\s+(QUARTER|HALF):/i.test(bodyLine)){
+      debugLog.push('SKIP_PARTIAL: "'+bodyLine+'"');failed++;continue;
+    }
     const statMatch=bodyLine.match(/^([A-Z][A-Z\s\+]+):/i);
     if(!statMatch){debugLog.push('NO_STAT_MATCH: "'+bodyLine+'" title='+move.title);failed++;continue;}
     const statType=statMatch[1].trim().toLowerCase();
