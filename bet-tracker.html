@@ -974,10 +974,23 @@ function findBTStat(playerStats, playerName, statKey){
     strikeouts:['pitching_so','batting_so','so'],
     rbi:       ['batting_rbi','rbi'],
     runs:      ['batting_r','r'],
+    // NHL skaters — ESPN category "skating": labels g,a,pts,sog,+/-,pim,toi,ppg,shg,gwg
+    goals:           ['skating_g','g'],
+    nhlassists:      ['skating_a','a'],
+    nhlpoints:       ['skating_pts','pts'],
+    shotsOnGoal:     ['skating_sog','sog'],
+    powerplaypoints: ['skating_ppg','skating_ppp','ppg','ppp'],
+    // NHL goalies — ESPN category "goalie": labels sa,sv,ga,svpct,toi,pim,en,so
+    saves:           ['goalie_sv','sv','svs','saves'],
   };
   const keys = lookup[statKey] || [statKey];
   for(const k of keys){
     if(stats[k]!==undefined) return stats[k];
+  }
+  // Last-resort: scan all stat keys for partial match
+  for(const k of keys){
+    const found = Object.keys(stats).find(sk=>sk.endsWith('_'+k)||sk===k);
+    if(found!==undefined) return stats[found];
   }
   return null;
 }
@@ -1001,23 +1014,37 @@ async function btAutoGrade(){
   });
 
   let graded=0, failed=0;
+  const dbg=[];
   for(const[key,group] of Object.entries(groups)){
     btn.textContent=`⏳ ${group.sport} ${group.date}…`;
     let stats = await fetchBTBoxScores(group.date, group.sport);
+    let usedDate = group.date;
     // If no players found, try next day (e.g. logged Saturday, game Sunday)
     if(!Object.keys(stats).length){
       const nextDay = new Date(group.date+'T12:00:00');
       nextDay.setDate(nextDay.getDate()+1);
       const nextDate = nextDay.toISOString().split('T')[0];
       stats = await fetchBTBoxScores(nextDate, group.sport);
+      usedDate = nextDate;
     }
+    dbg.push(`[${group.sport} ${usedDate}] ${Object.keys(stats).length} players found`);
     for(const bet of group.bets){
       const statKey = extractStatKey(bet.propType, bet.prop);
       const line = extractBetLine(bet.prop);
       const dir = extractBetDir(bet.prop, bet.direction||null);
-      if(!statKey||!line){failed++;continue;}
+      if(!statKey||!line){
+        dbg.push(`  SKIP no_key/line — ${bet.player} | propType="${bet.propType}" prop="${bet.prop}" → statKey=${statKey} line=${line}`);
+        failed++;continue;
+      }
       const actual = findBTStat(stats, bet.player, statKey);
-      if(actual===null){failed++;continue;}
+      if(actual===null){
+        // Show what keys we have for this player (first 10)
+        const nm=(bet.player||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+        const matchKey=Object.keys(stats).find(k=>k.includes(nm.split(' ').pop()));
+        const avail=matchKey?Object.keys(stats[matchKey]).slice(0,10).join(','):'(player not found)';
+        dbg.push(`  MISS ${bet.player} statKey=${statKey} | avail: ${avail}`);
+        failed++;continue;
+      }
       const result = dir==='OVER'?(actual>line?'win':actual===line?'push':'loss'):(actual<line?'win':actual===line?'push':'loss');
       const idx = bets.findIndex(b=>b.id===bet.id);
       if(idx!==-1){
@@ -1026,11 +1053,17 @@ async function btAutoGrade(){
         bets[idx].gradedLine=line;
         bets[idx].gradedDir=dir;
       }
+      dbg.push(`  OK ${bet.player} ${statKey}=${actual} ${dir} ${line} → ${result}`);
       graded++;
     }
   }
   saveBets(); renderBets(); updateStats();
   btn.disabled=false; btn.textContent='⚡ Auto-Grade';
+  // Show debug panel
+  let dp=document.getElementById('btDebugPanel');
+  if(!dp){dp=document.createElement('div');dp.id='btDebugPanel';dp.style.cssText='position:fixed;bottom:0;left:0;right:0;max-height:260px;overflow-y:auto;background:#0a0a0a;border-top:1px solid #333;padding:10px;font-family:monospace;font-size:11px;color:#ccc;z-index:9999';document.body.appendChild(dp);}
+  dp.innerHTML='<b style="color:#0f0">⚡ BET GRADE DEBUG</b> <span style="color:#888;font-size:10px">(click to close)</span><br>'+dbg.map(l=>l.startsWith('  MISS')?'<span style="color:#f66">'+l+'</span>':l.startsWith('  OK')?'<span style="color:#0f0">'+l+'</span>':l.startsWith('  SKIP')?'<span style="color:#fa0">'+l+'</span>':'<b>'+l+'</b>').join('<br>');
+  dp.onclick=function(){dp.remove();};
   showToast(`⚡ Graded ${graded}${skipped?` · ${skipped} 1Q skipped`:''}${failed?` · ${failed} not found`:''}`);
 }
 
