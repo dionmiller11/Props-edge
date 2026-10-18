@@ -974,12 +974,12 @@ function findBTStat(playerStats, playerName, statKey){
     strikeouts:['pitching_so','batting_so','so'],
     rbi:       ['batting_rbi','rbi'],
     runs:      ['batting_r','r'],
-    // NHL skaters — ESPN category "skating": labels g,a,pts,sog,+/-,pim,toi,ppg,shg,gwg
-    goals:           ['skating_g','g'],
-    nhlassists:      ['skating_a','a'],
-    nhlpoints:       ['skating_pts','pts'],
-    shotsOnGoal:     ['skating_sog','sog'],
-    powerplaypoints: ['skating_ppg','skating_ppp','ppg','ppp'],
+    // NHL skaters — ESPN category varies: "skating", "forwards", "defensemen"
+    goals:           ['skating_g','forwards_g','defensemen_g','g'],
+    nhlassists:      ['skating_a','forwards_a','defensemen_a','a'],
+    nhlpoints:       ['skating_pts','forwards_pts','defensemen_pts','pts'],
+    shotsOnGoal:     ['skating_sog','forwards_sog','defensemen_sog','sog'],
+    powerplaypoints: ['skating_ppg','forwards_ppg','defensemen_ppg','ppg','ppp'],
     // NHL goalies — ESPN category "goalie": labels sa,sv,ga,svpct,toi,pim,en,so
     saves:           ['goalie_sv','sv','svs','saves'],
   };
