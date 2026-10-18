@@ -486,7 +486,15 @@ async function autoGradeSteam(){
     btn.disabled=false; btn.textContent='⚡ Auto-Grade';
     return;
   }
-  showToast(`Grading ${toGrade.length} move${toGrade.length!==1?'s':''}…`, 2000);
+  // Show debug panel immediately with what we found
+  const debugPanel=document.getElementById('debugPanel');
+  const debugContent=document.getElementById('debugContent');
+  if(debugPanel){
+    debugPanel.style.display='block';
+    const sample=toGrade.slice(0,3).map(m=>m.title+'|sport='+m.sport+'|move='+JSON.stringify(m.move)+'|dir='+m.direction).join('\n');
+    debugContent.textContent='Found '+toGrade.length+' to grade\n\nSample:\n'+sample;
+  }
+  showToast('Grading '+toGrade.length+' move'+(toGrade.length!==1?'s':'')+'…', 2000);
   // Cache scoreboard fetches by date+sport so we only fetch each once
   const cache={};
   const fetchCached=async(date,sport)=>{
@@ -559,12 +567,11 @@ async function autoGradeSteam(){
   saveGrades();
   render();
   btn.disabled=false; btn.textContent='⚡ Auto-Grade';
-  // Show debug panel on page so no console needed
-  const debugPanel=document.getElementById('debugPanel');
-  if(debugPanel){
-    debugPanel.style.display='block';
-    document.getElementById('debugContent').textContent=
-      'Graded: '+graded+' | Failed: '+failed+'\n\n'+debugLog.slice(0,20).join('\n');
+  const dp=document.getElementById('debugPanel');
+  if(dp){
+    dp.style.display='block';
+    document.getElementById('debugContent').textContent+=
+      '\n\n--- RESULTS ---\nGraded: '+graded+' | Failed: '+failed+'\n\n'+debugLog.slice(0,30).join('\n');
   }
   showToast('⚡ Graded '+graded+' · '+failed+' failed', 5000);
 }
