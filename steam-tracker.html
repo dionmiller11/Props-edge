@@ -559,9 +559,11 @@ async function autoGradeSteam(){
       if(checkMs>=todayMs) break;
       const checkDate=new Date(checkMs).toISOString().split('T')[0];
       const games=await fetchScoresCached(checkDate,sport);
+      const matchTeam=(abbr,g_abbr,g_name)=>
+        g_abbr===abbr||g_name.includes(abbr.toLowerCase());
       const game=games.find(g=>
-        (g.awayAbbr===awayAbbr&&g.homeAbbr===homeAbbr)||
-        (g.awayAbbr===homeAbbr&&g.homeAbbr===awayAbbr)
+        (matchTeam(awayAbbr,g.awayAbbr,g.awayName)&&matchTeam(homeAbbr,g.homeAbbr,g.homeName))||
+        (matchTeam(homeAbbr,g.awayAbbr,g.awayName)&&matchTeam(awayAbbr,g.homeAbbr,g.homeName))
       );
       if(game) return {game,gameDate:checkDate};
     }
