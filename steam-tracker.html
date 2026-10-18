@@ -143,6 +143,13 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
   </div>
 </main>
 <div class="toast" id="toast"></div>
+<div id="debugPanel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:#0a0f1a;border-top:2px solid #00d4ff;padding:12px 16px;z-index:200;font-family:monospace;font-size:11px;color:#e8edf5;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="color:#00d4ff;font-weight:700;font-size:12px;">⚡ AUTO-GRADE DEBUG</span>
+    <button onclick="document.getElementById('debugPanel').style.display='none'" style="background:none;border:1px solid #1e2d45;color:#6b7a96;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;">✕ Close</button>
+  </div>
+  <pre id="debugContent" style="white-space:pre-wrap;line-height:1.6;color:#b0c4de;margin:0;"></pre>
+</div>
 
 <script>
 const SPORT_COLORS = {NFL:'#ff6b35',NCAAFB:'#ffd700',NBA:'#00d4ff',MLB:'#00ff88',NHL:'#00e5ff',WNBA:'#ff69b4',MMA:'#b06eff'};
@@ -181,7 +188,7 @@ async function loadFromWorker(){
         body: a.body || '',
         type: a.type || 'move',
         priority: a.priority || 'default',
-        sport: extractSport(a.title),
+        sport: a.sport ? (a.sport.toUpperCase()) : extractSport(a.title+' '+(a.body||'')),
         move: extractMove(a.body),
         publicPct: extractPublic(a.body),
         direction: extractDirection(a.body),
@@ -198,7 +205,7 @@ async function loadFromWorker(){
 function extractSport(title){
   const t = (title||'').toUpperCase();
   if(t.includes('NFL')) return 'NFL';
-  if(t.includes('NCAAF')) return 'NCAAFB';
+  if(t.includes('NCAAFB')||t.includes('NCAAF')) return 'NCAAFB';
   if(t.includes('NBA')) return 'NBA';
   if(t.includes('MLB')) return 'MLB';
   if(t.includes('NHL')) return 'NHL';
@@ -483,39 +490,64 @@ async function autoGradeSteam(){
   // Cache scoreboard fetches by date+sport so we only fetch each once
   const cache={};
   const fetchCached=async(date,sport)=>{
-    const key=`${date}|${sport}`;
+    const key=date+'|'+sport;
     if(cache[key]) return cache[key];
-    btn.textContent=`⏳ ${sport} ${date}…`;
+    btn.textContent='⏳ '+sport+' '+date+'…';
     cache[key]=await fetchBoxScoresForDate(date,sport);
     return cache[key];
+  };
+  // Helper: find player stats by searching move date + up to 7 days forward
+  // Prop line moves happen BEFORE the game — must search forward for game date
+  const findStatsWithPlayer=async(moveDate, sport, playerName)=>{
+    const nameLower=playerName.toLowerCase();
+    const lastName=nameLower.split(' ').pop();
+    const startMs=new Date(moveDate+'T12:00:00Z').getTime();
+    const todayMs=new Date(today+'T00:00:00Z').getTime();
+    for(let d=0;d<=7;d++){
+      const checkMs=startMs+(d*86400000);
+      if(checkMs>=todayMs) break;
+      const checkDate=new Date(checkMs).toISOString().split('T')[0];
+      const stats=await fetchCached(checkDate,sport);
+      const keys=Object.keys(stats);
+      const found=keys.find(k=>k===nameLower)||keys.find(k=>k.endsWith(lastName)&&k.includes(' '));
+      if(found) return {stats,gameDate:checkDate,foundName:found};
+    }
+    return null;
   };
   let graded=0, failed=0;
   const debugLog=[];
   for(const move of toGrade){
     const moveDate=new Date(move.ts).toISOString().split('T')[0];
-    const stats=await fetchCached(moveDate, move.sport||'');
     const playerMatch=(move.title||'').match(/—\s*(.+)$/);
     if(!playerMatch){debugLog.push('NO_PLAYER_MATCH: '+move.title);failed++;continue;}
     const playerName=playerMatch[1].trim();
     const bodyLine=(move.body||'').split('\n')[0];
     const statMatch=bodyLine.match(/^([A-Z][A-Z\s\+]+):/i);
-    if(!statMatch){debugLog.push('NO_STAT_MATCH: '+bodyLine);failed++;continue;}
+    if(!statMatch){debugLog.push('NO_STAT_MATCH: "'+bodyLine+'" title='+move.title);failed++;continue;}
     const statType=statMatch[1].trim().toLowerCase();
     const mv=move.move;
     if(!mv){debugLog.push('NO_MOVE: '+move.title);failed++;continue;}
     const finalLine=parseFloat(mv.to);
-    const dir=move.direction;
-    if(!finalLine||!dir){debugLog.push('NO_LINE_OR_DIR: line='+finalLine+' dir='+dir);failed++;continue;}
-    // Check player exists in stats
-    const playerNames=Object.keys(stats);
-    const nameLower=playerName.toLowerCase();
-    const lastName=nameLower.split(' ').pop();
-    const foundName=playerNames.find(k=>k===nameLower)||playerNames.find(k=>k.endsWith(lastName)&&k.includes(' '));
-    if(!foundName){debugLog.push('PLAYER_NOT_FOUND: "'+playerName+'" sport='+move.sport+' date='+moveDate+' statsCount='+playerNames.length);failed++;continue;}
-    const actual=findPlayerStat(stats, playerName, statType);
+    // Derive direction from the move diff if not explicitly stored
+    const dir=move.direction||(mv.diff>0?'UP':mv.diff<0?'DOWN':null);
+    if(!finalLine||!dir){debugLog.push('NO_LINE_OR_DIR: line='+finalLine+' dir='+dir+' title='+move.title);failed++;continue;}
+    // Determine sport — stored value or infer from stat type
+    const NFL_STATS=['passing yards','rushing yards','receiving yards','receptions','rushing attempts','passing completions','passing attempts','passing touchdowns','rushing touchdowns','interceptions','targets','field goals made','kicking points','extra points made','rushing plus receiving yards'];
+    const NBA_STATS=['points','rebounds','assists','steals','blocks','turnovers','three point field goals made','points plus assists plus rebounds','assists plus rebounds','points plus rebounds'];
+    const NHL_STATS=['saves','shots on goal','goals'];
+    let sport=move.sport||'';
+    if(!sport||sport==='—'){
+      if(NFL_STATS.includes(statType)) sport='NFL';
+      else if(NBA_STATS.includes(statType)) sport='NBA';
+      else if(NHL_STATS.includes(statType)) sport='NHL';
+    }
+    // Search forward from move date to find game date where player has stats
+    const found=await findStatsWithPlayer(moveDate, sport, playerName);
+    if(!found){debugLog.push('PLAYER_NOT_FOUND: "'+playerName+'" sport='+sport+' alertDate='+moveDate);failed++;continue;}
+    const actual=findPlayerStat(found.stats, playerName, statType);
     if(actual===null){
-      const playerKeys=Object.keys(stats[foundName]||{});
-      debugLog.push('STAT_NOT_FOUND: "'+statType+'" for '+playerName+' keys='+playerKeys.join(','));
+      const playerKeys=Object.keys(found.stats[found.foundName]||{});
+      debugLog.push('STAT_NOT_FOUND: "'+statType+'" for '+playerName+' gameDate='+found.gameDate+' keys='+playerKeys.join(','));
       failed++;continue;
     }
     let result;
@@ -527,8 +559,14 @@ async function autoGradeSteam(){
   saveGrades();
   render();
   btn.disabled=false; btn.textContent='⚡ Auto-Grade';
-  showToast(`⚡ Graded ${graded} · ${failed} failed — check console`, 5000);
-  if(debugLog.length) console.log('AUTO-GRADE DEBUG:\n'+debugLog.slice(0,10).join('\n'));
+  // Show debug panel on page so no console needed
+  const debugPanel=document.getElementById('debugPanel');
+  if(debugPanel){
+    debugPanel.style.display='block';
+    document.getElementById('debugContent').textContent=
+      'Graded: '+graded+' | Failed: '+failed+'\n\n'+debugLog.slice(0,20).join('\n');
+  }
+  showToast('⚡ Graded '+graded+' · '+failed+' failed', 5000);
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
