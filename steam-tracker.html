@@ -337,35 +337,12 @@ function renderTable(){
 }
 
 // ── AUTO-GRADER ──
-const STAT_ALIASES={
-  // NFL
-  'receiving yards':['recyds','rec yds','receivingyards','recyards','yds','receiving'],
-  'rushing yards':['rushyds','rush yds','rushingyards','rushyards','yds','rushing'],
-  'passing yards':['passyds','pass yds','passingyards','passyards','yds','passing'],
-  'receptions':['rec','receptions','catches'],
-  'rushing attempts':['att','rush att','rushingattempts','car','carries'],
-  'passing attempts':['att','pass att','passingattempts'],
-  'passing completions':['cmp','completions','comp'],
-  'passing touchdowns':['td','tds','passingtd','pass td'],
-  'rushing touchdowns':['td','tds','rushingtd','rush td'],
-  'interceptions':['int','ints','interceptions'],
-  // NBA/WNBA
-  'points':['pts','points'],
-  'rebounds':['reb','rebounds','totalrebounds','tot'],
-  'assists':['ast','assists'],
-  'steals':['stl','steals'],
-  'blocks':['blk','blocks'],
-  'turnovers':['to','turnovers'],
-  'three point field goals made':['3pm','3pt','threes'],
-  'points plus assists plus rebounds':['pts','points'],
-  'assists plus rebounds':['ast','assists'],
-  'points plus rebounds':['pts','points'],
-  // NHL
-  'saves':['saves','sv','svs'],
-  'shots on goal':['sog','shots','shots on goal'],
-  'goals':['g','goals'],
-  'assists':['a','ast','assists'],
-  'points plus assists plus rebounds':['pts','points'],
+
+// ESPN category name → prop type prefix for namespacing
+const ESPN_CAT_PREFIX={
+  passing:'pass_', rushing:'rush_', receiving:'rec_',
+  kicking:'kick_', punting:'punt_', defensive:'def_',
+  // NBA/NHL cats have unique label names so no prefix needed
 };
 
 async function fetchBoxScoresForDate(dateStr, sport){
@@ -384,11 +361,19 @@ async function fetchBoxScoresForDate(dateStr, sport){
         const bs=await bsRes.json();
         for(const team of (bs.boxscore?.players||[])){
           for(const cat of (team.statistics||[])){
-            const labels=(cat.labels||[]).map(l=>l.toLowerCase());
+            const catName=(cat.name||'').toLowerCase();
+            const prefix=ESPN_CAT_PREFIX[catName]||'';
+            const labels=(cat.labels||[]).map(l=>prefix+l.toLowerCase().replace(/[^a-z0-9]/g,''));
             for(const athlete of (cat.athletes||[])){
               const name=(athlete.athlete?.displayName||'').toLowerCase();
               const stats={};
-              (athlete.stats||[]).forEach((v,i)=>{if(labels[i])stats[labels[i]]=parseFloat(v)||0;});
+              (athlete.stats||[]).forEach((v,i)=>{
+                if(labels[i]){
+                  const n=parseFloat(v);
+                  // Handle C/ATT format — also store raw
+                  stats[labels[i]]=isNaN(n)?v:n;
+                }
+              });
               if(!playerStats[name])playerStats[name]={};
               Object.assign(playerStats[name],stats);
             }
@@ -400,36 +385,79 @@ async function fetchBoxScoresForDate(dateStr, sport){
   }catch(e){return {};}
 }
 
+// Maps prop body stat type → namespaced ESPN label(s)
+const PROP_TO_ESPN={
+  // NFL passing
+  'passing yards':['pass_yds'],
+  'passing attempts':['pass_catt'], // "C/ATT" stored as pass_catt
+  'passing completions':['pass_catt'],
+  'passing touchdowns':['pass_td'],
+  'interceptions':['pass_int'],
+  // NFL rushing
+  'rushing yards':['rush_yds'],
+  'rushing attempts':['rush_car'],
+  'rushing touchdowns':['rush_td'],
+  // NFL receiving
+  'receiving yards':['rec_yds'],
+  'receptions':['rec_rec'],
+  'receiving touchdowns':['rec_td'],
+  'targets':['rec_tgts'],
+  // NFL kicking
+  'field goals made':['kick_fg'],
+  'kicking points':['kick_pts'],
+  'extra points made':['kick_xp'],
+  // NFL combo
+  'rushing plus receiving yards':['rush_yds','rec_yds'],
+  // NBA/WNBA (no prefix — unique labels)
+  'points':['pts'],
+  'rebounds':['reb','tot'],
+  'assists':['ast'],
+  'steals':['stl'],
+  'blocks':['blk'],
+  'turnovers':['to'],
+  'three point field goals made':['3pm','3pt'],
+  'points plus assists plus rebounds':['pts','reb','ast'],
+  'assists plus rebounds':['ast','reb'],
+  'points plus rebounds':['pts','reb'],
+  // NHL (no prefix)
+  'saves':['sv','svs','saves'],
+  'shots on goal':['sog','shots'],
+  'goals':['g'],
+};
+
 function findPlayerStat(playerStats, playerName, statType){
   const name=playerName.toLowerCase();
   // Find player — try full name then last name
   let stats=playerStats[name];
   if(!stats){
     const lastName=name.split(' ').pop();
-    const match=Object.keys(playerStats).find(k=>k.includes(lastName)&&k.split(' ').length>1);
+    const match=Object.keys(playerStats).find(k=>k.endsWith(lastName)&&k.includes(' '));
     if(match) stats=playerStats[match];
   }
   if(!stats) return null;
-  // Find stat — normalize keys and aliases (strip spaces, lowercase)
   const st=statType.toLowerCase().trim();
-  const aliases=STAT_ALIASES[st]||[st.replace(/\s+/g,'')];
-  const normKey=k=>k.toLowerCase().replace(/[^a-z0-9]/g,'');
-  const normAliases=aliases.map(normKey);
-  for(const [k,v] of Object.entries(stats)){
-    const nk=normKey(k);
-    if(normAliases.some(a=>nk===a||nk.startsWith(a)||a.startsWith(nk))) return v;
-  }
-  // PRA special case
-  if(st.includes('points plus')&&st.includes('rebounds')){
-    const p=stats['pts']??stats['points']??0;
-    const r=stats['reb']??stats['rebounds']??0;
-    const a=stats['ast']??stats['assists']??0;
-    return p+r+a;
-  }
-  if(st.includes('rushing plus receiving')){
-    const rush=stats['rush']??stats['rushing']??0;
-    const rec=stats['rec']??stats['receiving']??0;
-    return rush+rec;
+  const targets=PROP_TO_ESPN[st];
+  if(targets){
+    // Combo props: sum multiple fields
+    if(targets.length>1 && ['rushing plus receiving yards','points plus assists plus rebounds','assists plus rebounds','points plus rebounds'].includes(st)){
+      let sum=0,found=false;
+      for(const t of targets){
+        const v=stats[t];
+        if(v!=null&&!isNaN(parseFloat(v))){sum+=parseFloat(v);found=true;}
+      }
+      return found?sum:null;
+    }
+    // Single stat — try each alias
+    for(const t of targets){
+      const raw=stats[t];
+      if(raw==null) continue;
+      // Handle "C/ATT" format for completions (take numerator) or attempts (take denominator)
+      if(typeof raw==='string'&&raw.includes('/')){
+        if(st==='passing completions') return parseFloat(raw.split('/')[0]);
+        if(st==='passing attempts') return parseFloat(raw.split('/')[1]);
+      }
+      if(!isNaN(parseFloat(raw))) return parseFloat(raw);
+    }
   }
   return null;
 }
