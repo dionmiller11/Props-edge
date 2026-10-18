@@ -338,18 +338,34 @@ function renderTable(){
 
 // ── AUTO-GRADER ──
 const STAT_ALIASES={
-  'receiving yards':['rec','receiving','receivingyards','recyards'],
-  'rushing yards':['rush','rushing','rushingyards','rushyards'],
-  'passing yards':['pass','passing','passingyards','passyards'],
+  // NFL
+  'receiving yards':['recyds','rec yds','receivingyards','recyards','yds','receiving'],
+  'rushing yards':['rushyds','rush yds','rushingyards','rushyards','yds','rushing'],
+  'passing yards':['passyds','pass yds','passingyards','passyards','yds','passing'],
   'receptions':['rec','receptions','catches'],
+  'rushing attempts':['att','rush att','rushingattempts','car','carries'],
+  'passing attempts':['att','pass att','passingattempts'],
+  'passing completions':['cmp','completions','comp'],
+  'passing touchdowns':['td','tds','passingtd','pass td'],
+  'rushing touchdowns':['td','tds','rushingtd','rush td'],
+  'interceptions':['int','ints','interceptions'],
+  // NBA/WNBA
   'points':['pts','points'],
-  'rebounds':['reb','rebounds','totalrebounds'],
+  'rebounds':['reb','rebounds','totalrebounds','tot'],
   'assists':['ast','assists'],
-  'saves':['saves','sv'],
-  'kicking points':['kickingpoints','fg','pat'],
-  'rushing plus receiving yards':['rush','rushing','scrimmage'],
+  'steals':['stl','steals'],
+  'blocks':['blk','blocks'],
+  'turnovers':['to','turnovers'],
+  'three point field goals made':['3pm','3pt','threes'],
   'points plus assists plus rebounds':['pts','points'],
   'assists plus rebounds':['ast','assists'],
+  'points plus rebounds':['pts','points'],
+  // NHL
+  'saves':['saves','sv','svs'],
+  'shots on goal':['sog','shots','shots on goal'],
+  'goals':['g','goals'],
+  'assists':['a','ast','assists'],
+  'points plus assists plus rebounds':['pts','points'],
 };
 
 async function fetchBoxScoresForDate(dateStr, sport){
@@ -394,13 +410,14 @@ function findPlayerStat(playerStats, playerName, statType){
     if(match) stats=playerStats[match];
   }
   if(!stats) return null;
-  // Find stat
-  const st=statType.toLowerCase();
+  // Find stat — normalize keys and aliases (strip spaces, lowercase)
+  const st=statType.toLowerCase().trim();
   const aliases=STAT_ALIASES[st]||[st.replace(/\s+/g,'')];
-  for(const a of aliases){
-    for(const [k,v] of Object.entries(stats)){
-      if(k.includes(a)||a.includes(k)) return v;
-    }
+  const normKey=k=>k.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const normAliases=aliases.map(normKey);
+  for(const [k,v] of Object.entries(stats)){
+    const nk=normKey(k);
+    if(normAliases.some(a=>nk===a||nk.startsWith(a)||a.startsWith(nk))) return v;
   }
   // PRA special case
   if(st.includes('points plus')&&st.includes('rebounds')){
@@ -420,55 +437,50 @@ function findPlayerStat(playerStats, playerName, statType){
 async function autoGradeSteam(){
   const btn=document.getElementById('autoGradeBtn');
   btn.disabled=true; btn.textContent='⏳ Grading…';
-  // Get yesterday's date
-  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-  const ds=yesterday.toISOString().split('T')[0];
-  // Find ungraded prop moves from yesterday
+  const today=new Date().toISOString().split('T')[0];
+  // Find all ungraded prop moves (any date, excluding today — scores not final yet)
   const toGrade=moves.filter(m=>{
-    if(grades[m._key]) return false; // already graded
-    if(!m.ts) return false;
-    // Must have a line move and a player name extractable from the title
-    if(!m.move) return false;
+    if(grades[m._key]) return false;
+    if(!m.ts||!m.move) return false;
     if(!(m.title||'').match(/—\s*.+/)) return false;
     const moveDate=new Date(m.ts).toISOString().split('T')[0];
-    return moveDate===ds;
+    return moveDate < today; // only past dates
   });
   if(!toGrade.length){
-    const total=moves.filter(m=>{const md=new Date(m.ts).toISOString().split('T')[0];return md===ds;}).length;
-    showToast(`No gradeable moves from ${ds} (${total} total alerts that day)`, 4000);
+    showToast('No ungraded prop moves found', 3000);
     btn.disabled=false; btn.textContent='⚡ Auto-Grade';
     return;
   }
-  showToast(`Found ${toGrade.length} gradeable move${toGrade.length!==1?'s':''}…`, 2000);
-  // Group by sport
-  const sports=[...new Set(toGrade.map(m=>m.sport).filter(Boolean))];
-  const allStats={};
-  for(const sport of sports){
-    btn.textContent=`⏳ ${sport} scores…`;
-    allStats[sport]=await fetchBoxScoresForDate(ds, sport);
-  }
+  showToast(`Grading ${toGrade.length} move${toGrade.length!==1?'s':''}…`, 2000);
+  // Cache scoreboard fetches by date+sport so we only fetch each once
+  const cache={};
+  const fetchCached=async(date,sport)=>{
+    const key=`${date}|${sport}`;
+    if(cache[key]) return cache[key];
+    btn.textContent=`⏳ ${sport} ${date}…`;
+    cache[key]=await fetchBoxScoresForDate(date,sport);
+    return cache[key];
+  };
   let graded=0, failed=0;
   for(const move of toGrade){
-    const stats=allStats[move.sport]||{};
-    // Extract player name from title e.g. "NFL PROP MOVE — Johnny Mundt"
+    const moveDate=new Date(move.ts).toISOString().split('T')[0];
+    const stats=await fetchCached(moveDate, move.sport||'');
+    // Extract player name from title e.g. "PROP MOVE — Travis Kelce"
     const playerMatch=(move.title||'').match(/—\s*(.+)$/);
     if(!playerMatch){failed++;continue;}
     const playerName=playerMatch[1].trim();
-    // Extract stat type from body e.g. "RECEIVING YARDS: 8.5 → 7.5"
+    // Extract stat type from body e.g. "RECEIVING YARDS: 47.5 → 48.5"
     const bodyLine=(move.body||'').split('\n')[0];
-    const statMatch=bodyLine.match(/^([A-Z\s\+]+):/i);
+    const statMatch=bodyLine.match(/^([A-Z][A-Z\s\+]+):/i);
     if(!statMatch){failed++;continue;}
     const statType=statMatch[1].trim().toLowerCase();
-    // Extract final line (the 'to' value) and direction
     const mv=move.move;
     if(!mv){failed++;continue;}
     const finalLine=parseFloat(mv.to);
-    const dir=move.direction; // UP = bet OVER, DOWN = bet UNDER
+    const dir=move.direction;
     if(!finalLine||!dir){failed++;continue;}
-    // Find actual stat
     const actual=findPlayerStat(stats, playerName, statType);
     if(actual===null){failed++;continue;}
-    // Grade: UP → follow to OVER final line; DOWN → follow to UNDER final line
     let result;
     if(dir==='UP') result=actual>finalLine?'win':actual===finalLine?'push':'loss';
     else result=actual<finalLine?'win':actual===finalLine?'push':'loss';
