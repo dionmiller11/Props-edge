@@ -253,7 +253,7 @@
 
 <main>
   <div class="filters">
-    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="50" max="100" step="5" oninput="renderTable()"> %</div>
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="80" min="50" max="100" step="5" oninput="renderTable()"> %</div>
     <div class="filter-group"><span class="filter-label">SORT</span>
       <select id="sortBy" onchange="renderTable()">
         <option value="rate">Hit Rate</option>
@@ -482,7 +482,7 @@ function switchTab(tab){
 }
 function toggleEdge(el){edgeOnly=!edgeOnly;el.classList.toggle('active',edgeOnly);renderTable();}
 function toggleUpcoming(el){upcomingOnly=!upcomingOnly;el.classList.toggle('active',upcomingOnly);renderTable();}
-function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=70;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');renderTable();}
+function resetFilters(){document.getElementById('sortBy').value='rate';document.getElementById('dirFilter').value='all';document.getElementById('teamFilter').value='all';document.getElementById('minRate').value=80;edgeOnly=false;document.getElementById('edgeChip').classList.remove('active');renderTable();}
 function setProgress(pct,label){document.getElementById('progressWrap').style.display='block';document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
 function hideProgress(){document.getElementById('progressWrap').style.display='none';}
 
@@ -665,6 +665,21 @@ async function runScan(){
 function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
 function oddsToImplied(odds){if(!odds)return null;const o=parseInt(odds);if(isNaN(o))return null;return o<0?(-o)/(-o+100)*100:100/(o+100)*100;}
 function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)return null;return parseFloat((rate-imp).toFixed(1));}
+// Consistency: hit rate holds across multiple signal types (overall + at least one split)
+function isConsistentRate(p, threshold=70){
+  if(!p.allSignals||p.allSignals.length<2) return false;
+  const splits = p.allSignals.filter(s=>s.type!=='RECENT_FORM'&&s.type!=='LAST_10');
+  return splits.some(s=>s.rate>=threshold);
+}
+function consistencyLabel(p){
+  if(!p.allSignals) return null;
+  const h2h = p.allSignals.find(s=>s.type==='HEAD_TO_HEAD');
+  const ha  = p.allSignals.find(s=>s.type==='HOME_AWAY');
+  const parts=[];
+  if(h2h&&h2h.rate>=70) parts.push(`${h2h.rate}% vs opp`);
+  if(ha&&ha.rate>=70)  parts.push(`${ha.rate}% ${ha.desc||'home/away'}`);
+  return parts.length ? parts.join(' · ') : null;
+}
 const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
 let activeSignal='RECENT_FORM';
 function extractAllSignals(signals){const out=[];for(const sig of(signals||[])){const pct=parseInt((sig.annotation||'').replace('%',''))||0;if(!pct)continue;const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);out.push({type:sig.type||'UNKNOWN',label:SIGNAL_DISPLAY[sig.type]||sig.type,rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});}const seen={};return out.filter(s=>{if(seen[s.type]&&seen[s.type]>=s.rate)return false;seen[s.type]=s.rate;return true;});}
@@ -724,8 +739,10 @@ function renderTable(){
     const op=p.bestOdds;
     const bestBookName=p.bestBook||''; const bookLabel=bestBookName?`<span style="font-size:9px;color:var(--gold);margin-left:3px;font-weight:700">${bestBookName}</span>`:''; const bookCountLabel=p.bookCount?`<span style="font-size:9px;color:var(--muted);margin-left:4px">${p.bookCount} books</span>`:''; const moveBadge=lineMoveBadge(p); const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${moveBadge}${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>${bookLabel}${bookCountLabel}`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const gtColor=gameTimeColor(p.gameTime); const timeStr=p.gameTime?` · <span style="${gtColor};font-weight:700">● ${esc(p.gameTime)}</span>`:'';
+    const consistent=isConsistentRate(p); const conLabel=consistencyLabel(p);
+    const conBadge=consistent?`<span title="${conLabel||'Holds across splits'}" style="font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);margin-left:4px">📊 CONSISTENT</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
-      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}${conBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
