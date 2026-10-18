@@ -352,6 +352,41 @@ const ESPN_CAT_PREFIX={
   // NBA/NHL cats have unique label names so no prefix needed
 };
 
+// Returns [{homeAbbr, awayAbbr, homeScore, awayScore, homeName, awayName}] for a date+sport
+async function fetchGameScoresForDate(dateStr, sport){
+  try{
+    const paths={NFL:'football/nfl',NBA:'basketball/nba',WNBA:'basketball/wnba',MLB:'baseball/mlb',NHL:'hockey/nhl',NCAAFB:'football/college-football'};
+    const path=paths[sport]; if(!path) return [];
+    const ds=dateStr.replace(/-/g,'');
+    const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+path+'/scoreboard?dates='+ds);
+    if(!res.ok) return [];
+    const data=await res.json();
+    const games=[];
+    for(const evt of (data.events||[])){
+      const comps=evt.competitions||[];
+      for(const comp of comps){
+        const teams=comp.competitors||[];
+        const home=teams.find(t=>t.homeAway==='home');
+        const away=teams.find(t=>t.homeAway==='away');
+        if(!home||!away) continue;
+        const homeScore=parseInt(home.score);
+        const awayScore=parseInt(away.score);
+        if(isNaN(homeScore)||isNaN(awayScore)) continue;
+        // Only include completed games
+        if(comp.status?.type?.completed!==true) continue;
+        games.push({
+          homeAbbr:(home.team?.abbreviation||'').toUpperCase(),
+          awayAbbr:(away.team?.abbreviation||'').toUpperCase(),
+          homeName:(home.team?.displayName||'').toLowerCase(),
+          awayName:(away.team?.displayName||'').toLowerCase(),
+          homeScore, awayScore
+        });
+      }
+    }
+    return games;
+  }catch(e){return [];}
+}
+
 async function fetchBoxScoresForDate(dateStr, sport){
   try{
     const paths={NFL:'football/nfl',NBA:'basketball/nba',WNBA:'basketball/wnba',MLB:'baseball/mlb',NHL:'hockey/nhl',NCAAFB:'football/college-football'};
@@ -478,8 +513,9 @@ async function autoGradeSteam(){
   const toGrade=moves.filter(m=>{
     if(grades[m._key]) return false;
     if(!m.ts||!m.move) return false;
-    // Only grade actual prop moves, not spreads/totals
-    if(!(m.title||'').includes('PROP MOVE')) return false;
+    const t=m.title||'';
+    // Grade prop moves, spreads, and totals
+    if(!t.includes('PROP MOVE')&&!t.includes('SPREAD')&&!t.includes('TOTAL')) return false;
     const moveDate=new Date(m.ts).toISOString().split('T')[0];
     return moveDate < today; // only past dates
   });
@@ -506,6 +542,31 @@ async function autoGradeSteam(){
     cache[key]=await fetchBoxScoresForDate(date,sport);
     return cache[key];
   };
+  // Cache game scores by date+sport
+  const scoreCache={};
+  const fetchScoresCached=async(date,sport)=>{
+    const key=date+'|'+sport;
+    if(scoreCache[key]) return scoreCache[key];
+    scoreCache[key]=await fetchGameScoresForDate(date,sport);
+    return scoreCache[key];
+  };
+  // Find game by team abbreviations (try date + up to 7 days forward)
+  const findGame=async(moveDate,sport,awayAbbr,homeAbbr)=>{
+    const startMs=new Date(moveDate+'T12:00:00Z').getTime();
+    const todayMs=new Date(today+'T00:00:00Z').getTime();
+    for(let d=0;d<=7;d++){
+      const checkMs=startMs+(d*86400000);
+      if(checkMs>=todayMs) break;
+      const checkDate=new Date(checkMs).toISOString().split('T')[0];
+      const games=await fetchScoresCached(checkDate,sport);
+      const game=games.find(g=>
+        (g.awayAbbr===awayAbbr&&g.homeAbbr===homeAbbr)||
+        (g.awayAbbr===homeAbbr&&g.homeAbbr===awayAbbr)
+      );
+      if(game) return {game,gameDate:checkDate};
+    }
+    return null;
+  };
   // Helper: find player stats by searching move date + up to 7 days forward
   // Prop line moves happen BEFORE the game — must search forward for game date
   const findStatsWithPlayer=async(moveDate, sport, playerName)=>{
@@ -528,23 +589,88 @@ async function autoGradeSteam(){
   const debugLog=[];
   for(const move of toGrade){
     const moveDate=new Date(move.ts).toISOString().split('T')[0];
-    const playerMatch=(move.title||'').match(/—\s*(.+)$/);
-    if(!playerMatch){debugLog.push('NO_PLAYER_MATCH: '+move.title);failed++;continue;}
+    const title=move.title||'';
+    const body=move.body||'';
+    const mv=move.move;
+
+    // ── SPREAD grading ──────────────────────────────────────────────
+    if(title.includes('SPREAD')){
+      // Title: "STEAM NFL SPREAD — NO @ NYG"  body: "+1.5 → -1.5 (-3.0)"
+      const teamsMatch=title.match(/—\s*([A-Z]+)\s*@\s*([A-Z]+)/i);
+      if(!teamsMatch){debugLog.push('SPREAD_NO_TEAMS: '+title);failed++;continue;}
+      const awayAbbr=teamsMatch[1].toUpperCase();
+      const homeAbbr=teamsMatch[2].toUpperCase();
+      if(!mv){debugLog.push('SPREAD_NO_MOVE: '+title);failed++;continue;}
+      // The line is on the home team (standard convention): negative = home favored
+      // Steam direction: if line moved toward home (more negative), steam on home; else steam on away
+      const finalLine=parseFloat(mv.to); // home team's closing line
+      if(isNaN(finalLine)){debugLog.push('SPREAD_BAD_LINE: '+mv.to);failed++;continue;}
+      const found=await findGame(moveDate,move.sport||'',awayAbbr,homeAbbr);
+      if(!found){debugLog.push('SPREAD_NO_GAME: '+awayAbbr+' @ '+homeAbbr+' sport='+move.sport);failed++;continue;}
+      const {game}=found;
+      // Normalize: ensure home/away match what we found
+      const flipped=game.awayAbbr===homeAbbr;
+      const homeScore=flipped?game.awayScore:game.homeScore;
+      const awayScore=flipped?game.homeScore:game.awayScore;
+      const margin=homeScore-awayScore; // positive = home won
+      // Steam on the side the line moved toward
+      // Line moved more negative (diff<0) = steam on home; moved more positive = steam on away
+      const steamHome=mv.diff<0;
+      let result;
+      if(steamHome){
+        result=margin>Math.abs(finalLine)?'win':margin===Math.abs(finalLine)?'push':'loss';
+        if(finalLine>0) result=margin>0?'win':margin===0?'push':'loss'; // home is underdog
+      } else {
+        const awayMargin=awayScore-homeScore;
+        const awayLine=-finalLine;
+        result=awayMargin>Math.abs(awayLine)?'win':awayMargin===Math.abs(awayLine)?'push':'loss';
+        if(awayLine>0) result=awayMargin>0?'win':awayMargin===0?'push':'loss';
+      }
+      grades[move._key]=result;
+      graded++;
+      continue;
+    }
+
+    // ── TOTAL grading ───────────────────────────────────────────────
+    if(title.includes('TOTAL')){
+      // Title: "NBA TOTAL — CHI @ DEN"  body: "O/U: 235.5 → 231.5 (-4.0)"
+      const teamsMatch=title.match(/—\s*([A-Z]+)\s*@\s*([A-Z]+)/i);
+      if(!teamsMatch){debugLog.push('TOTAL_NO_TEAMS: '+title);failed++;continue;}
+      const awayAbbr=teamsMatch[1].toUpperCase();
+      const homeAbbr=teamsMatch[2].toUpperCase();
+      if(!mv){debugLog.push('TOTAL_NO_MOVE: '+title);failed++;continue;}
+      const finalLine=parseFloat(mv.to);
+      if(isNaN(finalLine)){debugLog.push('TOTAL_BAD_LINE: '+mv.to);failed++;continue;}
+      const found=await findGame(moveDate,move.sport||'',awayAbbr,homeAbbr);
+      if(!found){debugLog.push('TOTAL_NO_GAME: '+awayAbbr+' @ '+homeAbbr+' sport='+move.sport);failed++;continue;}
+      const combined=found.game.homeScore+found.game.awayScore;
+      // Line dropped = steam on Under; line rose = steam on Over
+      const steamUnder=mv.diff<0;
+      let result;
+      if(steamUnder) result=combined<finalLine?'win':combined===finalLine?'push':'loss';
+      else result=combined>finalLine?'win':combined===finalLine?'push':'loss';
+      grades[move._key]=result;
+      graded++;
+      continue;
+    }
+
+    // ── PROP grading ─────────────────────────────────────────────────
+    const playerMatch=(title).match(/—\s*(.+)$/);
+    if(!playerMatch){debugLog.push('NO_PLAYER_MATCH: '+title);failed++;continue;}
     const playerName=playerMatch[1].trim();
-    const bodyLine=(move.body||'').split('\n')[0];
+    const bodyLine=body.split('\n')[0];
     // Skip first-quarter/first-half props — ESPN only has full-game box scores
     if(/\d+[QH]:|FIRST\s+(QUARTER|HALF):/i.test(bodyLine)){
       debugLog.push('SKIP_PARTIAL: "'+bodyLine+'"');failed++;continue;
     }
     const statMatch=bodyLine.match(/^([A-Z][A-Z\s\+]+):/i);
-    if(!statMatch){debugLog.push('NO_STAT_MATCH: "'+bodyLine+'" title='+move.title);failed++;continue;}
+    if(!statMatch){debugLog.push('NO_STAT_MATCH: "'+bodyLine+'" title='+title);failed++;continue;}
     const statType=statMatch[1].trim().toLowerCase();
-    const mv=move.move;
-    if(!mv){debugLog.push('NO_MOVE: '+move.title);failed++;continue;}
+    if(!mv){debugLog.push('NO_MOVE: '+title);failed++;continue;}
     const finalLine=parseFloat(mv.to);
     // Derive direction from the move diff if not explicitly stored
     const dir=move.direction||(mv.diff>0?'UP':mv.diff<0?'DOWN':null);
-    if(!finalLine||!dir){debugLog.push('NO_LINE_OR_DIR: line='+finalLine+' dir='+dir+' title='+move.title);failed++;continue;}
+    if(!finalLine||!dir){debugLog.push('NO_LINE_OR_DIR: line='+finalLine+' dir='+dir+' title='+title);failed++;continue;}
     // Determine sport — stored value or infer from stat type
     const NFL_STATS=['passing yards','rushing yards','receiving yards','receptions','rushing attempts','passing completions','passing attempts','passing touchdowns','rushing touchdowns','interceptions','targets','field goals made','kicking points','extra points made','rushing plus receiving yards'];
     const NBA_STATS=['points','rebounds','assists','steals','blocks','turnovers','three point field goals made','points plus assists plus rebounds','assists plus rebounds','points plus rebounds'];
