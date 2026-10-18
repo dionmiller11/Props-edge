@@ -477,7 +477,8 @@ async function autoGradeSteam(){
   const toGrade=moves.filter(m=>{
     if(grades[m._key]) return false;
     if(!m.ts||!m.move) return false;
-    if(!(m.title||'').match(/—\s*.+/)) return false;
+    // Only grade actual prop moves, not spreads/totals
+    if(!(m.title||'').includes('PROP MOVE')) return false;
     const moveDate=new Date(m.ts).toISOString().split('T')[0];
     return moveDate < today; // only past dates
   });
