@@ -490,25 +490,34 @@ async function autoGradeSteam(){
     return cache[key];
   };
   let graded=0, failed=0;
+  const debugLog=[];
   for(const move of toGrade){
     const moveDate=new Date(move.ts).toISOString().split('T')[0];
     const stats=await fetchCached(moveDate, move.sport||'');
-    // Extract player name from title e.g. "PROP MOVE — Travis Kelce"
     const playerMatch=(move.title||'').match(/—\s*(.+)$/);
-    if(!playerMatch){failed++;continue;}
+    if(!playerMatch){debugLog.push('NO_PLAYER_MATCH: '+move.title);failed++;continue;}
     const playerName=playerMatch[1].trim();
-    // Extract stat type from body e.g. "RECEIVING YARDS: 47.5 → 48.5"
     const bodyLine=(move.body||'').split('\n')[0];
     const statMatch=bodyLine.match(/^([A-Z][A-Z\s\+]+):/i);
-    if(!statMatch){failed++;continue;}
+    if(!statMatch){debugLog.push('NO_STAT_MATCH: '+bodyLine);failed++;continue;}
     const statType=statMatch[1].trim().toLowerCase();
     const mv=move.move;
-    if(!mv){failed++;continue;}
+    if(!mv){debugLog.push('NO_MOVE: '+move.title);failed++;continue;}
     const finalLine=parseFloat(mv.to);
     const dir=move.direction;
-    if(!finalLine||!dir){failed++;continue;}
+    if(!finalLine||!dir){debugLog.push('NO_LINE_OR_DIR: line='+finalLine+' dir='+dir);failed++;continue;}
+    // Check player exists in stats
+    const playerNames=Object.keys(stats);
+    const nameLower=playerName.toLowerCase();
+    const lastName=nameLower.split(' ').pop();
+    const foundName=playerNames.find(k=>k===nameLower)||playerNames.find(k=>k.endsWith(lastName)&&k.includes(' '));
+    if(!foundName){debugLog.push('PLAYER_NOT_FOUND: "'+playerName+'" sport='+move.sport+' date='+moveDate+' statsCount='+playerNames.length);failed++;continue;}
     const actual=findPlayerStat(stats, playerName, statType);
-    if(actual===null){failed++;continue;}
+    if(actual===null){
+      const playerKeys=Object.keys(stats[foundName]||{});
+      debugLog.push('STAT_NOT_FOUND: "'+statType+'" for '+playerName+' keys='+playerKeys.join(','));
+      failed++;continue;
+    }
     let result;
     if(dir==='UP') result=actual>finalLine?'win':actual===finalLine?'push':'loss';
     else result=actual<finalLine?'win':actual===finalLine?'push':'loss';
@@ -518,7 +527,8 @@ async function autoGradeSteam(){
   saveGrades();
   render();
   btn.disabled=false; btn.textContent='⚡ Auto-Grade';
-  showToast(`⚡ Graded ${graded} move${graded!==1?'s':''}${failed?` · ${failed} not found`:''}`, 4000);
+  showToast(`⚡ Graded ${graded} · ${failed} failed — check console`, 5000);
+  if(debugLog.length) console.log('AUTO-GRADE DEBUG:\n'+debugLog.slice(0,10).join('\n'));
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
