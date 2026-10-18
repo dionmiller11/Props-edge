@@ -426,16 +426,20 @@ async function autoGradeSteam(){
   // Find ungraded prop moves from yesterday
   const toGrade=moves.filter(m=>{
     if(grades[m._key]) return false; // already graded
-    if(m.type!=='prop') return false; // only prop moves for now
     if(!m.ts) return false;
+    // Must have a line move and a player name extractable from the title
+    if(!m.move) return false;
+    if(!(m.title||'').match(/—\s*.+/)) return false;
     const moveDate=new Date(m.ts).toISOString().split('T')[0];
     return moveDate===ds;
   });
   if(!toGrade.length){
-    showToast('No ungraded prop moves from yesterday');
+    const total=moves.filter(m=>{const md=new Date(m.ts).toISOString().split('T')[0];return md===ds;}).length;
+    showToast(`No gradeable moves from ${ds} (${total} total alerts that day)`, 4000);
     btn.disabled=false; btn.textContent='⚡ Auto-Grade';
     return;
   }
+  showToast(`Found ${toGrade.length} gradeable move${toGrade.length!==1?'s':''}…`, 2000);
   // Group by sport
   const sports=[...new Set(toGrade.map(m=>m.sport).filter(Boolean))];
   const allStats={};
