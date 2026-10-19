@@ -39,7 +39,7 @@ main{max-width:1100px;margin:0 auto;padding:18px 16px;}
 .filter-chip.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
 .filter-chip.win{border-color:var(--accent2);color:var(--accent2);} .filter-chip.win.active{background:var(--accent2);color:#000;}
 .filter-chip.loss{border-color:var(--miss);color:var(--miss);} .filter-chip.loss.active{background:var(--miss);color:#fff;}
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
 .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
 table{width:100%;border-collapse:collapse;font-size:12px;}
@@ -182,6 +182,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
           <button id="btAutoGradeBtn" onclick="btAutoGrade()" style="font-size:10px;padding:3px 9px;border-radius:4px;background:rgba(0,255,136,.08);color:var(--accent2);border:1px solid rgba(0,255,136,.2);cursor:pointer;font-family:var(--font);font-weight:700;">⚡ Auto-Grade</button>
         </div>
       </div>
+      <div class="table-scroll">
       <table>
         <thead><tr>
           <th id="chkHeader" style="display:none;width:28px"></th>
@@ -191,6 +192,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         </tr></thead>
         <tbody id="betBody"></tbody>
       </table>
+      </div>
     </div>
   </div>
 
