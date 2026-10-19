@@ -148,6 +148,7 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="lastUpdated">—</span>
     <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+    <button class="btn btn-gold" id="gl-grade-btn" onclick="gradeGameLines()" style="font-size:11px">⚡ Grade Lines</button>
     <button class="btn btn-primary" id="runBtn" onclick="loadAll()">⚡ LOAD LINES</button>
   </div>
 </header>
@@ -713,6 +714,9 @@ async function loadAll(){
     fetch(`${WORKER_URL}/sim/save`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date: todayDate, predictions }) }).catch(()=>{});
   }
 
+  // ── GAME LINES SNAPSHOT — save every game for market analytics ──
+  saveGameLinesSnapshot(allGames, todayDate);
+
   renderCurrentTab();
   document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   setStatus('done', `✅ ${allGames.length} games loaded · ${allGames.filter(g=>g.rlm).length} RLM · ${allGames.filter(g=>g.steam).length} steam moves · 🎲 sims complete`);
@@ -1056,6 +1060,164 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 // Auto-load
 window.addEventListener('DOMContentLoaded',()=>setTimeout(loadAll,600));
+
+// ═══════════════════════════════════════════════════════════
+// GAME LINES SNAPSHOT — log every game for market analytics
+// ═══════════════════════════════════════════════════════════
+function saveGameLinesSnapshot(games, date){
+  const key = 'glSnapshot_' + date;
+  let existing;
+  try{ existing = JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ existing=null; }
+  const current = existing || {date, games:[]};
+  const seen = new Set(current.games.map(g=>g.id));
+  const toAdd = [];
+  for(const g of games){
+    if(seen.has(g.id)) continue;
+    // Determine sim-recommended side for spread and total
+    const spreadSide = g.sim ? (g.sim.awaySpreadPct > 50 ? 'AWAY' : 'HOME') : null;
+    const totalSide  = g.sim ? (g.sim.overPct > 50 ? 'OVER' : 'UNDER') : null;
+    const spreadConf = g.sim ? Math.max(g.sim.awaySpreadPct||0, g.sim.homeSpreadPct||0) : null;
+    const totalConf  = g.sim ? Math.max(g.sim.overPct||0, g.sim.underPct||0) : null;
+    const entry = {
+      id: g.id,
+      sport: g.sport,
+      away: g.away, home: g.home,
+      awayFull: g.awayFull, homeFull: g.homeFull,
+      commence: g.commence,
+      date,
+      spread: g.spread,
+      total: g.total,
+      ml_home: g.ml_home,
+      ml_away: g.ml_away,
+      spreadSide,   // which side sim recommends: AWAY or HOME
+      totalSide,    // OVER or UNDER
+      spreadConf,   // sim confidence %
+      totalConf,
+      rlm: g.rlm||false,
+      steam: g.steam||false,
+      sharpScore: g.sharpScore||0,
+      result_spread: null,  // filled by grader: 'WIN','LOSS','PUSH'
+      result_total:  null,
+      result_ml_away: null,
+      result_ml_home: null,
+      savedAt: Date.now()
+    };
+    current.games.push(entry);
+    toAdd.push(entry);
+    seen.add(g.id);
+  }
+  current.updatedAt = Date.now();
+  try{ localStorage.setItem(key, JSON.stringify(current)); }catch(e){}
+  // Sync to KV worker
+  if(toAdd.length){
+    fetch(`${WORKER_URL}/gamelines/save`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date, games: toAdd})
+    }).catch(()=>{});
+  }
+  if(toAdd.length) showToast(`📊 Saved ${toAdd.length} game lines for tracking`);
+}
+
+// Grade all ungraded game lines from past dates using ESPN final scores
+async function gradeGameLines(){
+  const today = new Date().toISOString().split('T')[0];
+  const btn = document.getElementById('gl-grade-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Grading…';}
+  let totalGraded=0, totalFailed=0;
+
+  // Check last 14 days for ungraded snapshots
+  for(let i=1;i<=14;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const dt = d.toISOString().split('T')[0];
+    const key = 'glSnapshot_' + dt;
+    let snap;
+    try{ snap = JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ continue; }
+    if(!snap||!snap.games) continue;
+
+    const ungraded = snap.games.filter(g=>g.result_spread===null&&g.result_total===null);
+    if(!ungraded.length) continue;
+
+    // Fetch ESPN scores for each sport on that date
+    const sports = [...new Set(ungraded.map(g=>g.sport))];
+    const scoreMap = {};
+    for(const sport of sports){
+      const espnPath = {NFL:'football/nfl',NBA:'basketball/nba',MLB:'baseball/mlb',NHL:'hockey/nhl',NCAAFB:'football/college-football'}[sport];
+      if(!espnPath) continue;
+      try{
+        const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?dates=${dt.replace(/-/g,'')}&limit=100`);
+        if(!r.ok) continue;
+        const data = await r.json();
+        for(const evt of (data.events||[])){
+          const comp = evt.competitions?.[0];
+          if(!comp) continue;
+          const home = comp.competitors?.find(c=>c.homeAway==='home');
+          const away = comp.competitors?.find(c=>c.homeAway==='away');
+          const status = evt.status?.type?.completed;
+          if(!status) continue;
+          scoreMap[evt.id] = {
+            homeScore: parseInt(home?.score||0),
+            awayScore: parseInt(away?.score||0),
+            completed: true
+          };
+        }
+      }catch(e){}
+    }
+
+    // Grade each game
+    let changed=false;
+    for(const g of ungraded){
+      const sc = scoreMap[g.id];
+      if(!sc||!sc.completed) continue;
+      const {homeScore, awayScore} = sc;
+      const total = homeScore + awayScore;
+      const awayMargin = awayScore - homeScore; // positive = away wins outright
+
+      // Grade spread (spread is from home team's perspective: negative = home fav)
+      if(g.spread!=null && g.spreadSide){
+        const ats = g.spread<0
+          ? homeScore + g.spread - awayScore  // home covers if positive
+          : awayScore + Math.abs(g.spread) - homeScore; // away covers
+        const homeCovers = g.spread<0 ? (homeScore+g.spread)>awayScore : homeScore<(awayScore-Math.abs(g.spread));
+        // Actually: home spread = home + spread vs away
+        const homeCoverMargin = homeScore - awayScore + g.spread; // >0 home covers, <0 away covers, =0 push
+        if(homeCoverMargin===0){
+          g.result_spread = 'PUSH';
+        } else if(g.spreadSide==='HOME'){
+          g.result_spread = homeCoverMargin>0?'WIN':'LOSS';
+        } else {
+          g.result_spread = homeCoverMargin<0?'WIN':'LOSS';
+        }
+      }
+
+      // Grade total
+      if(g.total!=null && g.totalSide){
+        if(total===g.total) g.result_total='PUSH';
+        else if(g.totalSide==='OVER') g.result_total = total>g.total?'WIN':'LOSS';
+        else g.result_total = total<g.total?'WIN':'LOSS';
+      }
+
+      // Grade ML — just track which side won, no sim recommendation needed
+      if(g.ml_home!=null){
+        const homeWon = homeScore > awayScore;
+        g.result_ml_home = homeWon?'WIN':'LOSS';
+        g.result_ml_away = homeWon?'LOSS':'WIN';
+      }
+
+      changed=true;
+      totalGraded++;
+    }
+
+    if(changed){
+      try{ localStorage.setItem(key, JSON.stringify(snap)); }catch(e){}
+      // Sync graded results back to worker
+      const graded = snap.games.filter(g=>g.result_spread||g.result_total);
+      fetch(`${WORKER_URL}/gamelines/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dt,games:graded})}).catch(()=>{});
+    }
+  }
+
+  if(btn){btn.disabled=false;btn.textContent='⚡ Grade Lines';}
+  showToast(`⚡ Graded ${totalGraded} game lines`);
+}
 </script>
 </body>
 </html>

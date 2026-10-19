@@ -319,6 +319,19 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         <div id="scan-by-proptype"></div>
       </div>
     </div>
+    <!-- Game Lines Analytics -->
+    <div class="analytics-card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">🏟 GAME LINES — SPREAD · TOTAL · ML</h3>
+        <button class="btn btn-gold" onclick="loadGameLinesData()" style="font-size:10px;padding:4px 10px">↻ Load</button>
+      </div>
+      <div id="gl-stats-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div><div style="font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;margin-bottom:8px">SPREAD (SIM PICK)</div><div id="gl-spread-breakdown"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;margin-bottom:8px">TOTAL (SIM PICK)</div><div id="gl-total-breakdown"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;margin-bottom:8px">BY SITUATION</div><div id="gl-situation-breakdown"></div></div>
+      </div>
+    </div>
     <!-- Raw play log -->
     <div class="analytics-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1719,6 +1732,95 @@ async function gradeScanPlays(){
   if(btn){btn.disabled=false;btn.textContent='⚡ Grade Pending';}
   showToast(`⚡ Graded ${graded} plays (${failed} dates failed)`);
   renderScanAnalytics();
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME LINES ANALYTICS — reads glSnapshot from localStorage
+// ═══════════════════════════════════════════════════════════
+let glGames=[];
+
+function loadGameLinesData(){
+  glGames=[];
+  // Read last 60 days of game lines snapshots from localStorage
+  for(let i=1;i<=60;i++){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const dt=d.toISOString().split('T')[0];
+    try{
+      const snap=JSON.parse(localStorage.getItem('glSnapshot_'+dt)||'null');
+      if(snap&&snap.games) glGames.push(...snap.games.map(g=>({...g,date:g.date||dt})));
+    }catch(e){}
+  }
+  renderGameLinesAnalytics();
+}
+
+function renderGameLinesAnalytics(){
+  const graded=glGames.filter(g=>g.result_spread||g.result_total||g.result_ml_home);
+
+  // Spread stats (sim picks only)
+  const spreadGraded=glGames.filter(g=>g.result_spread&&g.spreadSide);
+  const spreadW=spreadGraded.filter(g=>g.result_spread==='WIN').length;
+  const spreadL=spreadGraded.filter(g=>g.result_spread==='LOSS').length;
+  const spreadWR=spreadW+spreadL>0?Math.round(spreadW/(spreadW+spreadL)*100):0;
+
+  // Total stats
+  const totalGraded=glGames.filter(g=>g.result_total&&g.totalSide);
+  const totalW=totalGraded.filter(g=>g.result_total==='WIN').length;
+  const totalL=totalGraded.filter(g=>g.result_total==='LOSS').length;
+  const totalWR=totalW+totalL>0?Math.round(totalW/(totalW+totalL)*100):0;
+
+  // Overall units (flat -110 on each pick)
+  const calcU=(w,l)=>+(w*(100/110)-l).toFixed(2);
+  const spreadU=calcU(spreadW,spreadL);
+  const totalU=calcU(totalW,totalL);
+
+  const statsEl=document.getElementById('gl-stats-row');
+  if(statsEl) statsEl.innerHTML=`
+    <div class="stat-card"><div class="stat-val ${spreadWR>=55?'green':spreadWR>=45?'gold':'red'}">${spreadWR}%</div><div class="stat-lbl">SPREAD WIN% (${spreadW}-${spreadL})</div><div style="font-size:11px;font-family:var(--font);color:${spreadU>=0?'var(--accent2)':'var(--miss)'};margin-top:4px">${spreadU>=0?'+':''}${spreadU}u</div></div>
+    <div class="stat-card"><div class="stat-val ${totalWR>=55?'green':totalWR>=45?'gold':'red'}">${totalWR}%</div><div class="stat-lbl">TOTAL WIN% (${totalW}-${totalL})</div><div style="font-size:11px;font-family:var(--font);color:${totalU>=0?'var(--accent2)':'var(--miss)'};margin-top:4px">${totalU>=0?'+':''}${totalU}u</div></div>
+    <div class="stat-card"><div class="stat-val blue">${graded.length}</div><div class="stat-lbl">GAMES GRADED</div><div style="font-size:11px;color:var(--muted);margin-top:4px">${glGames.length} total logged</div></div>`;
+
+  // Spread by sport
+  const sportG={};
+  for(const g of spreadGraded){
+    const s=g.sport||'?';
+    if(!sportG[s])sportG[s]={w:0,l:0};
+    if(g.result_spread==='WIN')sportG[s].w++;else sportG[s].l++;
+  }
+  const spreadEl=document.getElementById('gl-spread-breakdown');
+  if(spreadEl) spreadEl.innerHTML=Object.entries(sportG).map(([s,v])=>{
+    const wr=v.w+v.l>0?Math.round(v.w/(v.w+v.l)*100):0;
+    const c=wr>=55?'var(--accent2)':wr>=45?'var(--gold)':'var(--miss)';
+    return`<div class="breakdown-row"><div class="breakdown-label">${esc(s)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${wr}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${wr}%</span> <span style="color:var(--muted)">${v.w}-${v.l}</span></div></div>`;
+  }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No graded data yet — click Grade Lines in Game Lines page</div>';
+
+  // Total by sport
+  const totalSportG={};
+  for(const g of totalGraded){
+    const s=g.sport||'?';
+    if(!totalSportG[s])totalSportG[s]={w:0,l:0};
+    if(g.result_total==='WIN')totalSportG[s].w++;else totalSportG[s].l++;
+  }
+  const totalEl=document.getElementById('gl-total-breakdown');
+  if(totalEl) totalEl.innerHTML=Object.entries(totalSportG).map(([s,v])=>{
+    const wr=v.w+v.l>0?Math.round(v.w/(v.w+v.l)*100):0;
+    const c=wr>=55?'var(--accent2)':wr>=45?'var(--gold)':'var(--miss)';
+    return`<div class="breakdown-row"><div class="breakdown-label">${esc(s)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${wr}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${wr}%</span> <span style="color:var(--muted)">${v.w}-${v.l}</span></div></div>`;
+  }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No graded data yet</div>';
+
+  // By situation: RLM, Steam, Sharp (confidence tiers)
+  const situations={
+    'RLM Games':    graded.filter(g=>g.rlm),
+    'Steam Moves':  graded.filter(g=>g.steam),
+    'High Conf (70%+)': graded.filter(g=>(g.spreadConf||0)>=70||(g.totalConf||0)>=70),
+  };
+  const sitEl=document.getElementById('gl-situation-breakdown');
+  if(sitEl) sitEl.innerHTML=Object.entries(situations).map(([label,games])=>{
+    const sw=games.filter(g=>g.result_spread==='WIN').length+games.filter(g=>g.result_total==='WIN').length;
+    const sl=games.filter(g=>g.result_spread==='LOSS').length+games.filter(g=>g.result_total==='LOSS').length;
+    const wr=sw+sl>0?Math.round(sw/(sw+sl)*100):null;
+    const c=wr===null?'var(--muted)':wr>=55?'var(--accent2)':wr>=45?'var(--gold)':'var(--miss)';
+    return`<div class="breakdown-row"><div class="breakdown-label">${esc(label)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${wr||0}%;background:${c}"></div></div><div class="breakdown-stats">${wr!==null?`<span class="wr" style="color:${c}">${wr}%</span> <span style="color:var(--muted)">${sw}-${sl}</span>`:'<span style="color:var(--muted)">—</span>'}</div></div>`;
+  }).join('');
 }
 
 </script>
