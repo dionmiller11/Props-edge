@@ -484,7 +484,8 @@ window.savePropsSnapshot=function(plays,sport){
   var cur=ex||{date:ds,plays:[]};
   var seen=new Set(cur.plays.map(function(p){return p.player+'|'+p.prop;}));
   var newPlays=[];
-  plays.filter(function(p){return(p.rate||0)>=80;}).forEach(function(p){
+  var _snapshotMin=parseInt((document.getElementById('minRate')||{}).value||'70');
+  plays.filter(function(p){return(p.rate||0)>=_snapshotMin;}).forEach(function(p){
     var k=p.player+'|'+p.prop;
     if(!seen.has(k)){var np=Object.assign({},p,{sport:p.sport||sport,savedAt:Date.now()});cur.plays.push(np);seen.add(k);newPlays.push(np);}
   });

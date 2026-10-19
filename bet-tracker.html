@@ -110,6 +110,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
   <button class="page-tab" id="tab-analytics" onclick="showPage('analytics')">📊 ANALYTICS</button>
   <button class="page-tab" id="tab-daily" onclick="showPage('daily')">📅 DAILY LOG</button>
   <button class="page-tab" id="tab-sim" onclick="showPage('sim')">🎲 SIM RESULTS</button>
+  <button class="page-tab" id="tab-scan" onclick="showPage('scan')">🔬 SCAN ANALYTICS</button>
 </div>
 <main>
   <!-- Stats Summary (always visible) -->
@@ -272,6 +273,69 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
     <div id="daily-log-body"></div>
   </div>
 
+  <!-- SCAN ANALYTICS PAGE -->
+  <div id="page-scan" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em">🔬 SCAN ANALYTICS — ALL MARKETS</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="scan-sport" class="form-input" style="width:auto;font-size:11px" onchange="renderScanAnalytics()">
+          <option value="ALL">All Sports</option>
+          <option value="NHL">🏒 NHL</option><option value="NFL">🏈 NFL</option>
+          <option value="NBA">🏀 NBA</option><option value="MLB">⚾ MLB</option>
+          <option value="NCAAFB">NCAAFB</option><option value="WNBA">WNBA</option>
+        </select>
+        <select id="scan-days" class="form-input" style="width:auto;font-size:11px" onchange="loadScanData()">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="60">Last 60 days</option>
+        </select>
+        <select id="scan-min" class="form-input" style="width:auto;font-size:11px" onchange="renderScanAnalytics()">
+          <option value="1">1+ plays</option>
+          <option value="3" selected>3+ plays</option>
+          <option value="5">5+ plays</option>
+          <option value="10">10+ plays</option>
+        </select>
+        <button class="btn btn-green" onclick="loadScanData()" style="font-size:11px">↻ Load</button>
+        <button id="scan-grade-btn" class="btn btn-gold" onclick="gradeScanPlays()" style="font-size:11px;display:none">⚡ Grade Pending</button>
+      </div>
+    </div>
+    <div id="scan-status" style="font-size:11px;color:var(--muted);margin-bottom:12px;font-family:var(--font)"></div>
+    <!-- Scan summary stats -->
+    <div id="scan-stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px"></div>
+    <!-- Market breakdown -->
+    <div class="analytics-card" style="margin-bottom:14px">
+      <h3>🎯 BY MARKET <span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">(sport · prop · direction) — every play the scanner surfaced</span></h3>
+      <div id="scan-market-breakdown"></div>
+    </div>
+    <!-- By sport -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="analytics-card">
+        <h3>🏟 BY SPORT</h3>
+        <div id="scan-by-sport"></div>
+      </div>
+      <div class="analytics-card">
+        <h3>📈 BY PROP TYPE</h3>
+        <div id="scan-by-proptype"></div>
+      </div>
+    </div>
+    <!-- Raw play log -->
+    <div class="analytics-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="margin:0">📋 PLAY LOG</h3>
+        <span id="scan-play-count" style="font-size:10px;color:var(--muted);font-family:var(--font)"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>DATE</th><th>PLAYER</th><th>PROP</th><th>DIR</th><th>RATE</th><th>RESULT</th>
+          </tr></thead>
+          <tbody id="scan-play-log"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- SIM RESULTS PAGE -->
   <div id="page-sim" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
@@ -362,13 +426,14 @@ function calcPL(bet){
 
 function showPage(page){
   activePage=page;
-  ['log','analytics','daily','sim'].forEach(p=>{
+  ['log','analytics','daily','sim','scan'].forEach(p=>{
     document.getElementById('page-'+p).style.display=page===p?'block':'none';
     document.getElementById('tab-'+p).classList.toggle('active',page===p);
   });
   if(page==='analytics') renderAnalytics();
   if(page==='daily') renderDailyLog();
   if(page==='sim'){ document.getElementById('sim-date').value=new Date().toISOString().split('T')[0]; renderSim(); }
+  if(page==='scan'&&!scanDataLoaded) loadScanData();
 }
 
 function addBet(){
@@ -1409,6 +1474,252 @@ renderBets();updateStats();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',fill);
   else fill();
 })();
+
+// ═══════════════════════════════════════════════════════════
+// SCAN ANALYTICS — grades every play the scanner surfaced
+// ═══════════════════════════════════════════════════════════
+let scanPlays=[], scanDataLoaded=false;
+
+async function loadScanData(){
+  const days=parseInt(document.getElementById('scan-days')?.value||'30');
+  const statusEl=document.getElementById('scan-status');
+  if(statusEl) statusEl.textContent='⏳ Loading scan history…';
+  scanPlays=[];
+  // Build date list for the range
+  const dates=[];
+  for(let i=1;i<=days;i++){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  // Fetch snapshots in parallel (batch of 7 at a time to avoid hammering worker)
+  let loaded=0,failed=0;
+  for(let i=0;i<dates.length;i+=7){
+    const batch=dates.slice(i,i+7);
+    const results=await Promise.allSettled(batch.map(async dt=>{
+      try{
+        const r=await fetch(`${KV_BASE}/snapshot/get?date=${dt}`,{signal:AbortSignal.timeout(5000)});
+        if(!r.ok) return null;
+        const d=await r.json();
+        return {date:dt, plays:(d.plays||[])};
+      }catch(e){return null;}
+    }));
+    for(let j=0;j<results.length;j++){
+      const v=results[j];
+      if(v.status==='fulfilled'&&v.value&&v.value.plays.length){
+        const dt=batch[j];
+        v.value.plays.forEach(p=>{
+          scanPlays.push({
+            ...p,
+            date:p.date||dt,
+            sport:(p.sport||'?').toUpperCase(),
+            direction:p.direction||'OVER',
+            propType:p.propType||p.category||p.propKey||'Other',
+            result:p.result||'pending'
+          });
+        });
+        loaded++;
+      } else if(v.status==='rejected') failed++;
+    }
+    if(statusEl) statusEl.textContent=`⏳ Loaded ${loaded} days… (${scanPlays.length} plays)`;
+  }
+  // Also merge from localStorage (for offline / current day)
+  for(let i=0;i<days;i++){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const dt=d.toISOString().split('T')[0];
+    try{
+      const cached=JSON.parse(localStorage.getItem('propsSnapshot_'+dt)||'null');
+      if(cached&&cached.plays){
+        const existingKeys=new Set(scanPlays.filter(p=>p.date===dt).map(p=>p.player+'|'+p.prop));
+        cached.plays.forEach(p=>{
+          const k=p.player+'|'+p.prop;
+          if(!existingKeys.has(k)){
+            scanPlays.push({...p,date:dt,sport:(p.sport||'?').toUpperCase(),direction:p.direction||'OVER',propType:p.propType||p.category||p.propKey||'Other',result:p.result||'pending'});
+          }
+        });
+      }
+    }catch(e){}
+  }
+  scanDataLoaded=true;
+  // Count pending from past days
+  const today=new Date().toISOString().split('T')[0];
+  const pendingOld=scanPlays.filter(p=>p.result==='pending'&&p.date&&p.date<today);
+  const gradeBtn=document.getElementById('scan-grade-btn');
+  if(gradeBtn) gradeBtn.style.display=pendingOld.length?'inline-block':'none';
+  if(statusEl) statusEl.textContent=`✅ ${scanPlays.length} plays across ${loaded} days · ${pendingOld.length} pending (not yet graded)`;
+  renderScanAnalytics();
+}
+
+function renderScanAnalytics(){
+  const sport=document.getElementById('scan-sport')?.value||'ALL';
+  const minN=parseInt(document.getElementById('scan-min')?.value||'3');
+  const today=new Date().toISOString().split('T')[0];
+  const filtered=scanPlays.filter(p=>sport==='ALL'||p.sport===sport);
+  const settled=filtered.filter(p=>p.result==='win'||p.result==='loss'||p.result==='W'||p.result==='L');
+  const norm=r=>r==='W'?'win':r==='L'?'loss':r;
+
+  // Summary stats
+  const totalW=settled.filter(p=>norm(p.result)==='win').length;
+  const totalL=settled.filter(p=>norm(p.result)==='loss').length;
+  const wr=totalW+totalL>0?Math.round(totalW/(totalW+totalL)*100):0;
+  const units=settled.reduce((s,p)=>{const r=norm(p.result);const odds=parseInt(p.bestOdds||p.odds||'-110');const u=1;return s+(r==='win'?(odds>0?odds/100:100/Math.abs(odds)):-u);},0);
+  const pendingCount=filtered.filter(p=>p.result==='pending').length;
+  const statsEl=document.getElementById('scan-stats-row');
+  if(statsEl) statsEl.innerHTML=`
+    <div class="stat-card"><div class="stat-val ${wr>=55?'green':wr>=45?'gold':'red'}">${wr}%</div><div class="stat-lbl">WIN RATE</div></div>
+    <div class="stat-card"><div class="stat-val">${totalW}-${totalL}</div><div class="stat-lbl">W-L (GRADED)</div></div>
+    <div class="stat-card"><div class="stat-val ${units>=0?'green':'red'}">${units>=0?'+':''}${units.toFixed(1)}u</div><div class="stat-lbl">UNITS @ -110</div></div>
+    <div class="stat-card"><div class="stat-val blue">${pendingCount}</div><div class="stat-lbl">PENDING</div></div>`;
+
+  // Market breakdown: sport · propType · direction
+  const mktG={};
+  for(const p of settled){
+    const dir=p.direction||'OVER';
+    const pt=(p.propType||'Other').replace(/^\w+_/,''); // strip ESPN prefix
+    const k=`${p.sport} · ${pt} · ${dir}`;
+    if(!mktG[k])mktG[k]={wins:0,losses:0,units:0};
+    const r=norm(p.result);
+    if(r==='win')mktG[k].wins++;else mktG[k].losses++;
+    const odds=parseInt(p.bestOdds||p.odds||'-110');
+    mktG[k].units+=(r==='win'?(odds>0?odds/100:100/Math.abs(odds)):-1);
+  }
+  const mktRows=Object.entries(mktG).map(([label,g])=>({
+    label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,
+    wr:Math.round(g.wins/(g.wins+g.losses)*100),
+    units:+g.units.toFixed(2)
+  })).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
+  const maxMkt=mktRows.reduce((m,r)=>Math.max(m,r.total),1);
+  const mktEl=document.getElementById('scan-market-breakdown');
+  if(mktEl) mktEl.innerHTML=mktRows.length
+    ?mktRows.map(r=>{
+        const barW=Math.round(r.total/maxMkt*100);
+        const barColor=r.wr>=57?'var(--accent2)':r.wr>=47?'var(--gold)':'var(--miss)';
+        const uColor=r.units>=0?'var(--accent2)':'var(--miss)';
+        const sample=r.total<5?`<span style="font-size:9px;color:var(--muted);margin-left:3px">(n=${r.total})</span>`:'';
+        return`<div class="breakdown-row">
+          <div class="breakdown-label">${esc(r.label)}${sample}</div>
+          <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${barW}%;background:${barColor}"></div></div>
+          <div class="breakdown-stats"><span class="wr" style="color:${barColor}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span> <span style="color:${uColor};margin-left:4px">${r.units>=0?'+':''}${r.units}u</span></div>
+        </div>`;
+      }).join('')
+    :`<div style="color:var(--muted);font-size:11px;padding:8px 0">No markets with ${minN}+ graded plays yet — grade pending plays first</div>`;
+
+  // By sport
+  const sG={};
+  for(const p of settled){
+    const s=p.sport||'?';
+    if(!sG[s])sG[s]={wins:0,losses:0};
+    const r=norm(p.result);
+    if(r==='win')sG[s].wins++;else sG[s].losses++;
+  }
+  const sRows=Object.entries(sG).map(([label,g])=>({label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,wr:Math.round(g.wins/(g.wins+g.losses)*100)})).sort((a,b)=>b.wr-a.wr);
+  const maxS=sRows.reduce((m,r)=>Math.max(m,r.total),1);
+  const sEl=document.getElementById('scan-by-sport');
+  if(sEl) sEl.innerHTML=sRows.map(r=>{
+    const c=r.wr>=55?'var(--accent2)':r.wr>=45?'var(--gold)':'var(--miss)';
+    return`<div class="breakdown-row"><div class="breakdown-label">${esc(r.label)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(r.total/maxS*100)}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span></div></div>`;
+  }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No data</div>';
+
+  // By prop type
+  const ptG={};
+  for(const p of settled){
+    const pt=(p.propType||'Other').replace(/^\w+_/,'');
+    if(!ptG[pt])ptG[pt]={wins:0,losses:0};
+    const r=norm(p.result);
+    if(r==='win')ptG[pt].wins++;else ptG[pt].losses++;
+  }
+  const ptRows=Object.entries(ptG).map(([label,g])=>({label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,wr:Math.round(g.wins/(g.wins+g.losses)*100)})).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
+  const maxPT=ptRows.reduce((m,r)=>Math.max(m,r.total),1);
+  const ptEl=document.getElementById('scan-by-proptype');
+  if(ptEl) ptEl.innerHTML=ptRows.map(r=>{
+    const c=r.wr>=55?'var(--accent2)':r.wr>=45?'var(--gold)':'var(--miss)';
+    return`<div class="breakdown-row"><div class="breakdown-label">${esc(r.label)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(r.total/maxPT*100)}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span></div></div>`;
+  }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No data</div>';
+
+  // Play log (last 50)
+  document.getElementById('scan-play-count').textContent=`${filtered.length} plays`;
+  const logRows=filtered.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,100);
+  const logEl=document.getElementById('scan-play-log');
+  if(logEl) logEl.innerHTML=logRows.map(p=>{
+    const r=norm(p.result);
+    const badge=r==='win'?'<span class="result-badge win">WIN</span>':r==='loss'?'<span class="result-badge loss">LOSS</span>':'<span class="result-badge pending">—</span>';
+    const dir=p.direction==='UNDER'?'▼ UNDER':'▲ OVER';
+    const dirColor=p.direction==='UNDER'?'var(--accent)':'var(--accent2)';
+    return`<tr><td style="font-size:10px;color:var(--muted)">${p.date||'—'}</td><td><div class="player-name">${esc(p.player||'—')}</div><div class="sub-text">${esc(p.sport||'')} · ${esc(p.team||'')}</div></td><td style="font-size:11px">${esc(p.prop||'—')}</td><td style="font-size:11px;color:${dirColor}">${dir}</td><td style="font-family:var(--font);font-size:11px;color:var(--gold)">${p.rate||'—'}%</td><td>${badge}</td></tr>`;
+  }).join('')||`<tr><td colspan="6" class="empty">No plays found</td></tr>`;
+}
+
+async function gradeScanPlays(){
+  const btn=document.getElementById('scan-grade-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Grading…';}
+  const today=new Date().toISOString().split('T')[0];
+  const pending=scanPlays.filter(p=>p.result==='pending'&&p.date&&p.date<today);
+  if(!pending.length){showToast('No pending plays to grade');if(btn){btn.disabled=false;btn.textContent='⚡ Grade Pending';}return;}
+
+  // Group by sport+date
+  const groups={};
+  for(const p of pending){
+    const k=`${(p.sport||'?').toUpperCase()}|${p.date}`;
+    if(!groups[k])groups[k]=[];
+    groups[k].push(p);
+  }
+  let graded=0,failed=0;
+  for(const [key,plays] of Object.entries(groups)){
+    const [sport,date]=key.split('|');
+    let boxDate=date;
+    // Try fetching box scores for this date
+    let stats={};
+    try{
+      const ids=await fetchBTGameIds(sport,boxDate);
+      if(ids&&ids.length) stats=await fetchBTBoxScores(sport,ids,boxDate);
+      // Try next day if empty (late games)
+      if(!Object.keys(stats).length){
+        const nd=new Date(boxDate+'T12:00:00'); nd.setDate(nd.getDate()+1);
+        const nd2=nd.toISOString().split('T')[0];
+        const ids2=await fetchBTGameIds(sport,nd2);
+        if(ids2&&ids2.length) stats=await fetchBTBoxScores(sport,ids2,nd2);
+      }
+    }catch(e){failed++;continue;}
+
+    for(const p of plays){
+      const pStats=stats[p.player]||stats[(p.player||'').toLowerCase()]||null;
+      if(!pStats){p.result='pending';continue;}
+      // Parse line from prop string: e.g. "O1.5 Goals" → 1.5, "U3.5 Points" → 3.5
+      const lineMatch=(p.prop||'').match(/[\d.]+/);
+      const line=lineMatch?parseFloat(lineMatch[0]):null;
+      if(line===null){p.result='pending';continue;}
+      // Get prop type key
+      const propTypeRaw=(p.propType||p.category||p.propKey||'').toLowerCase().replace(/\s+/g,'');
+      const statVal=findBTStat(propTypeRaw,pStats);
+      if(statVal===null){p.result='pending';continue;}
+      const dir=(p.direction||'OVER').toUpperCase();
+      if(dir==='OVER') p.result=statVal>line?'win':'loss';
+      else p.result=statVal<line?'win':'loss';
+      graded++;
+    }
+  }
+  // Save updated results back to localStorage snapshots
+  const byDate={};
+  for(const p of scanPlays){const dt=p.date||'unknown';if(!byDate[dt])byDate[dt]=[];byDate[dt].push(p);}
+  for(const [dt,plays] of Object.entries(byDate)){
+    try{
+      const cached=JSON.parse(localStorage.getItem('propsSnapshot_'+dt)||'null');
+      if(cached&&cached.plays){
+        const resultMap={};
+        plays.forEach(p=>resultMap[p.player+'|'+p.prop]=p.result);
+        cached.plays=cached.plays.map(cp=>{const r=resultMap[cp.player+'|'+cp.prop];return r?{...cp,result:r}:cp;});
+        localStorage.setItem('propsSnapshot_'+dt,JSON.stringify(cached));
+      }
+    }catch(e){}
+    // Also push updated results to worker
+    const dated=plays.filter(p=>p.date===dt&&(p.result==='win'||p.result==='loss'));
+    if(dated.length){
+      fetch(`${KV_BASE}/snapshot/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dt,plays:dated})}).catch(()=>{});
+    }
+  }
+  if(btn){btn.disabled=false;btn.textContent='⚡ Grade Pending';}
+  showToast(`⚡ Graded ${graded} plays (${failed} dates failed)`);
+  renderScanAnalytics();
+}
 
 </script>
 </body>
