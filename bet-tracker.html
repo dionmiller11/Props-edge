@@ -108,6 +108,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
 <div class="page-tabs">
   <button class="page-tab active" id="tab-log" onclick="showPage('log')">📋 BET LOG</button>
   <button class="page-tab" id="tab-analytics" onclick="showPage('analytics')">📊 ANALYTICS</button>
+  <button class="page-tab" id="tab-daily" onclick="showPage('daily')">📅 DAILY LOG</button>
   <button class="page-tab" id="tab-sim" onclick="showPage('sim')">🎲 SIM RESULTS</button>
 </div>
 <main>
@@ -129,12 +130,26 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         <div class="form-group"><span class="form-label">PROP TYPE</span>
           <select class="form-input" id="f-proptype">
             <option value="">— Select —</option>
+            <optgroup label="NBA/WNBA">
             <option value="Points">Points</option><option value="Rebounds">Rebounds</option><option value="Assists">Assists</option>
-            <option value="3-Pointers">3-Pointers</option><option value="PRA">PTS+REB+AST</option>
-            <option value="Hits">Hits</option><option value="Total Bases">Total Bases</option><option value="RBI">RBI</option>
-            <option value="Strikeouts">Strikeouts (P)</option><option value="Rush Yards">Rush Yards</option>
-            <option value="Rec Yards">Rec Yards</option><option value="Pass Yards">Pass Yards</option>
-            <option value="Receptions">Receptions</option><option value="TDs">TDs</option><option value="Other">Other</option>
+            <option value="3-Pointers">3-Pointers</option><option value="PRA">PTS+REB+AST</option><option value="Steals">Steals</option><option value="Blocks">Blocks</option>
+            </optgroup>
+            <optgroup label="NHL">
+            <option value="Goals">Goals</option><option value="Assists">NHL Assists</option><option value="Points">NHL Points</option>
+            <option value="Shots on Goal">Shots on Goal</option><option value="Saves">Saves</option><option value="Power Play Points">Power Play Points</option>
+            </optgroup>
+            <optgroup label="NFL/NCAAFB">
+            <option value="Rush Yards">Rush Yards</option><option value="Rec Yards">Rec Yards</option><option value="Pass Yards">Pass Yards</option>
+            <option value="Receptions">Receptions</option><option value="TDs">TDs</option><option value="Pass TDs">Pass TDs</option><option value="Completions">Completions</option>
+            </optgroup>
+            <optgroup label="MLB">
+            <option value="Hits">Hits</option><option value="Total Bases">Total Bases</option><option value="RBI">RBI</option><option value="Runs">Runs</option>
+            <option value="Strikeouts">Strikeouts (P)</option>
+            </optgroup>
+            <optgroup label="Game Lines">
+            <option value="Spread">Spread</option><option value="Total">Total (O/U)</option><option value="Moneyline">Moneyline</option>
+            </optgroup>
+            <option value="Other">Other</option>
           </select>
         </div>
         <div class="form-group"><span class="form-label">SPORT</span>
@@ -148,6 +163,11 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         <div class="form-group"><span class="form-label">HIT RATE %</span><input class="form-input" id="f-rate" placeholder="86" type="number" /></div>
         <div class="form-group"><span class="form-label">BOOK</span><input class="form-input" id="f-book" placeholder="e.g. DraftKings" /></div>
         <div class="form-group"><span class="form-label">DATE</span><input class="form-input" id="f-date" type="date" /></div>
+        <div class="form-group"><span class="form-label">DIRECTION</span>
+          <select class="form-input" id="f-direction">
+            <option value="OVER">Over ↑</option><option value="UNDER">Under ↓</option>
+          </select>
+        </div>
         <div class="form-group"><span class="form-label">RESULT</span>
           <select class="form-input" id="f-result">
             <option value="pending">Pending</option><option value="win">Win ✅</option>
@@ -225,6 +245,31 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <h3>💰 UNITS P/L BY SPORT</h3>
       <div id="units-sport"></div>
     </div>
+    <div class="analytics-card" style="margin-top:14px">
+      <h3>🎯 BY MARKET <span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">(sport · prop type · direction)</span> <span id="market-min-label" style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0;float:right">min <select id="market-min" onchange="renderAnalytics()" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:3px;font-size:10px;padding:1px 4px"><option value="1">1+</option><option value="3" selected>3+</option><option value="5">5+</option><option value="10">10+</option></select> bets</span></h3>
+      <div id="breakdown-market"></div>
+    </div>
+  </div>
+
+  <!-- DAILY LOG PAGE -->
+  <div id="page-daily" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em">📅 DAILY PERFORMANCE LOG</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="daily-sport" class="form-input" style="width:auto;font-size:11px" onchange="renderDailyLog()">
+          <option value="ALL">All Sports</option>
+          <option value="NHL">🏒 NHL</option><option value="NFL">🏈 NFL</option>
+          <option value="NBA">🏀 NBA</option><option value="MLB">⚾ MLB</option>
+          <option value="NCAAFB">NCAAFB</option>
+        </select>
+        <select id="daily-range" class="form-input" style="width:auto;font-size:11px" onchange="renderDailyLog()">
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+    </div>
+    <div id="daily-log-body"></div>
   </div>
 
   <!-- SIM RESULTS PAGE -->
@@ -287,6 +332,15 @@ let _kvSaveTimer = null;
   fetch(KV_BASE+'/bets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bets})}).catch(function(){});
   if(typeof renderBets==='function') renderBets();
   if(typeof updateStats==='function') updateStats();
+  // Auto-grade pending bets from previous days on page load
+  const today=new Date().toISOString().split('T')[0];
+  const needsGrading=bets.filter(b=>b.result==='pending'&&b.date&&b.date<today);
+  if(needsGrading.length>0){
+    console.log('[BetTracker] Auto-grade: '+needsGrading.length+' pending bets from previous days');
+    setTimeout(function(){
+      if(typeof btAutoGrade==='function') btAutoGrade(true);
+    }, 1500); // slight delay so page renders first
+  }
 })();
 
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
@@ -308,13 +362,12 @@ function calcPL(bet){
 
 function showPage(page){
   activePage=page;
-  document.getElementById('page-log').style.display=page==='log'?'block':'none';
-  document.getElementById('page-analytics').style.display=page==='analytics'?'block':'none';
-  document.getElementById('page-sim').style.display=page==='sim'?'block':'none';
-  document.getElementById('tab-log').classList.toggle('active',page==='log');
-  document.getElementById('tab-analytics').classList.toggle('active',page==='analytics');
-  document.getElementById('tab-sim').classList.toggle('active',page==='sim');
+  ['log','analytics','daily','sim'].forEach(p=>{
+    document.getElementById('page-'+p).style.display=page===p?'block':'none';
+    document.getElementById('tab-'+p).classList.toggle('active',page===p);
+  });
   if(page==='analytics') renderAnalytics();
+  if(page==='daily') renderDailyLog();
   if(page==='sim'){ document.getElementById('sim-date').value=new Date().toISOString().split('T')[0]; renderSim(); }
 }
 
@@ -326,6 +379,7 @@ function addBet(){
     id:Date.now(),date:document.getElementById('f-date').value,player,prop,
     propType:document.getElementById('f-proptype').value||'',
     sport:document.getElementById('f-sport').value,
+    direction:document.getElementById('f-direction').value||'OVER',
     odds:document.getElementById('f-odds').value||'-110',
     units:document.getElementById('f-units').value||'1',
     rate:document.getElementById('f-rate').value||'',
@@ -475,15 +529,54 @@ function renderAnalytics(){
     </div>`;
   }).join('') || '<div style="color:var(--muted);font-size:11px;padding:8px 0">No data yet</div>';
 
+  // Market breakdown: sport · propType · direction
+  const minN=parseInt(document.getElementById('market-min')?.value||'3');
+  const mktSettled=bets.filter(b=>b.result==='win'||b.result==='loss');
+  const mktGroups={};
+  for(const b of mktSettled){
+    const dir=b.direction||(b.prop&&/\bU\s*\d|\bunder\b/i.test(b.prop)?'UNDER':'OVER');
+    const pt=(b.propType||'Other').trim();
+    const k=`${b.sport||'?'} · ${pt} · ${dir}`;
+    if(!mktGroups[k])mktGroups[k]={wins:0,losses:0,units:0,sport:b.sport||'?'};
+    if(b.result==='win')mktGroups[k].wins++;else mktGroups[k].losses++;
+    mktGroups[k].units+=calcPL(b);
+  }
+  const mktRows=Object.entries(mktGroups).map(([label,g])=>({
+    label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,
+    wr:Math.round(g.wins/(g.wins+g.losses)*100),
+    units:+g.units.toFixed(2)
+  })).filter(r=>r.total>=minN).sort((a,b)=>b.units-a.units);
+  const maxMkt=mktRows.reduce((m,r)=>Math.max(m,r.total),1);
+  const mktEl=document.getElementById('breakdown-market');
+  if(!mktRows.length){
+    mktEl.innerHTML=`<div style="color:var(--muted);font-size:11px;padding:8px 0">No markets with ${minN}+ settled bets yet</div>`;
+  } else {
+    mktEl.innerHTML=mktRows.map(r=>{
+      const barW=Math.round((r.total/maxMkt)*100);
+      const barColor=r.wr>=55?'var(--accent2)':r.wr>=45?'var(--gold)':'var(--miss)';
+      const unitStr=r.units>=0?`+${r.units}u`:`${r.units}u`;
+      const unitColor=r.units>=0?'var(--accent2)':'var(--miss)';
+      const sampleBadge=r.total<5?`<span style="font-size:9px;color:var(--muted);margin-left:4px">(n=${r.total})</span>`:``;
+      return`<div class="breakdown-row">
+        <div class="breakdown-label" title="${esc(r.label)}">${esc(r.label)}${sampleBadge}</div>
+        <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${barW}%;background:${barColor}"></div></div>
+        <div class="breakdown-stats"><span class="wr" style="color:${barColor}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span> <span style="color:${unitColor};margin-left:4px">${unitStr}</span></div>
+      </div>`;
+    }).join('');
+  }
+
   // Insights
   const insights=[];
-  const allRows=[...sportRows,...ptRows,...bookRows];
+  const allRows=[...sportRows,...ptRows,...bookRows,...mktRows];
   // Best edge
   const best=allRows.filter(r=>r.total>=3).sort((a,b)=>b.wr-a.wr)[0];
   if(best&&best.wr>=60) insights.push({type:'hot',label:'BEST EDGE',text:`${best.label} — ${best.wr}% win rate (${best.wins}-${best.losses}, ${best.units>=0?'+':''}${best.units}u)`});
   // Worst drain
   const worst=allRows.filter(r=>r.total>=3).sort((a,b)=>a.wr-b.wr)[0];
   if(worst&&worst.wr<=40) insights.push({type:'cold',label:'AVOID',text:`${worst.label} — only ${worst.wr}% win rate (${worst.wins}-${worst.losses}, ${worst.units}u)`});
+  // Best market
+  const bestMkt=mktRows.filter(r=>r.total>=5).sort((a,b)=>b.wr-a.wr)[0];
+  if(bestMkt&&bestMkt.wr>=60) insights.push({type:'hot',label:'BEST MARKET',text:`${bestMkt.label} — ${bestMkt.wr}% (${bestMkt.wins}-${bestMkt.losses}, ${bestMkt.units>=0?'+':''}${bestMkt.units}u)`});
   // Best day
   const bestDay=dowRows.filter(r=>r.total>=2).sort((a,b)=>b.wr-a.wr)[0];
   if(bestDay) insights.push({type:'',label:'BEST DAY',text:`${bestDay.label} — ${bestDay.wr}% win rate on ${bestDay.total} bets`});
@@ -498,9 +591,88 @@ function renderAnalytics(){
   ).join('');
 }
 
+function renderDailyLog(){
+  const sport=document.getElementById('daily-sport')?.value||'ALL';
+  const range=document.getElementById('daily-range')?.value||'30';
+  const today=new Date();
+  const cutoff=range==='all'?null:new Date(today.getTime()-(parseInt(range)*86400000));
+
+  const settled=bets.filter(b=>{
+    if(b.result!=='win'&&b.result!=='loss'&&b.result!=='push') return false;
+    if(sport!=='ALL'&&b.sport!==sport) return false;
+    if(cutoff&&b.date&&new Date(b.date+'T12:00:00')<cutoff) return false;
+    return true;
+  });
+
+  // Group by date
+  const byDate={};
+  for(const b of settled){
+    const d=b.date||'unknown';
+    if(!byDate[d])byDate[d]={bets:[],wins:0,losses:0,pushes:0,units:0};
+    byDate[d].bets.push(b);
+    if(b.result==='win')byDate[d].wins++;
+    else if(b.result==='loss')byDate[d].losses++;
+    else byDate[d].pushes++;
+    byDate[d].units+=calcPL(b);
+  }
+
+  const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  const el=document.getElementById('daily-log-body');
+  if(!dates.length){
+    el.innerHTML='<div class="analytics-card"><div style="color:var(--muted);text-align:center;padding:30px">No settled bets in this range yet</div></div>';
+    return;
+  }
+
+  el.innerHTML=dates.map(date=>{
+    const d=byDate[date];
+    const wr=d.wins+d.losses>0?Math.round(d.wins/(d.wins+d.losses)*100):0;
+    const wrColor=wr>=55?'var(--accent2)':wr>=45?'var(--gold)':'var(--miss)';
+    const uStr=(d.units>=0?'+':'')+d.units.toFixed(2)+'u';
+    const uColor=d.units>=0?'var(--accent2)':'var(--miss)';
+
+    // Group by market within this date
+    const mktGroups={};
+    for(const b of d.bets){
+      const dir=b.direction||(b.prop&&/\bU\s*\d|\bunder\b/i.test(b.prop)?'UNDER':'OVER');
+      const pt=(b.propType||'Other').trim();
+      const k=`${b.sport||'?'} · ${pt} · ${dir}`;
+      if(!mktGroups[k])mktGroups[k]={wins:0,losses:0,pushes:0,units:0,bets:[]};
+      if(b.result==='win')mktGroups[k].wins++;
+      else if(b.result==='loss')mktGroups[k].losses++;
+      else mktGroups[k].pushes++;
+      mktGroups[k].units+=calcPL(b);
+      mktGroups[k].bets.push(b);
+    }
+
+    const mktHtml=Object.entries(mktGroups).map(([mkt,g])=>{
+      const mwr=g.wins+g.losses>0?Math.round(g.wins/(g.wins+g.losses)*100):null;
+      const mColor=mwr===null?'var(--muted)':mwr>=55?'var(--accent2)':mwr>=45?'var(--gold)':'var(--miss)';
+      const mu=(g.units>=0?'+':'')+g.units.toFixed(2)+'u';
+      const muColor=g.units>=0?'var(--accent2)':'var(--miss)';
+      return`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(30,45,69,.3);">
+        <div style="flex:1;font-size:11px;color:var(--text)">${esc(mkt)}</div>
+        <div style="font-size:11px;font-family:var(--font);color:${mColor};font-weight:700;white-space:nowrap">${g.wins}-${g.losses}${g.pushes?` (${g.pushes}P)`:''}</div>
+        <div style="font-size:11px;font-family:var(--font);color:${muColor};min-width:54px;text-align:right">${mu}</div>
+      </div>`;
+    }).join('');
+
+    return`<div class="analytics-card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+        <div style="font-size:13px;font-weight:700;font-family:var(--font);color:var(--text)">${date}</div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <span style="font-size:12px;font-family:var(--font);color:${wrColor};font-weight:700">${d.wins}-${d.losses}${d.pushes?` (${d.pushes}P)`:''} <span style="font-size:10px">${wr}%</span></span>
+          <span style="font-size:12px;font-family:var(--font);color:${uColor};font-weight:700">${uStr}</span>
+        </div>
+      </div>
+      ${mktHtml}
+    </div>`;
+  }).join('');
+}
+
 function clearForm(){
   ['f-player','f-prop','f-odds','f-rate','f-book'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-units').value='1';document.getElementById('f-result').value='pending';
+  document.getElementById('f-direction').value='OVER';
   document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
   document.getElementById('f-proptype').value='';
 }
