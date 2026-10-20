@@ -1226,20 +1226,21 @@ function findBTStat(playerStats, playerName, statKey){
     strikeouts:['pitching_so','batting_so','so'],
     rbi:       ['batting_rbi','rbi'],
     runs:      ['batting_r','r'],
-    // NHL skaters — ESPN categories: "forwards", "defensemen" (sometimes "skating")
-    // Actual ESPN labels: g,a,pts,+/-,pim,sog,bs,ht,tk,gv,ms,pp,sh,en,toi
-    goals:           ['forwards_g','defensemen_g','skating_g','g'],
-    nhlassists:      ['forwards_a','defensemen_a','skating_a','a'],
-    nhlpoints:       ['forwards_pts','defensemen_pts','skating_pts','pts'],
-    assists:         ['forwards_a','defensemen_a','skating_a','a'],
-    shotsOnGoal:     ['forwards_sog','defensemen_sog','skating_sog','sog'],
-    shots:           ['forwards_sog','defensemen_sog','skating_sog','sog'],
-    shotsOnGoalNHL:  ['forwards_sog','defensemen_sog','sog'],
-    blockedShots:    ['forwards_bs','defensemen_bs','skating_bs','bs'],
-    hits:            ['forwards_ht','defensemen_ht','skating_ht','ht'],
-    takeaways:       ['forwards_tk','defensemen_tk','skating_tk','tk'],
-    plusminus:       ['forwards_+','defensemen_+','skating_+','+'],
-    powerplaypoints: ['forwards_pp','defensemen_pp','skating_pp','pp','ppg','ppp'],
+    // NHL skaters — ESPN splits scoring vs physical into separate categories
+    // Scoring category (g,a,pts) may be: "scoring","skaters","nhlskating","skatingstats"
+    // Physical category (bs,ht,tk) confirmed as: "forwards","defensemen"
+    goals:           ['scoring_g','skaters_g','nhlskating_g','forwards_g','defensemen_g','skating_g','g'],
+    nhlassists:      ['scoring_a','skaters_a','nhlskating_a','forwards_a','defensemen_a','skating_a','a'],
+    nhlpoints:       ['scoring_pts','skaters_pts','nhlskating_pts','forwards_pts','defensemen_pts','skating_pts','pts'],
+    assists:         ['scoring_a','skaters_a','nhlskating_a','forwards_a','defensemen_a','skating_a','a'],
+    shotsOnGoal:     ['scoring_sog','skaters_sog','forwards_sog','defensemen_sog','skating_sog','sog','s'],
+    shots:           ['scoring_sog','skaters_sog','forwards_sog','defensemen_sog','sog','s'],
+    shotsOnGoalNHL:  ['scoring_sog','skaters_sog','forwards_sog','defensemen_sog','sog'],
+    blockedShots:    ['forwards_bs','defensemen_bs','scoring_bs','skaters_bs','skating_bs','bs'],
+    hits:            ['forwards_ht','defensemen_ht','scoring_ht','skaters_ht','skating_ht','ht'],
+    takeaways:       ['forwards_tk','defensemen_tk','scoring_tk','skaters_tk','skating_tk','tk'],
+    plusminus:       ['scoring_+','skaters_+','forwards_+','defensemen_+','skating_+','+'],
+    powerplaypoints: ['scoring_pp','skaters_pp','forwards_pp','defensemen_pp','skating_pp','pp','ppg','ppp'],
     // NHL goalies — ESPN category "goalie": labels sa,sv,ga,svpct,toi,pim,en,so
     saves:           ['goalie_sv','sv','svs','saves'],
   };
@@ -1684,6 +1685,7 @@ async function gradeScanPlays(){
     groups[k].push(p);
   }
   let graded=0,failed=0;
+  const missLog=[];
   for(const [key,plays] of Object.entries(groups)){
     const [sport,date]=key.split('|');
     let boxDate=date;
@@ -1708,12 +1710,26 @@ async function gradeScanPlays(){
       const statKey=(p.propKey||p.propType||p.category||'').toLowerCase().replace(/\s+/g,'');
       // Pass full stats dict — findBTStat handles fuzzy name matching
       const statVal=findBTStat(stats,p.player||'',statKey);
-      if(statVal===null){p.result='pending';continue;}
+      if(statVal===null){
+        // Debug: find what keys ESPN actually has for this player
+        if(missLog.length<5){
+          const nm=(p.player||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+          const matchKey=Object.keys(stats).find(k=>{const kn=k.replace(/[^a-z0-9 ]/g,'').trim();return kn===nm||kn.includes(nm.split(' ').pop());});
+          const avail=matchKey?Object.keys(stats[matchKey]).join(','):'(not found)';
+          missLog.push(`MISS ${p.player} key=${statKey} avail:${avail}`);
+        }
+        p.result='pending';continue;
+      }
       const dir=(p.direction||'OVER').toUpperCase();
       if(dir==='OVER') p.result=statVal>line?'win':'loss';
       else p.result=statVal<line?'win':'loss';
       graded++;
     }
+  }
+  // Show miss debug if any
+  if(missLog.length){
+    const dbgEl=document.getElementById('scan-status');
+    if(dbgEl) dbgEl.innerHTML+='<br><span style="color:var(--gold);font-size:10px">MISS SAMPLE: '+missLog.join(' | ')+'</span>';
   }
   // Save updated results back to localStorage snapshots
   const byDate={};
