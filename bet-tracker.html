@@ -1739,17 +1739,53 @@ async function gradeScanPlays(){
 // ═══════════════════════════════════════════════════════════
 let glGames=[];
 
-function loadGameLinesData(){
+async function loadGameLinesData(){
   glGames=[];
-  // Read last 60 days of game lines snapshots from localStorage
-  for(let i=1;i<=60;i++){
+  const days=60;
+  const dates=[];
+  for(let i=1;i<=days;i++){
     const d=new Date(); d.setDate(d.getDate()-i);
-    const dt=d.toISOString().split('T')[0];
+    dates.push(d.toISOString().split('T')[0]);
+  }
+
+  // Read localStorage first
+  for(const dt of dates){
     try{
       const snap=JSON.parse(localStorage.getItem('glSnapshot_'+dt)||'null');
       if(snap&&snap.games) glGames.push(...snap.games.map(g=>({...g,date:g.date||dt})));
     }catch(e){}
   }
+
+  // Merge KV data (fills in other devices' snapshots)
+  const el=document.getElementById('gl-stats-row');
+  if(el) el.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px">Loading from cloud…</div>';
+  try{
+    await Promise.all(dates.map(async dt=>{
+      try{
+        const r=await fetch(`${KV_BASE}/gamelines/get?date=${dt}`);
+        if(!r.ok) return;
+        const data=await r.json();
+        if(!data.found||!data.games) return;
+        // Merge: add games not already in glGames, update grades on existing
+        const seen=new Set(glGames.map(g=>g.id));
+        for(const g of data.games){
+          if(!seen.has(g.id)){ glGames.push({...g,date:g.date||dt}); seen.add(g.id); }
+          else{
+            const idx=glGames.findIndex(x=>x.id===g.id);
+            if(idx>=0&&(g.result_spread||g.result_total||g.result_ml_home)){
+              glGames[idx]={...glGames[idx],...g};
+            }
+          }
+        }
+        // Persist merged data back to localStorage
+        const existing=JSON.parse(localStorage.getItem('glSnapshot_'+dt)||'{"games":[]}');
+        const eSet=new Set(existing.games.map(g=>g.id));
+        for(const g of data.games) if(!eSet.has(g.id)) existing.games.push(g);
+        localStorage.setItem('glSnapshot_'+dt,JSON.stringify(existing));
+      }catch(e){}
+    }));
+  }catch(e){}
+
   renderGameLinesAnalytics();
 }
 
