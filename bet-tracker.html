@@ -1175,10 +1175,13 @@ function findBTStat(playerStats, playerName, statKey){
   if(!stats) return null;
 
   // Handle combo stats
-  if(statKey==='scrimmage'){
-    const rush = stats['rushingyards']??stats['rushing']??stats['ryds']??0;
-    const rec = stats['receivingyards']??stats['receiving']??stats['recyds']??0;
+  if(statKey==='scrimmage'||statKey==='rushingplusreceivingyards'||statKey==='scrimmageyards'){
+    const rush = stats['rushing_yds']??stats['rushingyards']??stats['rushing']??stats['ryds']??0;
+    const rec = stats['receiving_yds']??stats['receivingyards']??stats['receiving']??stats['recyds']??0;
     return rush+rec;
+  }
+  if(statKey==='passingcompletions'){
+    return stats['passing_c']??stats['c']??null;
   }
   if(statKey==='pra'){
     const p=stats['pts']??stats['points']??0;
