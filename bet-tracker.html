@@ -1189,16 +1189,16 @@ function findBTStat(playerStats, playerName, statKey){
     const a=stats['ast']??stats['assists']??0;
     return p+r+a;
   }
-  if(statKey==='totalyards'){
-    const pass=stats['passing_yds']??stats['passingyards']??0;
-    const rush=stats['rushing_yds']??stats['rushingyards']??0;
-    return pass+rush;
-  }
-  if(statKey==='anytiметd'||statKey==='anytimetd'){
+  if(statKey==='anytiметd'||statKey==='anytimetd'||statKey==='anytimetouchdown'||statKey==='toscoreatd'||statKey==='toscoreatouchdown'){
     const rushTd=stats['rushing_td']??0;
     const recTd=stats['receiving_td']??0;
     const passTd=stats['passing_td']??0;
     return rushTd+recTd+passTd>0?1:0; // 1 = scored, 0 = didn't score
+  }
+  if(statKey==='passingplusrushingyards'||statKey==='totalyards'||statKey==='passrushyds'){
+    const pass=stats['passing_yds']??stats['passingyards']??0;
+    const rush=stats['rushing_yds']??stats['rushingyards']??0;
+    return pass+rush;
   }
 
   // ESPN uses short labels — map our stat keys to ESPN abbreviations
