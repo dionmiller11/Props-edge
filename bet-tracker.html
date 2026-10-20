@@ -1631,17 +1631,20 @@ function renderScanAnalytics(){
     units:+g.units.toFixed(2)
   })).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
   const maxMkt=mktRows.reduce((m,r)=>Math.max(m,r.total),1);
+  const SPORT_COLORS={NHL:'#7B6CF6',NFL:'#F59E0B',MLB:'#EF4444',NBA:'#F97316',WNBA:'#EC4899',CBB:'#06B6D4',CFB:'#84CC16',NCAAB:'#06B6D4',NCAAF:'#84CC16'};
   const mktEl=document.getElementById('scan-market-breakdown');
   if(mktEl) mktEl.innerHTML=mktRows.length
     ?mktRows.map(r=>{
         const barW=Math.round(r.total/maxMkt*100);
-        const barColor=r.wr>=57?'var(--accent2)':r.wr>=47?'var(--gold)':'var(--miss)';
+        const sportKey=(r.label.split(' · ')[0]||'').toUpperCase();
+        const barColor=SPORT_COLORS[sportKey]||'var(--accent)';
+        const wrColor=r.wr>=57?'var(--accent2)':r.wr>=47?'var(--gold)':'var(--miss)';
         const uColor=r.units>=0?'var(--accent2)':'var(--miss)';
         const sample=r.total<5?`<span style="font-size:9px;color:var(--muted);margin-left:3px">(n=${r.total})</span>`:'';
         return`<div class="breakdown-row">
           <div class="breakdown-label">${esc(r.label)}${sample}</div>
           <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${barW}%;background:${barColor}"></div></div>
-          <div class="breakdown-stats"><span class="wr" style="color:${barColor}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span> <span style="color:${uColor};margin-left:4px">${r.units>=0?'+':''}${r.units}u</span></div>
+          <div class="breakdown-stats"><span class="wr" style="color:${wrColor}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span> <span style="color:${uColor};margin-left:4px">${r.units>=0?'+':''}${r.units}u</span></div>
         </div>`;
       }).join('')
     :`<div style="color:var(--muted);font-size:11px;padding:8px 0">No markets with ${minN}+ graded plays yet — grade pending plays first</div>`;
