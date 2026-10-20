@@ -1682,14 +1682,12 @@ async function gradeScanPlays(){
     // Try fetching box scores for this date
     let stats={};
     try{
-      const ids=await fetchBTGameIds(sport,boxDate);
-      if(ids&&ids.length) stats=await fetchBTBoxScores(sport,ids,boxDate);
+      stats=await fetchBTBoxScores(boxDate,sport);
       // Try next day if empty (late games)
       if(!Object.keys(stats).length){
         const nd=new Date(boxDate+'T12:00:00'); nd.setDate(nd.getDate()+1);
         const nd2=nd.toISOString().split('T')[0];
-        const ids2=await fetchBTGameIds(sport,nd2);
-        if(ids2&&ids2.length) stats=await fetchBTBoxScores(sport,ids2,nd2);
+        stats=await fetchBTBoxScores(nd2,sport);
       }
     }catch(e){failed++;continue;}
 
