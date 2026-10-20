@@ -1597,7 +1597,8 @@ function renderScanAnalytics(){
   const sport=document.getElementById('scan-sport')?.value||'ALL';
   const minN=parseInt(document.getElementById('scan-min')?.value||'3');
   const today=new Date().toISOString().split('T')[0];
-  const filtered=scanPlays.filter(p=>sport==='ALL'||p.sport===sport);
+  const is1Q=p=>/(1q|1h|1st\s*q|first\s*q|first\s*h)/i.test((p.prop||'')+(p.propType||''));
+  const filtered=scanPlays.filter(p=>(sport==='ALL'||p.sport===sport)&&!is1Q(p));
   const settled=filtered.filter(p=>p.result==='win'||p.result==='loss'||p.result==='W'||p.result==='L');
   const norm=r=>r==='W'?'win':r==='L'?'loss':r;
 
