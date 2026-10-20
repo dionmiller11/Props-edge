@@ -1768,8 +1768,8 @@ async function gradeScanPlays(){
         localStorage.setItem('propsSnapshot_'+dt,JSON.stringify(cached));
       }
     }catch(e){}
-    // Also push updated results to worker
-    const dated=plays.filter(p=>p.date===dt&&(p.result==='win'||p.result==='loss'));
+    // Push all plays for this date to worker (so phone gets full picture)
+    const dated=plays.filter(p=>p.date===dt);
     if(dated.length){
       fetch(`${KV_BASE}/snapshot/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dt,plays:dated})}).catch(()=>{});
     }
