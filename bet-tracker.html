@@ -1226,12 +1226,20 @@ function findBTStat(playerStats, playerName, statKey){
     strikeouts:['pitching_so','batting_so','so'],
     rbi:       ['batting_rbi','rbi'],
     runs:      ['batting_r','r'],
-    // NHL skaters — ESPN category varies: "skating", "forwards", "defensemen"
-    goals:           ['skating_g','forwards_g','defensemen_g','g'],
-    nhlassists:      ['skating_a','forwards_a','defensemen_a','a'],
-    nhlpoints:       ['skating_pts','forwards_pts','defensemen_pts','pts'],
-    shotsOnGoal:     ['skating_sog','forwards_sog','defensemen_sog','sog'],
-    powerplaypoints: ['skating_ppg','forwards_ppg','defensemen_ppg','ppg','ppp'],
+    // NHL skaters — ESPN categories: "forwards", "defensemen" (sometimes "skating")
+    // Actual ESPN labels: g,a,pts,+/-,pim,sog,bs,ht,tk,gv,ms,pp,sh,en,toi
+    goals:           ['forwards_g','defensemen_g','skating_g','g'],
+    nhlassists:      ['forwards_a','defensemen_a','skating_a','a'],
+    nhlpoints:       ['forwards_pts','defensemen_pts','skating_pts','pts'],
+    assists:         ['forwards_a','defensemen_a','skating_a','a'],
+    shotsOnGoal:     ['forwards_sog','defensemen_sog','skating_sog','sog'],
+    shots:           ['forwards_sog','defensemen_sog','skating_sog','sog'],
+    shotsOnGoalNHL:  ['forwards_sog','defensemen_sog','sog'],
+    blockedShots:    ['forwards_bs','defensemen_bs','skating_bs','bs'],
+    hits:            ['forwards_ht','defensemen_ht','skating_ht','ht'],
+    takeaways:       ['forwards_tk','defensemen_tk','skating_tk','tk'],
+    plusminus:       ['forwards_+','defensemen_+','skating_+','+'],
+    powerplaypoints: ['forwards_pp','defensemen_pp','skating_pp','pp','ppg','ppp'],
     // NHL goalies — ESPN category "goalie": labels sa,sv,ga,svpct,toi,pim,en,so
     saves:           ['goalie_sv','sv','svs','saves'],
   };
@@ -1692,15 +1700,14 @@ async function gradeScanPlays(){
     }catch(e){failed++;continue;}
 
     for(const p of plays){
-      const pStats=stats[p.player]||stats[(p.player||'').toLowerCase()]||null;
-      if(!pStats){p.result='pending';continue;}
-      // Parse line from prop string: e.g. "O1.5 Goals" → 1.5, "U3.5 Points" → 3.5
+      // Parse line from prop string or line field
       const lineMatch=(p.prop||'').match(/[\d.]+/);
-      const line=lineMatch?parseFloat(lineMatch[0]):null;
-      if(line===null){p.result='pending';continue;}
-      // Get prop type key
-      const propTypeRaw=(p.propType||p.category||p.propKey||'').toLowerCase().replace(/\s+/g,'');
-      const statVal=findBTStat(propTypeRaw,pStats);
+      const line=p.line!=null?parseFloat(p.line):lineMatch?parseFloat(lineMatch[0]):null;
+      if(line===null||isNaN(line)){p.result='pending';continue;}
+      // statKey: propKey is already the lookup key (e.g. 'nhlpoints','shotsOnGoal')
+      const statKey=(p.propKey||p.propType||p.category||'').toLowerCase().replace(/\s+/g,'');
+      // Pass full stats dict — findBTStat handles fuzzy name matching
+      const statVal=findBTStat(stats,p.player||'',statKey);
       if(statVal===null){p.result='pending';continue;}
       const dir=(p.direction||'OVER').toUpperCase();
       if(dir==='OVER') p.result=statVal>line?'win':'loss';
