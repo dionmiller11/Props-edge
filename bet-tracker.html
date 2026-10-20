@@ -1593,6 +1593,7 @@ async function loadScanData(){
 }
 
 function renderScanAnalytics(){
+  const SPORT_COLORS={NHL:'#7B6CF6',NFL:'#F59E0B',MLB:'#EF4444',NBA:'#F97316',WNBA:'#EC4899',CBB:'#06B6D4',CFB:'#84CC16',NCAAB:'#06B6D4',NCAAF:'#84CC16'};
   const sport=document.getElementById('scan-sport')?.value||'ALL';
   const minN=parseInt(document.getElementById('scan-min')?.value||'3');
   const today=new Date().toISOString().split('T')[0];
@@ -1631,7 +1632,6 @@ function renderScanAnalytics(){
     units:+g.units.toFixed(2)
   })).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
   const maxMkt=mktRows.reduce((m,r)=>Math.max(m,r.total),1);
-  const SPORT_COLORS={NHL:'#7B6CF6',NFL:'#F59E0B',MLB:'#EF4444',NBA:'#F97316',WNBA:'#EC4899',CBB:'#06B6D4',CFB:'#84CC16',NCAAB:'#06B6D4',NCAAF:'#84CC16'};
   const mktEl=document.getElementById('scan-market-breakdown');
   if(mktEl) mktEl.innerHTML=mktRows.length
     ?mktRows.map(r=>{
@@ -1665,20 +1665,25 @@ function renderScanAnalytics(){
     return`<div class="breakdown-row"><div class="breakdown-label">${esc(r.label)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(r.total/maxS*100)}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span></div></div>`;
   }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No data</div>';
 
-  // By prop type
+  // By sport · prop type
   const ptG={};
   for(const p of settled){
     const pt=(p.propType||'Other').replace(/^\w+_/,'');
-    if(!ptG[pt])ptG[pt]={wins:0,losses:0};
+    const sport=(p.sport||'?').toUpperCase();
+    const k=`${sport} · ${pt}`;
+    if(!ptG[k])ptG[k]={wins:0,losses:0,sport};
     const r=norm(p.result);
-    if(r==='win')ptG[pt].wins++;else ptG[pt].losses++;
+    if(r==='win')ptG[k].wins++;else ptG[k].losses++;
   }
-  const ptRows=Object.entries(ptG).map(([label,g])=>({label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,wr:Math.round(g.wins/(g.wins+g.losses)*100)})).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
+  const ptRows=Object.entries(ptG).map(([label,g])=>({label,wins:g.wins,losses:g.losses,total:g.wins+g.losses,wr:Math.round(g.wins/(g.wins+g.losses)*100),sport:g.sport})).filter(r=>r.total>=minN).sort((a,b)=>b.wr-a.wr);
   const maxPT=ptRows.reduce((m,r)=>Math.max(m,r.total),1);
   const ptEl=document.getElementById('scan-by-proptype');
   if(ptEl) ptEl.innerHTML=ptRows.map(r=>{
-    const c=r.wr>=55?'var(--accent2)':r.wr>=45?'var(--gold)':'var(--miss)';
-    return`<div class="breakdown-row"><div class="breakdown-label">${esc(r.label)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(r.total/maxPT*100)}%;background:${c}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${c}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span></div></div>`;
+    const barColor=SPORT_COLORS[r.sport]||'var(--accent)';
+    const wrColor=r.wr>=57?'var(--accent2)':r.wr>=47?'var(--gold)':'var(--miss)';
+    const pt=(r.label.split(' · ')[1]||r.label);
+    const sportDot=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${barColor};margin-right:5px;flex-shrink:0"></span><span style="color:var(--muted);font-size:9px;margin-right:3px">${r.sport}</span>`;
+    return`<div class="breakdown-row"><div class="breakdown-label" style="display:flex;align-items:center">${sportDot}${esc(pt)}</div><div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${Math.round(r.total/maxPT*100)}%;background:${barColor}"></div></div><div class="breakdown-stats"><span class="wr" style="color:${wrColor}">${r.wr}%</span> <span style="color:var(--muted)">${r.wins}-${r.losses}</span></div></div>`;
   }).join('')||'<div style="color:var(--muted);font-size:11px;padding:8px">No data</div>';
 
   // Play log (last 50)
