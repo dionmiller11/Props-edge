@@ -230,6 +230,21 @@ const _up=new URLSearchParams(window.location.search),_ut=_up.get('token')||_up.
 if(_ut){try{localStorage.setItem('lmToken',_ut);}catch(e){}}
 ['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
 
+// Auto-fetch fresh Linemate token from worker (uses stored refresh token)
+(async function autoFetchToken(){
+  try{
+    const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');
+    if(!r.ok) return;
+    const d=await r.json();
+    if(d.accessToken){
+      try{localStorage.setItem('lmToken',d.accessToken);}catch(e){}
+      document.getElementById('lmToken').value=d.accessToken;
+      updateStatus('lmToken',true);
+      document.getElementById('statusBar').textContent='✅ Linemate token auto-loaded — ready to scan';
+    }
+  }catch(e){}
+})();
+
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
 function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach(t=>{const oc=t.getAttribute('onclick')||'';t.classList.toggle('active',oc.includes("'"+tab+"'"));});const isSGP=tab==='sgp';const sp=document.getElementById('sgpPanel');const tw=document.querySelector('.table-wrap');if(sp)sp.style.display=isSGP?'block':'none';if(tw)tw.style.display=isSGP?'none':'block';if(!isSGP)renderTable();}
@@ -241,7 +256,15 @@ function populateTeamFilter(){const sel=document.getElementById('teamFilter');co
 function toMarketKey(name){return name.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');}
 
 async function runScan(){
-  const token=getStored('lmToken');if(!token){showError('Paste your Linemate JWT token above first.');return;}
+  let token=getStored('lmToken');
+  if(!token){
+    // Try auto-fetching from worker
+    try{
+      const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');
+      if(r.ok){const d=await r.json();if(d.accessToken){token=d.accessToken;try{localStorage.setItem('lmToken',token);}catch(e){}document.getElementById('lmToken').value=token;updateStatus('lmToken',true);}}
+    }catch(e){}
+    if(!token){showError('Paste your Linemate JWT token above first.');return;}
+  }
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
