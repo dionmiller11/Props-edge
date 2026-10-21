@@ -357,7 +357,7 @@ function getActiveSignalData(p){
   const sig=getSignalForPlay(p,activeSignal);
   if(sig)return sig;
   // Fallback to primary (RECENT_FORM or first)
-  return p.allSignals?.(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null;
+  return p.allSignals?(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null;
 }
 function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
 
