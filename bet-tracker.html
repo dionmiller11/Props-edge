@@ -1561,7 +1561,7 @@ renderBets();updateStats();
 // ═══════════════════════════════════════════════════════════
 let scanPlays=[], scanDataLoaded=false, scanYesterdayMode=false;
 
-function toggleYesterdayView(){
+async function toggleYesterdayView(){
   scanYesterdayMode=!scanYesterdayMode;
   const btn=document.getElementById('scan-yesterday-btn');
   const panel=document.getElementById('scan-yesterday-panel');
@@ -1572,6 +1572,11 @@ function toggleYesterdayView(){
     panel.style.display='block';
     if(statsRow) statsRow.style.display='none';
     mainCards.forEach(c=>c.style.display='none');
+    // Wait for data to load if not yet loaded
+    if(!scanDataLoaded){
+      document.getElementById('scan-yesterday-summary').textContent='⏳ Loading…';
+      await loadScanData();
+    }
     renderYesterdayPlays();
   } else {
     btn.style.background='var(--surface)';btn.style.color='var(--muted)';btn.style.borderColor='var(--border)';
