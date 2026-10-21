@@ -480,11 +480,36 @@ function renderBets(){
   });
   document.getElementById('betCount').textContent=filtered.length+' bet'+(filtered.length!==1?'s':'');
   if(!filtered.length){body.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">📋</div><p>No bets yet. Log your first play above.</p></div></td></tr>`;return;}
+  const isMobile=window.innerWidth<=700;
   body.innerHTML=filtered.map(b=>{
     const pl=calcPL(b);
-    const chkCell=selectMode?`<td><input type="checkbox" id="chk-${b.id}" ${selectedIds.has(b.id)?'checked':''} onchange="toggleSelect(${b.id})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--purple)"></td>`:'<td style="display:none"></td>';
     const plColor=pl>0?'var(--accent2)':pl<0?'var(--miss)':'var(--muted)';
     const plStr=pl>0?'+'+pl.toFixed(2)+'u':pl<0?pl.toFixed(2)+'u':'0u';
+    const resultBadge=b.result==='pending'
+      ?`<div style="display:flex;gap:4px"><button class="result-btn" onclick="updateResult(${b.id},'win')">W</button><button class="result-btn" onclick="updateResult(${b.id},'loss')">L</button><button class="result-btn" onclick="updateResult(${b.id},'push')">P</button></div>`
+      :`<span class="result-badge ${b.result}">${b.result==='win'?'✅ WIN':b.result==='loss'?'❌ LOSS':b.result==='push'?'🟡 PUSH':'⏳'}</span>${b.actualStat!=null?`<div style="font-size:9px;color:var(--muted);font-family:var(--font);margin-top:2px">${b.actualStat} vs ${b.gradedDir==='OVER'?'O':'U'}${b.gradedLine}</div>`:''}`;
+    if(isMobile){
+      return`<tr><td colspan="11" style="padding:0;border-bottom:1px solid var(--border)">
+        <div style="padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:4px;align-items:start">
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+              <span class="sport-badge ${(b.sport||'').toLowerCase()}" style="font-size:9px">${esc(b.sport)}</span>
+              <span style="color:var(--muted);font-size:10px">${b.date||'—'}</span>
+              ${b.rate?`<span style="color:var(--gold);font-size:10px">${b.rate}%</span>`:''}
+            </div>
+            <div class="player-name" style="font-size:13px">${esc(b.player)}</div>
+            <div style="color:var(--accent);font-size:11px;margin-top:2px">${esc(b.prop)}</div>
+            <div style="display:flex;gap:10px;margin-top:6px;align-items:center;flex-wrap:wrap">
+              <span style="color:var(--muted);font-size:11px">${esc(b.odds)} · ${esc(b.units)}u</span>
+              ${b.result!=='pending'?`<span style="font-weight:700;font-size:11px;color:${plColor}">${plStr}</span>`:''}
+            </div>
+            <div style="margin-top:6px">${resultBadge}</div>
+          </div>
+          <button class="del-btn" onclick="deleteBet(${b.id})" style="margin-top:2px">✕</button>
+        </div>
+      </td></tr>`;
+    }
+    const chkCell=selectMode?`<td><input type="checkbox" id="chk-${b.id}" ${selectedIds.has(b.id)?'checked':''} onchange="toggleSelect(${b.id})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--purple)"></td>`:'<td style="display:none"></td>';
     return`<tr>
       ${chkCell}
       <td style="color:var(--muted);font-size:11px">${b.date||'—'}</td>
@@ -495,10 +520,7 @@ function renderBets(){
       <td class="hide-mobile" style="color:var(--muted)">${b.rate?b.rate+'%':'—'}</td>
       <td class="hide-mobile" style="color:var(--muted);font-size:11px">${esc(b.book)||'—'}</td>
       <td>${esc(b.units)}u</td>
-      <td>${b.result==='pending'
-        ?`<div style="display:flex;gap:4px"><button class="result-btn" onclick="updateResult(${b.id},'win')">W</button><button class="result-btn" onclick="updateResult(${b.id},'loss')">L</button><button class="result-btn" onclick="updateResult(${b.id},'push')">P</button></div>`
-        :`<span class="result-badge ${b.result}">${b.result==='win'?'✅ WIN':b.result==='loss'?'❌ LOSS':b.result==='push'?'🟡 PUSH':'⏳'}</span>${b.actualStat!=null?`<div style="font-size:9px;color:var(--muted);font-family:var(--font);margin-top:2px">${b.actualStat} vs ${b.gradedDir==='OVER'?'O':'U'}${b.gradedLine}</div>`:''}`
-      }</td>
+      <td>${resultBadge}</td>
       <td style="font-weight:700;color:${plColor}">${b.result==='pending'?'—':plStr}</td>
       <td><button class="del-btn" onclick="deleteBet(${b.id})">✕</button></td>
     </tr>`;
