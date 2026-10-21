@@ -284,6 +284,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
           <option value="NBA">🏀 NBA</option><option value="MLB">⚾ MLB</option>
           <option value="NCAAFB">NCAAFB</option><option value="WNBA">WNBA</option>
         </select>
+        <button id="scan-yesterday-btn" class="btn" style="font-size:11px;background:var(--surface);border:1px solid var(--border);color:var(--muted)" onclick="toggleYesterdayView()">📅 Yesterday</button>
         <select id="scan-days" class="form-input" style="width:auto;font-size:11px" onchange="loadScanData()">
           <option value="7">Last 7 days</option>
           <option value="14">Last 14 days</option>
@@ -301,6 +302,21 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       </div>
     </div>
     <div id="scan-status" style="font-size:11px;color:var(--muted);margin-bottom:12px;font-family:var(--font)"></div>
+    <!-- Yesterday's plays panel -->
+    <div id="scan-yesterday-panel" style="display:none;margin-bottom:16px">
+      <div class="analytics-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">📅 YESTERDAY'S PLAYS</h3>
+          <span id="scan-yesterday-summary" style="font-size:11px;color:var(--muted);font-family:var(--font)"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>PLAYER</th><th>PROP</th><th>SPORT</th><th>DIR</th><th>RATE</th><th>RESULT</th></tr></thead>
+            <tbody id="scan-yesterday-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     <!-- Scan summary stats -->
     <div id="scan-stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px"></div>
     <!-- Market breakdown -->
@@ -1543,7 +1559,61 @@ renderBets();updateStats();
 // ═══════════════════════════════════════════════════════════
 // SCAN ANALYTICS — grades every play the scanner surfaced
 // ═══════════════════════════════════════════════════════════
-let scanPlays=[], scanDataLoaded=false;
+let scanPlays=[], scanDataLoaded=false, scanYesterdayMode=false;
+
+function toggleYesterdayView(){
+  scanYesterdayMode=!scanYesterdayMode;
+  const btn=document.getElementById('scan-yesterday-btn');
+  const panel=document.getElementById('scan-yesterday-panel');
+  const mainCards=document.querySelectorAll('#page-scan .analytics-card:not(#scan-yesterday-panel .analytics-card)');
+  const statsRow=document.getElementById('scan-stats-row');
+  if(scanYesterdayMode){
+    btn.style.background='var(--gold)';btn.style.color='#000';btn.style.borderColor='var(--gold)';
+    panel.style.display='block';
+    if(statsRow) statsRow.style.display='none';
+    mainCards.forEach(c=>c.style.display='none');
+    renderYesterdayPlays();
+  } else {
+    btn.style.background='var(--surface)';btn.style.color='var(--muted)';btn.style.borderColor='var(--border)';
+    panel.style.display='none';
+    if(statsRow) statsRow.style.display='';
+    mainCards.forEach(c=>c.style.display='');
+  }
+}
+
+function renderYesterdayPlays(){
+  const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+  const yd=yesterday.toISOString().split('T')[0];
+  const sport=document.getElementById('scan-sport')?.value||'ALL';
+  const norm=r=>r==='W'?'win':r==='L'?'loss':r;
+  const is1Q=p=>/(1q|1h|1st\s*q|first\s*q|first\s*h)/i.test((p.prop||'')+(p.propType||''));
+  const plays=scanPlays.filter(p=>p.date===yd&&!is1Q(p)&&(sport==='ALL'||p.sport===sport));
+  const settled=plays.filter(p=>norm(p.result)==='win'||norm(p.result)==='loss');
+  const wins=settled.filter(p=>norm(p.result)==='win').length;
+  const losses=settled.filter(p=>norm(p.result)==='loss').length;
+  const wr=settled.length?Math.round(wins/settled.length*100):0;
+  document.getElementById('scan-yesterday-summary').textContent=
+    settled.length?`${wins}-${losses} (${wr}%) · ${plays.length} total plays`:`${plays.length} plays · not graded yet`;
+  const body=document.getElementById('scan-yesterday-body');
+  if(!plays.length){body.innerHTML=`<tr><td colspan="6" class="empty">No plays found for ${yd}</td></tr>`;return;}
+  const sorted=plays.slice().sort((a,b)=>(b.rate||0)-(a.rate||0));
+  const SPORT_COLORS={NHL:'#7B6CF6',NFL:'#F59E0B',MLB:'#EF4444',NBA:'#F97316',WNBA:'#EC4899'};
+  body.innerHTML=sorted.map(p=>{
+    const r=norm(p.result);
+    const badge=r==='win'?'<span class="result-badge win">WIN</span>':r==='loss'?'<span class="result-badge loss">LOSS</span>':'<span class="result-badge pending">—</span>';
+    const dir=p.direction==='UNDER'?'▼ U':'▲ O';
+    const dirColor=p.direction==='UNDER'?'var(--accent)':'var(--accent2)';
+    const sc=SPORT_COLORS[p.sport]||'var(--accent)';
+    return`<tr>
+      <td><div class="player-name">${esc(p.player||'—')}</div><div class="sub-text">${esc(p.team||'')}</div></td>
+      <td style="font-size:11px">${esc(p.prop||'—')}</td>
+      <td><span class="sport-badge ${(p.sport||'').toLowerCase()}" style="border-color:${sc}">${esc(p.sport||'—')}</span></td>
+      <td style="font-size:11px;color:${dirColor}">${dir}</td>
+      <td style="font-size:11px;color:var(--gold)">${p.rate||'—'}%</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
 
 async function loadScanData(){
   const days=parseInt(document.getElementById('scan-days')?.value||'30');
