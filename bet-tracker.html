@@ -90,7 +90,19 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
 .insight-label{font-size:10px;font-weight:700;letter-spacing:.06em;margin-bottom:3px;}
 .insight-box.hot .insight-label{color:var(--accent2);} .insight-box.cold .insight-label{color:var(--miss);}
 .insight-box .insight-label{color:var(--accent);}
-@media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr);}.form-grid{grid-template-columns:1fr 1fr;}.hide-mobile{display:none;}.analytics-grid{grid-template-columns:1fr;}}
+@media(max-width:700px){
+  body{overflow-x:hidden;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);}
+  .form-grid{grid-template-columns:1fr;}
+  .hide-mobile{display:none;}
+  .analytics-grid{grid-template-columns:1fr;}
+  .page-tabs{padding:0 8px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+  .page-tabs .tab-btn{white-space:nowrap;flex-shrink:0;font-size:11px;padding:10px 10px;}
+  #scan-stats-row{grid-template-columns:repeat(2,1fr)!important;}
+  .form-input,select.form-input{width:100%!important;box-sizing:border-box;}
+  header{padding:10px 12px;}
+  .container{padding:0 10px;}
+}
 </style>
 </head>
 <body>
