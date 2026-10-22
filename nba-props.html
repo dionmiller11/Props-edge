@@ -192,6 +192,7 @@ let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[];
 document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 const _up=new URLSearchParams(window.location.search),_ut=_up.get('token')||_up.get('lmToken');if(_ut){try{localStorage.setItem('lmToken',_ut);}catch(e){}}
 ['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
+(async function autoFetchToken(){try{const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');if(!r.ok)return;const d=await r.json();if(d.accessToken){try{localStorage.setItem('lmToken',d.accessToken);}catch(e){}document.getElementById('lmToken').value=d.accessToken;updateStatus('lmToken',true);}}catch(e){}})();
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
 function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach(t=>{const oc=t.getAttribute('onclick')||'';t.classList.toggle('active',oc.includes("'"+tab+"'"));});const isSGP=tab==='sgp';const sp=document.getElementById('sgpPanel');const tw=document.querySelector('.table-wrap');if(sp)sp.style.display=isSGP?'block':'none';if(tw)tw.style.display=isSGP?'none':'block';if(!isSGP)renderTable();}
@@ -279,9 +280,11 @@ async function runScan(){
   try{
     setProgress(20,'Fetching Linemate NBA trends…');
     const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
-    if(res.status===401)throw new Error('Token expired — get a new one from linemate.io DevTools');
+    if(res.status===401){try{localStorage.removeItem('lmToken');}catch(e){}throw new Error('Token expired — refreshing, try scan again in 5s');}
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const data=await res.json();setProgress(60,'Processing '+data.length+' props…');
+    const data=await res.json();
+    if(!Array.isArray(data)||data.length===0){console.warn('Linemate NBA: empty response',data);setStatus('done','⚠️ Linemate returned 0 NBA props — no games today or API issue');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
+    setProgress(60,'Processing '+data.length+' props…');
     const results=[];
     for(const item of data){
       try{
