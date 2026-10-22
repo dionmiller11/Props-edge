@@ -284,32 +284,37 @@ async function runScan(){
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
     const data=await res.json();
     if(!Array.isArray(data)||data.length===0){console.warn('Linemate NBA: empty response',data);setStatus('done','⚠️ Linemate returned 0 NBA props — no games today or API issue');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
+    if(data.length>0)console.log('NBA sample item:',JSON.stringify(data[0]).slice(0,600));
     setProgress(60,'Processing '+data.length+' props…');
     const results=[];
     for(const item of data){
       try{
-        const playerName=item.player?.fullName||'Unknown',team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=item.player?.position||'';
-        const propType=toMarketKey(item.market?.name||''),propLabel=PROP_LABELS[propType]||item.market?.name||propType;
-        const isPitcher=PITCHER_PROPS.includes(propType);
+        const p=item.player||{};
+        const playerName=p.fullName||(p.firstName&&p.lastName?p.firstName+' '+p.lastName:null)||p.firstName||'Unknown';
+        const team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=p.position||p.pos||'';
+        const rawName=item.market?.name||'';
+        const propType=rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
+        const propLabel=PROP_LABELS[propType]||rawName.replace(/_/g,' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())||propType;
         const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-        const books=item.market?.books||{},bookKeys=Object.keys(books);
-        let bestLine=null,bestOverOdds=null,bestUnderOdds=null,bookOverCount=0,bookUnderCount=0;
-        for(const bk of bookKeys){const b=books[bk];const ol=b?.over?.current?.value;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))bestOverOdds=oo;}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))bestUnderOdds=uo;}}
+        const direction=(item.outcome||'over').toUpperCase();
+        const topLine=item.line;
+        const books=item.market?.books||{};
+        let bestLine=topLine||null,bestOverOdds=null,bestUnderOdds=null,bookOverCount=0,bookUnderCount=0;
+        for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value||b?.line;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))bestOverOdds=oo;}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))bestUnderOdds=uo;}}
         if(!bestLine)continue;
-        const allTrends=item.trends||{},lineTrends=allTrends[String(bestLine)]||{};
-        const overTrend=lineTrends['CUSTOM_RECENT_FORM_OVER']||lineTrends['LAST_10']||{};
-        const underTrend=lineTrends['CUSTOM_RECENT_FORM_UNDER']||{};
-        const overRate=Math.round(overTrend?.all?.hitRate||0),underRate=Math.round(underTrend?.all?.hitRate||0);
-        const overHits=overTrend?.all?.hits||0,underHits=underTrend?.all?.hits||0;
-        const overGames=overTrend?.all?.games||10,underGames=underTrend?.all?.games||10;
-        const l10=allTrends[String(bestLine)]?.['LAST_10']?.all;
-        const last10=l10?Array(Math.min(l10.hits,10)).fill(1).concat(Array(Math.min(l10.misses,10)).fill(0)).slice(0,10):[];
-        // Only show streak if 100% hit rate — synthetic array fabricates consecutive streaks
-        const overStreak=(overHits===overGames&&overGames>=2)?Math.min(overGames,10):0;
-        const underStreak=(underHits===underGames&&underGames>=2)?Math.min(underGames,10):0;
-        if(overRate>=minRate)results.push({player:playerName,team,position:pos,propKey:propType,isPitcher,prop:propLabel+' O'+bestLine,line:String(bestLine),direction:'OVER',rate:overRate,hits:overHits,games:overGames,last10,streak:overStreak,hotStreak:overStreak>=3,opposingTeam:opp,gameTime,matchupGrade:overRate>=90?'A':overRate>=80?'B':'C',matchupNote:'vs '+opp,bestOdds:bestOverOdds,bookCount:bookOverCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookOverCount/(bookOverCount+bookUnderCount)*100):null,sport:'NBA',category:propType,b2b:b2bTeams.has(team.toUpperCase())});
-        if(underRate>=minRate)results.push({player:playerName,team,position:pos,propKey:propType,isPitcher,prop:propLabel+' U'+bestLine,line:String(bestLine),direction:'UNDER',rate:underRate,hits:underHits,games:underGames,last10:last10.map(v=>1-v),streak:underStreak,hotStreak:underStreak>=3,opposingTeam:opp,gameTime,matchupGrade:underRate>=90?'A':underRate>=80?'B':'C',matchupNote:'vs '+opp,bestOdds:bestUnderOdds,bookCount:bookOverCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round(bookOverCount/(bookOverCount+bookUnderCount)*100):null,sport:'NBA',category:propType,b2b:b2bTeams.has(team.toUpperCase())});
-      }catch(e){}
+        const signals=item.signals||[];
+        const allSignals=[];
+        for(const sig of signals){const pct=parseInt((sig.annotation||'').replace('%',''))||0;if(!pct)continue;const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);allSignals.push({type:sig.type||'UNKNOWN',rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});}
+        const primary=allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
+        if(!primary||!primary.rate)continue;
+        const hitRate=primary.rate;
+        if(hitRate<minRate)continue;
+        const hits=primary.hits,games=primary.games;
+        const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
+        const streak=(hits===games&&games>=2)?Math.min(games,10):0;
+        const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
+        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=3,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote:'vs '+opp,bestOdds,bookCount:bookOverCount+bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,sport:'NBA',category:propType,b2b:b2bTeams.has(team.toUpperCase())});
+      }catch(e){console.warn('NBA item parse error',e);}
     }
     setProgress(95,'Sorting…');
     const seen={};allData=results.filter(p=>{const k=p.player+p.propKey+p.direction;if(seen[k]&&seen[k]>=p.rate)return false;seen[k]=p.rate;return true;}).sort((a,b)=>(b.rate||0)-(a.rate||0));
