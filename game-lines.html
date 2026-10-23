@@ -330,19 +330,13 @@ async function fetchESPNGames(sport){
     // Add today's date param so ESPN returns the full slate (not just a small default window)
     const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
     const url = isNCAAFB
-      ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=80&dates=${todayStr}`
+      ? `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=150&groups=80&dates=${todayStr}`
       : `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&dates=${todayStr}`;
     const res = await fetch(url);
     if(!res.ok) return [];
     const data = await res.json();
     let events = data.events||[];
-    // For NCAAFB also fetch FCS (group 81) and merge
-    if(isNCAAFB){
-      try{
-        const res2 = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?limit=100&groups=81`);
-        if(res2.ok){ const d2=await res2.json(); events=[...events,...(d2.events||[])]; }
-      }catch(e){}
-    }
+    // FBS only — skip FCS (group 81) fetch
     const mapped = events.map(evt=>{
       const comp = evt.competitions?.[0];
       const home = comp?.competitors?.find(c=>c.homeAway==='home');
