@@ -403,10 +403,10 @@ async function runScan() {
         const direction = (item.outcome||'over').toUpperCase();
 
         const books = item.market?.books || {};
-        let bestLine=null, bestOverOdds=null, bestUnderOdds=null, bookOverCount=0, bookUnderCount=0;
+        let bestLine=item.line||null, bestOverOdds=null, bestUnderOdds=null, bookOverCount=0, bookUnderCount=0;
         for (const bk of Object.keys(books)) {
           const b = books[bk];
-          const ol = b?.over?.current?.value;
+          const ol = b?.over?.current?.value || b?.line;
           const oo = b?.over?.current?.odds?.american;
           const uo = b?.under?.current?.odds?.american;
           if (ol && !bestLine) bestLine = ol;
@@ -414,6 +414,8 @@ async function runScan() {
           if (uo) { bookUnderCount++; if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)) bestUnderOdds=uo; }
         }
         if (!bestLine) continue;
+        // Filter out FCS: require at least 1 major book to have a line
+        if (bookOverCount + bookUnderCount === 0) continue;
 
         const signals = item.signals || [];
         const allSignals = extractAllSignals(signals);
