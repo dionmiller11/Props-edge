@@ -379,16 +379,20 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
 
   <!-- SIM RESULTS PAGE -->
   <div id="page-sim" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px">
         <label style="font-size:11px;color:var(--muted);font-family:var(--font)">DATE</label>
-        <input type="date" id="sim-date" class="form-input" style="width:150px" onchange="renderSim()">
+        <input type="date" id="sim-date" class="form-input" style="width:150px" onchange="simAddDate(this.value)">
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost" onclick="loadSimDates()" style="font-size:11px">📅 Dates</button>
+        <button class="btn btn-ghost" onclick="loadSimDates()" style="font-size:11px">📅 All Dates</button>
+        <button class="btn btn-ghost" onclick="simClearDates()" style="font-size:11px">✕ Clear</button>
         <button class="btn btn-primary" onclick="renderSim()" style="font-size:11px">↻ Refresh</button>
         <button id="simAutoGradeBtn" onclick="simAutoGrade()" style="font-size:11px;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.3);font-family:var(--sans);">⚡ Auto-Grade</button>
       </div>
+    </div>
+    <div id="sim-selected-dates" style="display:none;margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--muted);font-family:var(--font)">SELECTED:</span>
     </div>
     <div id="sim-dates-bar" style="display:none;margin-bottom:12px;gap:6px;flex-wrap:wrap"></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="sim-sport-filters">
@@ -473,7 +477,7 @@ function showPage(page){
   });
   if(page==='analytics') renderAnalytics();
   if(page==='daily') renderDailyLog();
-  if(page==='sim'){ document.getElementById('sim-date').value=new Date().toISOString().split('T')[0]; renderSim(); }
+  if(page==='sim'){ document.getElementById('sim-date').value=new Date().toISOString().split('T')[0]; if(!simSelectedDates.size){simAddDate(new Date().toISOString().split('T')[0]);} else renderSim(); }
   if(page==='scan'&&!scanDataLoaded) loadScanData();
 }
 
@@ -1407,20 +1411,53 @@ function setSimSport(sport, el){
   el.classList.add('active');
   renderSim();
 }
+let simSelectedDates = new Set();
+function simAddDate(dt){
+  if(!dt) return;
+  simSelectedDates.add(dt);
+  renderSimSelectedBar();
+  renderSim();
+}
+function simClearDates(){
+  simSelectedDates.clear();
+  renderSimSelectedBar();
+  document.getElementById('sim-body').innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-icon">🎲</div><p>Select a date to load sim predictions.</p></div></td></tr>`;
+  document.getElementById('sim-accuracy').innerHTML='';
+  document.getElementById('sim-count').textContent='';
+}
+function renderSimSelectedBar(){
+  const bar = document.getElementById('sim-selected-dates');
+  const dates = [...simSelectedDates].sort();
+  if(!dates.length){bar.style.display='none';return;}
+  bar.style.display='flex';
+  bar.innerHTML='<span style="font-size:11px;color:var(--muted);font-family:var(--font)">SELECTED:</span>'+
+    dates.map(dt=>`<button class="filter-chip active" onclick="simToggleDate('${dt}')" style="font-family:var(--font)">${dt} ✕</button>`).join('');
+}
+function simToggleDate(dt){
+  simSelectedDates.delete(dt);
+  renderSimSelectedBar();
+  renderSim();
+}
 async function renderSim(){
-  const date = document.getElementById('sim-date').value;
-  if(!date) return;
+  const dates = [...simSelectedDates].sort();
+  if(!dates.length){
+    const single = document.getElementById('sim-date').value;
+    if(single) simSelectedDates.add(single), renderSimSelectedBar(), renderSim();
+    return;
+  }
   document.getElementById('sim-body').innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">⏳ Loading…</td></tr>`;
   document.getElementById('sim-accuracy').innerHTML='';
   document.getElementById('sim-count').textContent='';
   try{
-    const r = await fetch(`${KV_BASE}/sim/results?date=${date}`);
-    const d = await r.json();
-    if(!d.predictions||!d.predictions.length){
-      document.getElementById('sim-body').innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for ${date}.</p></div></td></tr>`;
+    const allResults = await Promise.all(dates.map(date=>
+      fetch(`${KV_BASE}/sim/results?date=${date}`).then(r=>r.json()).catch(()=>({predictions:[]}))
+    ));
+    const allPreds = allResults.flatMap(d=>d.predictions||[]);
+    if(!allPreds.length){
+      document.getElementById('sim-body').innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-icon">📭</div><p>No sim predictions found for selected dates.</p></div></td></tr>`;
       return;
     }
-    const preds = simSportFilter==='ALL' ? d.predictions : d.predictions.filter(p=>(p.sport||'').toUpperCase()===simSportFilter);
+    const preds = simSportFilter==='ALL' ? allPreds : allPreds.filter(p=>(p.sport||'').toUpperCase()===simSportFilter);
     // Accuracy buckets
     const buckets={'50-59':{label:'50–59%',w:0,l:0},'60-69':{label:'60–69%',w:0,l:0},'70+':{label:'70%+',w:0,l:0}};
     const byType={total:{w:0,l:0},spread:{w:0,l:0},ml:{w:0,l:0}};
@@ -1490,7 +1527,7 @@ async function loadSimDates(){
     const r = await fetch(`${KV_BASE}/sim/dates`);
     const d = await r.json();
     if(!d.dates||!d.dates.length){bar.innerHTML='<span style="font-size:11px;color:var(--muted)">No sim data yet</span>';return;}
-    bar.innerHTML = d.dates.map(dt=>`<button class="filter-chip" onclick="document.getElementById('sim-date').value='${dt}';renderSim()" style="font-family:var(--font)">${dt}</button>`).join('');
+    bar.innerHTML = d.dates.map(dt=>`<button class="filter-chip ${simSelectedDates.has(dt)?'active':''}" onclick="simSelectedDates.has('${dt}')?simToggleDate('${dt}'):(simAddDate('${dt}'),this.classList.add('active'))" style="font-family:var(--font)">${dt}</button>`).join('');
   } catch(e){ bar.innerHTML='<span style="font-size:11px;color:var(--miss)">Error</span>'; }
 }
 
