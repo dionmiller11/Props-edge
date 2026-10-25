@@ -307,12 +307,13 @@ function parseGoaliesMP(csv){
 async function fetchMoneyPuck(){
   const season=new Date().getFullYear();
   const base=`https://moneypuck.com/moneypuck/playerData/seasonSummary/${season}/regular/`;
-  // MoneyPuck blocks direct browser fetches — proxy through allorigins.win
-  const proxy=url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  // MoneyPuck blocks direct browser fetches; route through our Cloudflare Worker proxy
+  const workerProxy=file=>`https://line-monitor.dion-miller11.workers.dev/moneypuck/${file}`;
   async function mpFetch(file){
-    // Try direct first (in case CORS ever gets fixed), then proxy
+    // 1. Try worker proxy (fastest, no CORS issues)
+    try{const r=await fetch(workerProxy(file));if(r.ok)return await r.text();}catch(e){}
+    // 2. Try direct (in case moneypuck ever opens CORS)
     try{const r=await fetch(base+file);if(r.ok)return await r.text();}catch(e){}
-    try{const r=await fetch(proxy(base+file));if(r.ok)return await r.text();}catch(e){}
     return null;
   }
   try{
