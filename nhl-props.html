@@ -347,11 +347,12 @@ function mpBadgeHtml(mp,isGoalie){
     const pos=g>0,col=pos?'var(--accent2)':'var(--miss)';
     return`<span class="mp-badge" style="background:${pos?'rgba(0,255,136,.12)':'rgba(255,82,82,.12)'};color:${col};border-color:${pos?'rgba(0,255,136,.3)':'rgba(255,82,82,.3)'}" title="MoneyPuck: GSax=${g>=0?'+':''}${g}  (Goals Saved Above Expected)">GSax ${g>=0?'+':''}${g}</span>`;
   }
-  const x=mp.xGoals60;if(!x)return'';
+  const x=mp.xGoals60||0;
   const col=x>=0.7?'var(--gold)':x>=0.5?'var(--accent2)':x>=0.3?'var(--teal)':'var(--muted)';
   const bg=x>=0.7?'rgba(255,215,0,.12)':x>=0.5?'rgba(0,255,136,.1)':x>=0.3?'rgba(0,207,255,.1)':'rgba(255,255,255,.05)';
   const bc=x>=0.7?'rgba(255,215,0,.3)':x>=0.5?'rgba(0,255,136,.25)':x>=0.3?'rgba(0,207,255,.25)':'rgba(255,255,255,.1)';
-  return`<span class="mp-badge" style="background:${bg};color:${col};border-color:${bc}" title="MoneyPuck: xG/60=${x.toFixed(2)}  Shots/60=${mp.shotsOnGoalFor60?.toFixed(1)||'—'}  GP=${mp.gamesPlayed}">xG ${x.toFixed(2)}</span>`;
+  const sog=mp.shotsOnGoalFor60?mp.shotsOnGoalFor60.toFixed(1):'—';
+  return`<span class="mp-badge" style="background:${bg};color:${col};border-color:${bc}" title="MoneyPuck: xG/60=${x.toFixed(2)}  Shots/60=${sog}  GP=${mp.gamesPlayed}">xG ${x.toFixed(2)}</span>`;
 }
 
 async function runScan(){
