@@ -300,6 +300,87 @@ const ESPN_SPORTS = {
 let allGames = [], activeSports = new Set(['NFL']), activePage = 'lines', parlayLegs = [];
 let openerData = {}, alertLog = [], publicPctData = {};
 
+// ── NFLVERSE EPA TEAM DATA ──
+let nflTeams = {}; // keyed by ESPN abbr (e.g. 'BUF', 'LAR')
+
+function parseNFLVerseCSV(csv){
+  try{
+    const lines=csv.trim().split('\n');
+    if(lines.length<2)return{};
+    const h=lines[0].split(',').map(function(x){return x.trim().replace(/"/g,'');});
+    const get=function(row,col){return(row[h.indexOf(col)]||'').replace(/"/g,'').trim();};
+    // aggregate by team across all weeks
+    const agg={};
+    for(let i=1;i<lines.length;i++){
+      const row=lines[i].split(',');
+      const team=get(row,'team');
+      if(!team)continue;
+      const opp=get(row,'opponent_team');
+      const passEPA=parseFloat(get(row,'passing_epa'))||0;
+      const rushEPA=parseFloat(get(row,'rushing_epa'))||0;
+      const att=parseInt(get(row,'attempts'))||0;
+      const car=parseInt(get(row,'carries'))||0;
+      const plays=att+car;
+      const epa=passEPA+rushEPA;
+      if(!agg[team]){agg[team]={offEPA:0,offPlays:0,defEPA:0,defPlays:0};}
+      agg[team].offEPA+=epa;
+      agg[team].offPlays+=plays;
+      // opponent's offense scored 'epa' against this team's defense
+      if(opp){
+        if(!agg[opp]){agg[opp]={offEPA:0,offPlays:0,defEPA:0,defPlays:0};}
+        agg[opp].defEPA+=epa;
+        agg[opp].defPlays+=plays;
+      }
+    }
+    // Convert to ppg using: ppg = 23 + (epa_per_play * 65)
+    // League avg ~23 pts, ~65 plays/game, epa/play ~0 at average
+    const out={};
+    const LEAGUE_AVG=23, PLAYS_PER_GAME=65;
+    for(const team in agg){
+      const d=agg[team];
+      const offRate=d.offPlays>0?d.offEPA/d.offPlays:0;
+      const defRate=d.defPlays>0?d.defEPA/d.defPlays:0;
+      // offRate > 0 = good offense; defRate < 0 = good defense (fewer pts allowed)
+      const ppg=LEAGUE_AVG+(offRate*PLAYS_PER_GAME);
+      const papg=LEAGUE_AVG+(defRate*PLAYS_PER_GAME); // pts allowed per game
+      out[team]={
+        offEPAPlay:parseFloat(offRate.toFixed(3)),
+        defEPAPlay:parseFloat(defRate.toFixed(3)),
+        ppg:Math.max(7,parseFloat(ppg.toFixed(1))),
+        papg:Math.max(7,parseFloat(papg.toFixed(1))),
+        games:Math.round(d.offPlays/PLAYS_PER_GAME),
+      };
+    }
+    return out;
+  }catch(e){return{};}
+}
+
+async function fetchNFLVerseTeams(){
+  try{
+    const season=new Date().getFullYear(); // 2025 = 2025 NFL season
+    const url='https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_'+season+'.csv';
+    // Route through worker proxy to avoid CORS issues
+    const proxyUrl='https://line-monitor.dion-miller11.workers.dev/nflverse/team_stats_'+season+'.csv';
+    let csv=null;
+    try{const r=await fetch(proxyUrl);if(r.ok)csv=await r.text();}catch(e){}
+    if(!csv){
+      // Direct fetch as fallback (GitHub releases do send CORS headers)
+      try{const r=await fetch(url);if(r.ok)csv=await r.text();}catch(e){}
+    }
+    if(csv&&csv.length>1000){
+      nflTeams=parseNFLVerseCSV(csv);
+      console.log('NFLVerse teams loaded:',Object.keys(nflTeams).length,'teams');
+    }
+  }catch(e){console.warn('NFLVerse fetch failed:',e);}
+}
+
+function getNFLTeam(espnAbbr){
+  // nflverse uses LA for Rams, LV for Raiders — ESPN uses LAR, LVR
+  const map={'LAR':'LA','LVR':'LV','JAC':'JAX'};
+  const abbr=map[espnAbbr]||espnAbbr;
+  return nflTeams[abbr]||null;
+}
+
 // ── MONEYPUCK TEAM DATA ──
 let mpTeams = {};
 
@@ -600,8 +681,21 @@ async function runSimsForGames(games, sportObj){
         const homeDef=(homeMP&&homeMP.xga60>0)?homeMP.xga60:sportDefault;
         const sim=simGame(awayOff,homeOff,awayDef,homeDef,g.total||defaultTotal,g.spread,MC_N,sport);
         g.sim=sim;
-        // Store for display on card
         g.mpAway=awayMP;g.mpHome=homeMP;
+        continue;
+      }
+
+      if(sport === 'NFL'){
+        // Use nflverse EPA/play → PPG; fall back to league avg 22 pts
+        const awayEPA=getNFLTeam(g.away);
+        const homeEPA=getNFLTeam(g.home);
+        const awayOff=awayEPA?awayEPA.ppg:sportDefault;
+        const awayDef=awayEPA?awayEPA.papg:sportDefault;
+        const homeOff=homeEPA?homeEPA.ppg:sportDefault;
+        const homeDef=homeEPA?homeEPA.papg:sportDefault;
+        const sim=simGame(awayOff,homeOff,awayDef,homeDef,g.total||defaultTotal,g.spread,MC_N,sport);
+        g.sim=sim;
+        g.epaAway=awayEPA;g.epaHome=homeEPA;
         continue;
       }
 
@@ -752,8 +846,11 @@ async function loadAll(){
     g.weather = await fetchWeatherForGame(g.home, g.venue);
   }));
 
-  // Fetch MoneyPuck team data for NHL sims
-  if(activeSports.has('NHL')) await fetchMPTeams();
+  // Fetch advanced team data for sims
+  const dataFetches=[];
+  if(activeSports.has('NHL')) dataFetches.push(fetchMPTeams());
+  if(activeSports.has('NFL')) dataFetches.push(fetchNFLVerseTeams());
+  if(dataFetches.length) await Promise.all(dataFetches);
 
   // Run Monte Carlo sims per sport
   for(const [key, sport] of sportEntries){
@@ -919,6 +1016,15 @@ function renderLines(){
           </span>
           <span class="mp-team-stat" title="${g.home} xGF/60 vs xGA/60 (MoneyPuck)">
             ${g.home}: <b style="color:${(g.mpHome&&g.mpHome.xgf60>=2.7)?'var(--accent2)':(g.mpHome&&g.mpHome.xgf60>=2.4)?'var(--gold)':'var(--muted)'}">${g.mpHome?g.mpHome.xgf60.toFixed(2):'—'}</b>xGF · <b style="color:${(g.mpHome&&g.mpHome.xga60<=2.4)?'var(--accent2)':(g.mpHome&&g.mpHome.xga60<=2.7)?'var(--gold)':'var(--miss)'}">${g.mpHome?g.mpHome.xga60.toFixed(2):'—'}</b>xGA
+          </span>
+        </div>`:''}
+        ${(g.epaAway||g.epaHome)?`<div class="mp-team-row">
+          <span class="mp-team-label">⚡ EPA/play</span>
+          <span class="mp-team-stat" title="${g.away} EPA/play offense vs defense (nflverse)">
+            ${g.away}: <b style="color:${(g.epaAway&&g.epaAway.offEPAPlay>=0.10)?'var(--accent2)':(g.epaAway&&g.epaAway.offEPAPlay>=0)?'var(--gold)':'var(--miss)'}">${g.epaAway?g.epaAway.offEPAPlay.toFixed(3):'—'}</b>off · <b style="color:${(g.epaAway&&g.epaAway.defEPAPlay<=-0.05)?'var(--accent2)':(g.epaAway&&g.epaAway.defEPAPlay<=0.05)?'var(--gold)':'var(--miss)'}">${g.epaAway?g.epaAway.defEPAPlay.toFixed(3):'—'}</b>def
+          </span>
+          <span class="mp-team-stat" title="${g.home} EPA/play offense vs defense (nflverse)">
+            ${g.home}: <b style="color:${(g.epaHome&&g.epaHome.offEPAPlay>=0.10)?'var(--accent2)':(g.epaHome&&g.epaHome.offEPAPlay>=0)?'var(--gold)':'var(--miss)'}">${g.epaHome?g.epaHome.offEPAPlay.toFixed(3):'—'}</b>off · <b style="color:${(g.epaHome&&g.epaHome.defEPAPlay<=-0.05)?'var(--accent2)':(g.epaHome&&g.epaHome.defEPAPlay<=0.05)?'var(--gold)':'var(--miss)'}">${g.epaHome?g.epaHome.defEPAPlay.toFixed(3):'—'}</b>def
           </span>
         </div>`:''}
         ${g.sim ? `<div class="sim-section">
