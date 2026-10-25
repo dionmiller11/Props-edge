@@ -263,15 +263,11 @@ function parseMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
   const headers=lines[0].split(',');
   const idx={};headers.forEach((h,i)=>{idx[h.trim()]=i;});
-  // MoneyPuck has multiple rows per player (by situation: all, 5on5, powerPlay, etc.)
-  // Only use 'all' situation rows for overall stats
-  const sitIdx=idx['situation']??idx['Situation']??-1;
-  // Name column: try 'name' then 'playerName'
-  const nameIdx=idx['name']??idx['playerName']??idx['Player']??0;
+  const sitIdx=(idx['situation']!==undefined)?idx['situation']:(idx['Situation']!==undefined?idx['Situation']:-1);
+  const nameIdx=(idx['name']!==undefined)?idx['name']:(idx['playerName']!==undefined?idx['playerName']:(idx['Player']!==undefined?idx['Player']:0));
   const out={};
   for(let i=1;i<lines.length;i++){
     const cols=lines[i].split(',');
-    // Filter to 'all' situation if column exists
     if(sitIdx>=0){const sit=(cols[sitIdx]||'').replace(/"/g,'').trim();if(sit&&sit!=='all')continue;}
     const nm=(cols[nameIdx]||'').replace(/"/g,'').trim();
     if(!nm)continue;
@@ -290,8 +286,8 @@ function parseGoaliesMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
   const headers=lines[0].split(',');
   const idx={};headers.forEach((h,i)=>{idx[h.trim()]=i;});
-  const sitIdx=idx['situation']??idx['Situation']??-1;
-  const nameIdx=idx['name']??idx['playerName']??idx['Player']??0;
+  const sitIdx=(idx['situation']!==undefined)?idx['situation']:(idx['Situation']!==undefined?idx['Situation']:-1);
+  const nameIdx=(idx['name']!==undefined)?idx['name']:(idx['playerName']!==undefined?idx['playerName']:(idx['Player']!==undefined?idx['Player']:0));
   const out={};
   for(let i=1;i<lines.length;i++){
     const cols=lines[i].split(',');
@@ -329,6 +325,9 @@ async function fetchMoneyPuck(){
     const [skatersCSV,goaliesCSV]=await Promise.all([mpFetch('skaters.csv'),mpFetch('goalies.csv')]);
     if(skatersCSV){mpSkaters=parseMP(skatersCSV);}
     if(goaliesCSV){mpGoalies=parseGoaliesMP(goaliesCSV);}
+    const sk=Object.keys(mpSkaters).length,gl=Object.keys(mpGoalies).length;
+    console.log('MoneyPuck loaded: '+sk+' skaters, '+gl+' goalies');
+    if(sk>0||gl>0)setStatus('running','📡 MoneyPuck: '+sk+' skaters, '+gl+' goalies loaded. Processing props…');
   }catch(e){console.warn('MoneyPuck fetch failed:',e);}
 }
 function getMPData(playerName,isGoalie){
