@@ -940,8 +940,11 @@ function renderLines(){
     const total = g.total!=null ? g.total : '—';
     const totalMove = od?.totalMove!=null&&Math.abs(od.totalMove)>=0.5 ? `<div class="line-move ${od.totalMove>0?'up':'down'}">${od.totalMove>0?'▲':'▼'}${Math.abs(od.totalMove)}</div>` : '<div class="line-move none">no move</div>';
     // ML
-    const mlA = g.ml_away!=null?(g.ml_away>0?'+':'')+g.ml_away:'—';
-    const mlH = g.ml_home!=null?(g.ml_home>0?'+':'')+g.ml_home:'—';
+    // Filter out ESPN garbage placeholder MLs (anything beyond ±800 is not a real line)
+    const mlARaw = g.ml_away!=null&&Math.abs(g.ml_away)<=800?g.ml_away:null;
+    const mlHRaw = g.ml_home!=null&&Math.abs(g.ml_home)<=800?g.ml_home:null;
+    const mlA = mlARaw!=null?(mlARaw>0?'+':'')+mlARaw:'—';
+    const mlH = mlHRaw!=null?(mlHRaw>0?'+':'')+mlHRaw:'—';
 
     // Public bars
     let publicHtml = '';
