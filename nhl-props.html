@@ -307,13 +307,18 @@ function parseGoaliesMP(csv){
 async function fetchMoneyPuck(){
   const season=new Date().getFullYear();
   const base=`https://moneypuck.com/moneypuck/playerData/seasonSummary/${season}/regular/`;
+  // MoneyPuck blocks direct browser fetches — proxy through allorigins.win
+  const proxy=url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  async function mpFetch(file){
+    // Try direct first (in case CORS ever gets fixed), then proxy
+    try{const r=await fetch(base+file);if(r.ok)return await r.text();}catch(e){}
+    try{const r=await fetch(proxy(base+file));if(r.ok)return await r.text();}catch(e){}
+    return null;
+  }
   try{
-    const [sRes,gRes]=await Promise.all([
-      fetch(base+'skaters.csv'),
-      fetch(base+'goalies.csv')
-    ]);
-    if(sRes.ok){const csv=await sRes.text();mpSkaters=parseMP(csv);}
-    if(gRes.ok){const csv=await gRes.text();mpGoalies=parseGoaliesMP(csv);}
+    const [skatersCSV,goaliesCSV]=await Promise.all([mpFetch('skaters.csv'),mpFetch('goalies.csv')]);
+    if(skatersCSV){mpSkaters=parseMP(skatersCSV);}
+    if(goaliesCSV){mpGoalies=parseGoaliesMP(goaliesCSV);}
   }catch(e){console.warn('MoneyPuck fetch failed:',e);}
 }
 function getMPData(playerName,isGoalie){
