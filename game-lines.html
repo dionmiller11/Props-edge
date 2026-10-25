@@ -152,6 +152,7 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
     <span style="font-family:var(--font);font-size:11px;color:var(--muted)" id="lastUpdated">—</span>
     <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
     <button class="btn btn-gold" id="gl-grade-btn" onclick="gradeGameLines()" style="font-size:11px">⚡ Grade Lines</button>
+    <button class="btn btn-ghost" id="gl-regrade-btn" onclick="regradeGameLines()" style="font-size:11px" title="Clear all grades and re-grade from scratch (fixes incorrect grades)">🔄 Re-grade All</button>
     <button class="btn btn-primary" id="runBtn" onclick="loadAll()">⚡ LOAD LINES</button>
   </div>
 </header>
@@ -1402,9 +1403,11 @@ async function gradeGameLines(){
         // homeSpread: negative = home fav, positive = away fav
         let homeSpread = g.homeSpread!=null ? g.homeSpread : null;
         if(homeSpread==null){
-          // Old snapshot: derive from ML if available, else use spread sign
+          // Old snapshot: derive from ML if available (filter ESPN garbage ±800), else use spread sign
+          const mlH = g.ml_home!=null&&Math.abs(g.ml_home)<=800 ? g.ml_home : null;
+          const mlA = g.ml_away!=null&&Math.abs(g.ml_away)<=800 ? g.ml_away : null;
           let homeFav;
-          if(g.ml_home!=null&&g.ml_away!=null) homeFav=g.ml_home<g.ml_away;
+          if(mlH!=null&&mlA!=null) homeFav=mlH<mlA;
           else homeFav=g.spread<0;
           homeSpread = homeFav ? -Math.abs(g.spread) : Math.abs(g.spread);
         }
@@ -1447,6 +1450,38 @@ async function gradeGameLines(){
 
   if(btn){btn.disabled=false;btn.textContent='⚡ Grade Lines';}
   showToast(`⚡ Graded ${totalGraded} game lines`);
+}
+
+// Re-grade: clear all existing spread/total results for last 14 days, then re-grade fresh
+// Fixes any games that were incorrectly graded due to spread sign bugs
+async function regradeGameLines(){
+  const btn = document.getElementById('gl-regrade-btn');
+  if(!confirm('Clear and re-grade all results for the last 14 days? This will fix any incorrect grades.')) return;
+  if(btn){btn.disabled=true;btn.textContent='⏳ Clearing…';}
+
+  let cleared=0;
+  for(let i=1;i<=14;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const dt = d.toISOString().split('T')[0];
+    const key = 'glSnapshot_' + dt;
+    let snap;
+    try{ snap = JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ continue; }
+    if(!snap||!snap.games||!snap.games.length) continue;
+    // Clear all existing grades so gradeGameLines will re-process them
+    for(const g of snap.games){
+      if(g.result_spread!==null||g.result_total!==null){
+        g.result_spread=null; g.result_total=null;
+        g.result_ml_home=null; g.result_ml_away=null;
+        cleared++;
+      }
+    }
+    try{ localStorage.setItem(key, JSON.stringify(snap)); }catch(e){}
+  }
+
+  if(btn){btn.textContent='⚡ Re-grading…';}
+  showToast(`🔄 Cleared ${cleared} grades — re-grading now…`);
+  await gradeGameLines();
+  if(btn){btn.disabled=false;btn.textContent='🔄 Re-grade All';}
 }
 </script>
 </body>
