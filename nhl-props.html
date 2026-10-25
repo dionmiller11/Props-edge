@@ -263,10 +263,17 @@ function parseMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
   const headers=lines[0].split(',');
   const idx={};headers.forEach((h,i)=>{idx[h.trim()]=i;});
+  // MoneyPuck has multiple rows per player (by situation: all, 5on5, powerPlay, etc.)
+  // Only use 'all' situation rows for overall stats
+  const sitIdx=idx['situation']??idx['Situation']??-1;
+  // Name column: try 'name' then 'playerName'
+  const nameIdx=idx['name']??idx['playerName']??idx['Player']??0;
   const out={};
   for(let i=1;i<lines.length;i++){
     const cols=lines[i].split(',');
-    const nm=(cols[idx['name']]||'').replace(/"/g,'').trim();
+    // Filter to 'all' situation if column exists
+    if(sitIdx>=0){const sit=(cols[sitIdx]||'').replace(/"/g,'').trim();if(sit&&sit!=='all')continue;}
+    const nm=(cols[nameIdx]||'').replace(/"/g,'').trim();
     if(!nm)continue;
     const key=mpNormName(nm);
     out[key]={
@@ -274,7 +281,6 @@ function parseMP(csv){
       xGoals60:parseFloat(cols[idx['xGoals60']])||0,
       shotsOnGoalFor60:parseFloat(cols[idx['shotsOnGoalFor60']])||0,
       goalsFor60:parseFloat(cols[idx['goalsFor60']])||0,
-      primaryAssists60:parseFloat(cols[idx['I_F_primaryAssists']])||0,
       gamesPlayed:parseInt(cols[idx['gamesPlayed']])||0,
     };
   }
@@ -284,10 +290,13 @@ function parseGoaliesMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
   const headers=lines[0].split(',');
   const idx={};headers.forEach((h,i)=>{idx[h.trim()]=i;});
+  const sitIdx=idx['situation']??idx['Situation']??-1;
+  const nameIdx=idx['name']??idx['playerName']??idx['Player']??0;
   const out={};
   for(let i=1;i<lines.length;i++){
     const cols=lines[i].split(',');
-    const nm=(cols[idx['name']]||'').replace(/"/g,'').trim();
+    if(sitIdx>=0){const sit=(cols[sitIdx]||'').replace(/"/g,'').trim();if(sit&&sit!=='all')continue;}
+    const nm=(cols[nameIdx]||'').replace(/"/g,'').trim();
     if(!nm)continue;
     const key=mpNormName(nm);
     // GSax = Goals Saved Above Expected = xGoalsSaved - actualGoalsAllowed
