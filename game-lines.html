@@ -895,7 +895,8 @@ async function loadAll(){
 // ── RENDER LINES TAB ──
 function renderLines(){
   const grid = document.getElementById('gamesGrid');
-  const games = allGames.filter(g=>activeSports.has(g.sport));
+  // Only show games that have a real spread or total — no line = not useful
+  const games = allGames.filter(g=>activeSports.has(g.sport)&&(g.spread!=null||g.total!=null));
   if(!games.length){grid.innerHTML='<div class="empty"><div class="empty-icon">📊</div><p>No games found. Click ⚡ LOAD LINES or enable more sports above.</p></div>';return;}
 
   grid.innerHTML = games.map(g=>{
