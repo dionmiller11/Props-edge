@@ -88,6 +88,9 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .wx-desc{color:var(--muted);font-size:10px;}
 /* Sim probability section */
 .sim-section{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;}
+.mp-team-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 0 4px;border-top:1px solid var(--border);margin-top:8px;}
+.mp-team-label{font-size:9px;font-weight:700;color:var(--muted);font-family:var(--font);letter-spacing:.05em;white-space:nowrap;}
+.mp-team-stat{font-size:10px;color:var(--text);font-family:var(--font);white-space:nowrap;}
 .sim-title{font-size:9px;color:var(--muted);font-family:var(--font);letter-spacing:.12em;margin-bottom:8px;}
 .sim-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
 .sim-label{font-size:11px;font-family:var(--font);font-weight:700;min-width:90px;color:var(--text);}
@@ -296,6 +299,58 @@ const ESPN_SPORTS = {
 
 let allGames = [], activeSports = new Set(['NFL']), activePage = 'lines', parlayLegs = [];
 let openerData = {}, alertLog = [], publicPctData = {};
+
+// ── MONEYPUCK TEAM DATA ──
+let mpTeams = {};
+
+// MoneyPuck teams.csv uses same abbreviations as ESPN (NYI, BOS, etc.)
+// Utah Hockey Club moved from ARI; MP uses 'UTA'
+const ESPN_TO_MP_ABBR = {'ARI':'UTA'}; // ESPN still sometimes shows ARI for Utah
+
+function parseMPTeams(csv){
+  try{
+    const lines=csv.trim().split('\n');
+    if(lines.length<2)return{};
+    const headers=lines[0].split(',');
+    const idx={};
+    headers.forEach(function(h,i){idx[h.trim()]=i;});
+    const out={};
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(',');
+      const sit=(cols[idx['situation']]||'').replace(/"/g,'').trim();
+      if(sit&&sit!=='all')continue;
+      // teams.csv uses 'team' column (ESPN abbreviation like NYI, BOS)
+      const teamAbbr=(cols[idx['name']]||cols[idx['team']]||'').replace(/"/g,'').trim();
+      if(!teamAbbr)continue;
+      const xgf=parseFloat(cols[idx['xGoalsFor']])||0;
+      const xga=parseFloat(cols[idx['xGoalsAgainst']])||0;
+      const ice=parseFloat(cols[idx['iceTime']])||0;
+      const gp=parseInt(cols[idx['gamesPlayed']])||0;
+      // per-60 = (total / iceTime_seconds) * 3600
+      const xgf60=ice>0?parseFloat((xgf/ice*3600).toFixed(3)):0;
+      const xga60=ice>0?parseFloat((xga/ice*3600).toFixed(3)):0;
+      out[teamAbbr]={abbr:teamAbbr,xgf60:xgf60,xga60:xga60,xgf:xgf,xga:xga,gp:gp};
+    }
+    return out;
+  }catch(e){return{};}
+}
+
+async function fetchMPTeams(){
+  try{
+    const workerUrl='https://line-monitor.dion-miller11.workers.dev/moneypuck/teams.csv';
+    const r=await fetch(workerUrl);
+    if(r.ok){
+      const csv=await r.text();
+      mpTeams=parseMPTeams(csv);
+      console.log('MoneyPuck teams loaded:',Object.keys(mpTeams).length);
+    }
+  }catch(e){console.warn('MP teams fetch failed:',e);}
+}
+
+function getMPTeam(espnAbbr){
+  const abbr=ESPN_TO_MP_ABBR[espnAbbr]||espnAbbr;
+  return mpTeams[abbr]||null;
+}
 
 // ── SPORT TOGGLES ──
 function toggleSport(sport, el){
@@ -535,11 +590,18 @@ async function runSimsForGames(games, sportObj){
       const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:22;
       const defaultTotal = sport==='NHL'?5.5:sport==='MLB'?8.5:44;
 
-      // NHL team stats endpoint blocks CORS from browser — use ESPN odds total directly
-      // and fall back to league-average goals (3.0) for both teams
       if(sport === 'NHL'){
-        const sim = simGame(sportDefault, sportDefault, sportDefault, sportDefault, g.total||defaultTotal, g.spread, MC_N, sport);
-        g.sim = sim;
+        // Use MoneyPuck xGF/60 and xGA/60 per team; fall back to league avg 3.0
+        const awayMP=getMPTeam(g.away);
+        const homeMP=getMPTeam(g.home);
+        const awayOff=(awayMP&&awayMP.xgf60>0)?awayMP.xgf60:sportDefault;
+        const awayDef=(awayMP&&awayMP.xga60>0)?awayMP.xga60:sportDefault;
+        const homeOff=(homeMP&&homeMP.xgf60>0)?homeMP.xgf60:sportDefault;
+        const homeDef=(homeMP&&homeMP.xga60>0)?homeMP.xga60:sportDefault;
+        const sim=simGame(awayOff,homeOff,awayDef,homeDef,g.total||defaultTotal,g.spread,MC_N,sport);
+        g.sim=sim;
+        // Store for display on card
+        g.mpAway=awayMP;g.mpHome=homeMP;
         continue;
       }
 
@@ -689,6 +751,9 @@ async function loadAll(){
   await Promise.all(allGames.filter(g=>g.isOutdoor&&['NFL','NCAAFB'].includes(g.sport)).map(async g=>{
     g.weather = await fetchWeatherForGame(g.home, g.venue);
   }));
+
+  // Fetch MoneyPuck team data for NHL sims
+  if(activeSports.has('NHL')) await fetchMPTeams();
 
   // Run Monte Carlo sims per sport
   for(const [key, sport] of sportEntries){
@@ -847,6 +912,15 @@ function renderLines(){
           </div>
         </div>
         ${publicHtml}
+        ${(g.mpAway||g.mpHome)?`<div class="mp-team-row">
+          <span class="mp-team-label">📊 MP xG/60</span>
+          <span class="mp-team-stat" title="${g.away} xGF/60 vs xGA/60 (MoneyPuck)">
+            ${g.away}: <b style="color:${(g.mpAway&&g.mpAway.xgf60>=2.7)?'var(--accent2)':(g.mpAway&&g.mpAway.xgf60>=2.4)?'var(--gold)':'var(--muted)'}">${g.mpAway?g.mpAway.xgf60.toFixed(2):'—'}</b>xGF · <b style="color:${(g.mpAway&&g.mpAway.xga60<=2.4)?'var(--accent2)':(g.mpAway&&g.mpAway.xga60<=2.7)?'var(--gold)':'var(--miss)'}">${g.mpAway?g.mpAway.xga60.toFixed(2):'—'}</b>xGA
+          </span>
+          <span class="mp-team-stat" title="${g.home} xGF/60 vs xGA/60 (MoneyPuck)">
+            ${g.home}: <b style="color:${(g.mpHome&&g.mpHome.xgf60>=2.7)?'var(--accent2)':(g.mpHome&&g.mpHome.xgf60>=2.4)?'var(--gold)':'var(--muted)'}">${g.mpHome?g.mpHome.xgf60.toFixed(2):'—'}</b>xGF · <b style="color:${(g.mpHome&&g.mpHome.xga60<=2.4)?'var(--accent2)':(g.mpHome&&g.mpHome.xga60<=2.7)?'var(--gold)':'var(--miss)'}">${g.mpHome?g.mpHome.xga60.toFixed(2):'—'}</b>xGA
+          </span>
+        </div>`:''}
         ${g.sim ? `<div class="sim-section">
           <div class="sim-title">🎲 MONTE CARLO SIM PROBABILITY (${MC_N.toLocaleString()} RUNS)</div>
           ${g.total!=null?`
