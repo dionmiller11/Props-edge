@@ -1269,6 +1269,24 @@ function saveGameLinesSnapshot(games, date){
     const totalSide  = g.sim ? (g.sim.overPct > 50 ? 'OVER' : 'UNDER') : null;
     const spreadConf = g.sim ? Math.max(g.sim.awaySpreadPct||0, g.sim.homeSpreadPct||0) : null;
     const totalConf  = g.sim ? Math.max(g.sim.overPct||0, g.sim.underPct||0) : null;
+    // Normalize spread to always be from home team's perspective (negative = home fav)
+    let homeFav = null;
+    if(g.spread!=null){
+      const detM = (g._oddsDetails||'').match(/([A-Za-z]+)\s*([+-]?\d+)/);
+      if(detM){
+        const fa = detM[1].toUpperCase();
+        if(fa===g.home.toUpperCase()) homeFav=true;
+        else if(fa===g.away.toUpperCase()) homeFav=false;
+        else if(g.ml_home!=null&&g.ml_away!=null) homeFav=g.ml_home<g.ml_away;
+        else homeFav=g.spread<0;
+      } else if(g.ml_home!=null&&g.ml_away!=null){
+        homeFav=g.ml_home<g.ml_away;
+      } else {
+        homeFav=g.spread<0;
+      }
+    }
+    // homeSpread: negative means home is fav; positive means away is fav (always home perspective)
+    const homeSpread = g.spread!=null ? (homeFav ? -Math.abs(g.spread) : Math.abs(g.spread)) : null;
     const entry = {
       id: g.id,
       sport: g.sport,
@@ -1277,6 +1295,7 @@ function saveGameLinesSnapshot(games, date){
       commence: g.commence,
       date,
       spread: g.spread,
+      homeSpread,   // normalized: negative = home fav, positive = away fav
       total: g.total,
       ml_home: g.ml_home,
       ml_away: g.ml_away,
@@ -1348,6 +1367,8 @@ async function gradeGameLines(){
           scoreMap[evt.id] = {
             homeScore: parseInt(home?.score||0),
             awayScore: parseInt(away?.score||0),
+            homeAbbr: home?.team?.abbreviation||'',
+            awayAbbr: away?.team?.abbreviation||'',
             completed: true
           };
         }
@@ -1357,20 +1378,38 @@ async function gradeGameLines(){
     // Grade each game
     let changed=false;
     for(const g of ungraded){
-      const sc = scoreMap[g.id];
+      // Primary match: ESPN event ID
+      let sc = scoreMap[g.id];
+      // Fallback: match by team abbreviations (handles ID mismatch between scoreboard fetches)
+      if(!sc||!sc.completed){
+        const fallback = Object.values(scoreMap).find(s=>
+          s.completed &&
+          s.homeAbbr && s.awayAbbr &&
+          s.homeAbbr.toUpperCase()===g.home.toUpperCase() &&
+          s.awayAbbr.toUpperCase()===g.away.toUpperCase()
+        );
+        if(fallback) sc=fallback;
+      }
       if(!sc||!sc.completed) continue;
       const {homeScore, awayScore} = sc;
+      // Sanity check — both scores must be non-negative integers
+      if(isNaN(homeScore)||isNaN(awayScore)||homeScore<0||awayScore<0) continue;
       const total = homeScore + awayScore;
       const awayMargin = awayScore - homeScore; // positive = away wins outright
 
-      // Grade spread (spread is from home team's perspective: negative = home fav)
+      // Grade spread — use homeSpread (always home-perspective) if stored, else derive from ML
       if(g.spread!=null && g.spreadSide){
-        const ats = g.spread<0
-          ? homeScore + g.spread - awayScore  // home covers if positive
-          : awayScore + Math.abs(g.spread) - homeScore; // away covers
-        const homeCovers = g.spread<0 ? (homeScore+g.spread)>awayScore : homeScore<(awayScore-Math.abs(g.spread));
-        // Actually: home spread = home + spread vs away
-        const homeCoverMargin = homeScore - awayScore + g.spread; // >0 home covers, <0 away covers, =0 push
+        // homeSpread: negative = home fav, positive = away fav
+        let homeSpread = g.homeSpread!=null ? g.homeSpread : null;
+        if(homeSpread==null){
+          // Old snapshot: derive from ML if available, else use spread sign
+          let homeFav;
+          if(g.ml_home!=null&&g.ml_away!=null) homeFav=g.ml_home<g.ml_away;
+          else homeFav=g.spread<0;
+          homeSpread = homeFav ? -Math.abs(g.spread) : Math.abs(g.spread);
+        }
+        // homeCoverMargin > 0 means home covered, < 0 means away covered
+        const homeCoverMargin = homeScore - awayScore + homeSpread;
         if(homeCoverMargin===0){
           g.result_spread = 'PUSH';
         } else if(g.spreadSide==='HOME'){
