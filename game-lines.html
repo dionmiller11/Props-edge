@@ -357,20 +357,22 @@ function parseNFLVerseCSV(csv){
 
 async function fetchNFLVerseTeams(){
   try{
-    // nflverse GitHub releases have open CORS headers — fetch directly, no proxy needed
-    // Use previous year if before Aug (preseason), else current year
     const now=new Date();
     const season=(now.getMonth()>=7)?now.getFullYear():(now.getFullYear()-1);
-    const url='https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_'+season+'.csv';
-    const r=await fetch(url,{redirect:'follow'});
-    if(r.ok){
-      const csv=await r.text();
-      if(csv&&csv.length>500){
-        nflTeams=parseNFLVerseCSV(csv);
-        console.log('NFLVerse teams loaded:',Object.keys(nflTeams).length,'teams');
-      }
+    const directUrl='https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_'+season+'.csv';
+    const proxyUrl='https://line-monitor.dion-miller11.workers.dev/nflverse/stats_team_week_'+season+'.csv';
+    let csv=null;
+    // Try worker proxy first (avoids GitHub redirect/CORS edge cases on mobile)
+    try{const r=await fetch(proxyUrl);if(r.ok){const t=await r.text();if(t&&t.length>500)csv=t;}}catch(e){}
+    // Fall back to direct GitHub
+    if(!csv){
+      try{const r=await fetch(directUrl,{redirect:'follow'});if(r.ok){const t=await r.text();if(t&&t.length>500)csv=t;}}catch(e){}
+    }
+    if(csv){
+      nflTeams=parseNFLVerseCSV(csv);
+      console.log('NFLVerse teams loaded:',Object.keys(nflTeams).length,'teams');
     }else{
-      console.warn('NFLVerse HTTP',r.status);
+      console.warn('NFLVerse: both proxy and direct fetch failed');
     }
   }catch(e){console.warn('NFLVerse fetch failed:',e);}
 }
