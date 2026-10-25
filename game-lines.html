@@ -572,26 +572,36 @@ async function fetchTeamStats(sport, teamId){
   const key = sport.key+'_'+teamId;
   if(teamStatsCache[key]) return teamStatsCache[key];
   try{
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/teams/${teamId}`);
-    if(!res.ok) return null;
-    const data = await res.json();
-    const team = data.team;
-    // Get scoring stats from record/stats
     const stats = {};
-    // Try season stats endpoint
+    // Primary: /statistics endpoint — flatten all stat names
     const sRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/teams/${teamId}/statistics`);
     if(sRes.ok){
       const sData = await sRes.json();
-      const cats = sData.results?.stats?.categories||sData.team?.record?.items||[];
-      // Parse scoring offense and defense
       for(const cat of (sData.results?.stats?.categories||[])){
         for(const stat of (cat.stats||[])){
-          stats[stat.name] = parseFloat(stat.value)||0;
+          const v = parseFloat(stat.value);
+          if(!isNaN(v) && v > 0) stats[stat.name] = v;
         }
       }
     }
-    teamStatsCache[key] = stats;
-    return stats;
+    // Fallback: /record endpoint — look for pointsPerGame in summary items
+    if(!stats['avgPoints'] && !stats['pointsPerGame']){
+      try{
+        const rRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport.path}/teams/${teamId}`);
+        if(rRes.ok){
+          const rData = await rRes.json();
+          // Some sports expose record averages here
+          for(const item of (rData.team?.record?.items||[])){
+            for(const s of (item.stats||[])){
+              const v = parseFloat(s.value);
+              if(!isNaN(v) && v > 0 && s.name) stats[s.name] = v;
+            }
+          }
+        }
+      }catch(e){}
+    }
+    teamStatsCache[key] = Object.keys(stats).length ? stats : null;
+    return teamStatsCache[key];
   }catch(e){ return null; }
 }
 
@@ -671,7 +681,7 @@ async function runSimsForGames(games, sportObj){
 
   for(const g of games){
     try{
-      const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:22;
+      const sportDefault = sport==='NHL'?3.0:sport==='MLB'?4.5:sport==='NBA'||sport==='WNBA'?112:sport==='NCAAFB'?28:22;
       const defaultTotal = sport==='NHL'?5.5:sport==='MLB'?8.5:44;
 
       if(sport === 'NHL'){
