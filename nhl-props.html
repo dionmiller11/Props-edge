@@ -162,7 +162,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     </div>
   </div>
   <div class="table-wrap">
-    <div class="table-header"><span class="table-title" id="tableTitle">🏒 ALL NHL PROPS — TODAY</span><span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span><button onclick="alert('SKATERS:'+Object.keys(window.mpSkaters||{}).slice(0,5).join(', ')+'\n\nMATCHES:'+JSON.stringify((window._mpMatchLog||[]).slice(0,5)))" style="font-size:10px;padding:2px 6px;margin-left:8px;background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.3);border-radius:4px;font-family:var(--font)">🔍 MP Debug</button></div>
+    <div class="table-header"><span class="table-title" id="tableTitle">🏒 ALL NHL PROPS — TODAY</span><span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span></div>
     <div class="table-scroll">
       <table>
         <thead><tr>
@@ -326,12 +326,6 @@ async function fetchMoneyPuck(){
     if(skatersCSV){mpSkaters=parseMP(skatersCSV);window.mpSkaters=mpSkaters;}
     if(goaliesCSV){mpGoalies=parseGoaliesMP(goaliesCSV);}
     const sk=Object.keys(mpSkaters).length,gl=Object.keys(mpGoalies).length;
-    const sampleKeys=Object.keys(mpSkaters).slice(0,5);
-    const sampleVals=sampleKeys.map(k=>mpSkaters[k].name+'→xG:'+mpSkaters[k].xGoals60);
-    window._mpDebug={skaterCount:sk,goalieCount:gl,sampleKeys,sampleVals};
-    console.log('MoneyPuck loaded: '+sk+' skaters, '+gl+' goalies');
-    console.log('Sample skater keys:',sampleKeys);
-    console.log('Sample skater vals:',sampleVals);
     if(sk>0||gl>0)setStatus('running','📡 MoneyPuck: '+sk+' skaters, '+gl+' goalies loaded. Processing props…');
   }catch(e){console.warn('MoneyPuck fetch failed:',e);}
 }
@@ -401,8 +395,6 @@ async function runScan(){
         const last10=Array(Math.min(hitHits,10)).fill(1).concat(Array(Math.max(0,Math.min(hitGames,10)-Math.min(hitHits,10))).fill(0)).slice(0,10);
         const streak=(hitHits===hitGames&&hitGames>=2)?hitGames:0;
         const mpData=getMPData(playerName,isGoalie);
-        if(!window._mpMatchLog)window._mpMatchLog=[];
-        if(window._mpMatchLog.length<10)window._mpMatchLog.push({lm:playerName,key:mpNormName(playerName),hit:!!mpData});
         const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType,allSignals,mpData};
         if(hitRate>=minRate){
           const dirLabel=direction==='UNDER'?'U':'O';
