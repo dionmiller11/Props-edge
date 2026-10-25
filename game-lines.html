@@ -1330,7 +1330,7 @@ function saveGameLinesSnapshot(games, date){
 }
 
 // Grade all ungraded game lines from past dates using ESPN final scores
-async function gradeGameLines(){
+async function gradeGameLines(force=false){
   const today = new Date().toISOString().split('T')[0];
   const btn = document.getElementById('gl-grade-btn');
   if(btn){btn.disabled=true;btn.textContent='⏳ Grading…';}
@@ -1440,11 +1440,14 @@ async function gradeGameLines(){
       totalGraded++;
     }
 
-    if(changed){
+    if(changed||force){
       try{ localStorage.setItem(key, JSON.stringify(snap)); }catch(e){}
-      // Sync graded results back to worker
-      const graded = snap.games.filter(g=>g.result_spread||g.result_total);
-      fetch(`${WORKER_URL}/gamelines/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dt,games:graded})}).catch(()=>{});
+      // On force (re-grade), push ALL games so cloud fully overwrites stale grades
+      // On normal grade, push only graded games to avoid unnecessary data
+      const toSync = force ? snap.games : snap.games.filter(g=>g.result_spread||g.result_total);
+      if(toSync.length){
+        fetch(`${WORKER_URL}/gamelines/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dt,games:toSync,force:force})}).catch(()=>{});
+      }
     }
   }
 
@@ -1480,7 +1483,7 @@ async function regradeGameLines(){
 
   if(btn){btn.textContent='⚡ Re-grading…';}
   showToast(`🔄 Cleared ${cleared} grades — re-grading now…`);
-  await gradeGameLines();
+  await gradeGameLines(true); // force=true: push full snapshot to overwrite cloud
   if(btn){btn.disabled=false;btn.textContent='🔄 Re-grade All';}
 }
 </script>
