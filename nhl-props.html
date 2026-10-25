@@ -162,7 +162,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     </div>
   </div>
   <div class="table-wrap">
-    <div class="table-header"><span class="table-title" id="tableTitle">🏒 ALL NHL PROPS — TODAY</span><span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span></div>
+    <div class="table-header"><span class="table-title" id="tableTitle">🏒 ALL NHL PROPS — TODAY</span><span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span><button onclick="alert('SKATERS:'+Object.keys(window.mpSkaters||{}).slice(0,5).join(', ')+'\n\nMATCHES:'+JSON.stringify((window._mpMatchLog||[]).slice(0,5)))" style="font-size:10px;padding:2px 6px;margin-left:8px;background:rgba(255,215,0,.15);color:var(--gold);border:1px solid rgba(255,215,0,.3);border-radius:4px;font-family:var(--font)">🔍 MP Debug</button></div>
     <div class="table-scroll">
       <table>
         <thead><tr>
@@ -257,7 +257,7 @@ function populateTeamFilter(){const sel=document.getElementById('teamFilter');co
 function toMarketKey(name){return name.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');}
 
 // ── MONEYPUCK DATA ──
-let mpSkaters={};let mpGoalies={};
+let mpSkaters={};let mpGoalies={};window.mpSkaters=mpSkaters;
 function mpNormName(n){return(n||'').toLowerCase().replace(/[^a-z]/g,'');}
 function parseMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
@@ -323,7 +323,7 @@ async function fetchMoneyPuck(){
   }
   try{
     const [skatersCSV,goaliesCSV]=await Promise.all([mpFetch('skaters.csv'),mpFetch('goalies.csv')]);
-    if(skatersCSV){mpSkaters=parseMP(skatersCSV);}
+    if(skatersCSV){mpSkaters=parseMP(skatersCSV);window.mpSkaters=mpSkaters;}
     if(goaliesCSV){mpGoalies=parseGoaliesMP(goaliesCSV);}
     const sk=Object.keys(mpSkaters).length,gl=Object.keys(mpGoalies).length;
     const sampleKeys=Object.keys(mpSkaters).slice(0,5);
