@@ -1475,14 +1475,21 @@ async function regradeGameLines(){
     const d = new Date(); d.setDate(d.getDate()-i);
     const dt = d.toISOString().split('T')[0];
     const key = 'glSnapshot_' + dt;
-    const local = localStorage.getItem(key);
-    if(local) continue; // already have it
     try{
       const r = await fetch(`${WORKER_URL}/gamelines/get?date=${dt}`);
       if(!r.ok) continue;
       const cloud = await r.json();
       if(cloud&&cloud.games&&cloud.games.length){
-        localStorage.setItem(key, JSON.stringify(cloud));
+        // Merge cloud games into local (cloud has the spread/ml data, local may have more)
+        let snap;
+        try{ snap = JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ snap=null; }
+        if(!snap||!snap.games){ snap = cloud; }
+        else{
+          // Add any cloud games not in local
+          const localIds = new Set(snap.games.map(g=>g.id));
+          for(const cg of cloud.games){ if(!localIds.has(cg.id)) snap.games.push(cg); }
+        }
+        localStorage.setItem(key, JSON.stringify(snap));
       }
     }catch(e){}
   }
