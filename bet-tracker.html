@@ -389,6 +389,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
         <button class="btn btn-ghost" onclick="simClearDates()" style="font-size:11px">✕ Clear</button>
         <button class="btn btn-primary" onclick="renderSim()" style="font-size:11px">↻ Refresh</button>
         <button id="simAutoGradeBtn" onclick="simAutoGrade()" style="font-size:11px;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.3);font-family:var(--sans);">⚡ Auto-Grade</button>
+        <button id="simRegradeBtn" onclick="simRegrade()" style="font-size:11px;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;background:rgba(255,170,0,.1);color:var(--gold);border:1px solid rgba(255,170,0,.3);font-family:var(--sans);">🔄 Re-grade</button>
       </div>
     </div>
     <div id="sim-selected-dates" style="display:none;margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -1028,22 +1029,23 @@ function gradeSimPrediction(prediction, game){
     return 'P'; // push
   }
   if(prediction.betType==='spread'){
-    // p.spread is ESPN home-team spread (negative = home favored)
-    const spread = parseFloat(prediction.spread)||0;
+    // Use homeSpread (normalized: negative = home favored) if available, else derive from ML
+    let homeSpread = prediction.homeSpread != null ? prediction.homeSpread : null;
+    if(homeSpread == null){
+      const rawSpread = parseFloat(prediction.spread)||0;
+      const mlH = prediction.ml_home, mlA = prediction.ml_away;
+      let homeFav;
+      if(mlH!=null&&mlA!=null&&Math.abs(mlH)<=800&&Math.abs(mlA)<=800) homeFav=mlH<mlA;
+      else homeFav=rawSpread<0;
+      homeSpread = homeFav ? -Math.abs(rawSpread) : Math.abs(rawSpread);
+    }
     // sim favors: if simAwayPct > 50, away team is the edge
     const simFavors = prediction.simAwayPct > 50 ? 'away' : 'home';
-    // home ATS: homeScore + spread vs awayScore
-    const homeATS = homeScore + spread;
-    if(simFavors==='home'){
-      if(homeATS > awayScore) return 'W';
-      if(homeATS < awayScore) return 'L';
-      return 'P';
-    } else {
-      // away covers: awayScore > homeScore + spread
-      if(awayScore > homeATS) return 'W';
-      if(awayScore < homeATS) return 'L';
-      return 'P';
-    }
+    // homeCoverMargin > 0 means home covered
+    const homeCoverMargin = homeScore - awayScore + homeSpread;
+    if(homeCoverMargin === 0) return 'P';
+    if(simFavors==='home') return homeCoverMargin > 0 ? 'W' : 'L';
+    return homeCoverMargin < 0 ? 'W' : 'L';
   }
   if(prediction.betType==='ml'){
     const simFavors = prediction.simAwayPct > 50 ? 'away' : 'home';
@@ -1136,6 +1138,45 @@ async function simAutoGrade(){
     btn.disabled=false; btn.textContent='⚡ Auto-Grade';
     showToast('Error grading: '+e.message);
   }
+}
+
+// Re-grade: clears all existing sim results for selected dates then re-grades from scratch
+async function simRegrade(){
+  const btn = document.getElementById('simRegradeBtn');
+  const dates = [...simSelectedDates].sort();
+  if(!dates.length){ showToast('Select dates first'); return; }
+  if(!confirm(`Clear and re-grade sim predictions for ${dates.length} date(s)?`)) return;
+  btn.disabled=true; btn.textContent='⏳ Re-grading…';
+  let totalGraded=0;
+  for(const date of dates){
+    try{
+      const r=await fetch(`${KV_BASE}/sim/results?date=${date}`);
+      const d=await r.json();
+      if(!d.predictions||!d.predictions.length) continue;
+      // Clear all existing results
+      for(const p of d.predictions) delete p.result;
+      // Fetch scores
+      const sports=[...new Set(d.predictions.map(p=>p.sport||'NFL').filter(Boolean))];
+      const scoresBySport={};
+      for(const sport of sports) scoresBySport[sport]=await fetchGameScores(date,sport);
+      // Re-grade
+      let graded=0;
+      for(const pred of d.predictions){
+        const sport=pred.sport||'NFL';
+        const games=scoresBySport[sport]||[];
+        const game=matchSimGame(pred,games);
+        if(!game||!game.isCompleted) continue;
+        const result=gradeSimPrediction(pred,game);
+        if(result){ pred.result=result; pred.homeScore=game.homeScore; pred.awayScore=game.awayScore; pred.finalTotal=game.total; graded++; }
+      }
+      // Save back
+      await fetch(`${KV_BASE}/sim/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,predictions:d.predictions})});
+      totalGraded+=graded;
+    }catch(e){}
+  }
+  btn.disabled=false; btn.textContent='🔄 Re-grade';
+  showToast(`🔄 Re-graded ${totalGraded} predictions`);
+  renderSim();
 }
 
 // Render sim table with pre-fetched predictions (used after local grading when KV save fails)
