@@ -1403,12 +1403,20 @@ async function gradeGameLines(force=false){
         // homeSpread: negative = home fav, positive = away fav
         let homeSpread = g.homeSpread!=null ? g.homeSpread : null;
         if(homeSpread==null){
-          // Old snapshot: derive from ML if available (filter ESPN garbage ±800), else use spread sign
-          const mlH = g.ml_home!=null&&Math.abs(g.ml_home)<=800 ? g.ml_home : null;
-          const mlA = g.ml_away!=null&&Math.abs(g.ml_away)<=800 ? g.ml_away : null;
-          let homeFav;
-          if(mlH!=null&&mlA!=null) homeFav=mlH<mlA;
-          else homeFav=g.spread<0;
+          // Old snapshot: try _oddsDetails string first (most reliable), then ML, then spread sign
+          let homeFav = null;
+          const detM = (g._oddsDetails||'').match(/([A-Za-z]+)\s*([+-]?\d+)/);
+          if(detM){
+            const fa = detM[1].toUpperCase();
+            if(fa===g.home.toUpperCase()) homeFav=true;
+            else if(fa===g.away.toUpperCase()) homeFav=false;
+          }
+          if(homeFav===null){
+            const mlH = g.ml_home!=null&&Math.abs(g.ml_home)<=800 ? g.ml_home : null;
+            const mlA = g.ml_away!=null&&Math.abs(g.ml_away)<=800 ? g.ml_away : null;
+            if(mlH!=null&&mlA!=null) homeFav=mlH<mlA;
+            else homeFav=g.spread<0;
+          }
           homeSpread = homeFav ? -Math.abs(g.spread) : Math.abs(g.spread);
         }
         // homeCoverMargin > 0 means home covered, < 0 means away covered
