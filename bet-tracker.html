@@ -867,6 +867,11 @@ const BT_STAT_MAP = {
   'rebounds':'rebounds','reb':'rebounds',
   'assists':'assists','ast':'assists',
   'pts+reb+ast':'pra','pra':'pra',
+  'points plus rebounds plus assists':'pra','points plus assists plus rebounds':'pra',
+  'pts + reb + ast':'pra','pts+reb+ast':'pra',
+  'points plus rebounds':'pr','pts+reb':'pr','pts + reb':'pr',
+  'points plus assists':'pa','pts+ast':'pa','pts + ast':'pa',
+  'rebounds plus assists':'ra','reb+ast':'ra','reb + ast':'ra',
   '3-pointers':'threepointers','3pm':'threepointers','threes':'threepointers',
   'steals':'steals','blocks':'blocks',
   // MLB
@@ -1283,6 +1288,21 @@ function findBTStat(playerStats, playerName, statKey){
     const r=stats['reb']??stats['rebounds']??0;
     const a=stats['ast']??stats['assists']??0;
     return p+r+a;
+  }
+  if(statKey==='pr'){
+    const p=stats['pts']??stats['points']??0;
+    const r=stats['reb']??stats['rebounds']??0;
+    return p+r;
+  }
+  if(statKey==='pa'){
+    const p=stats['pts']??stats['points']??0;
+    const a=stats['ast']??stats['assists']??0;
+    return p+a;
+  }
+  if(statKey==='ra'){
+    const r=stats['reb']??stats['rebounds']??0;
+    const a=stats['ast']??stats['assists']??0;
+    return r+a;
   }
   if(statKey==='anytiметd'||statKey==='anytimetd'||statKey==='anytimetouchdown'||statKey==='toscoreatd'||statKey==='toscoreatouchdown'){
     const rushTd=stats['rushing_td']??0;
