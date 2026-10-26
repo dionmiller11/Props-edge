@@ -1468,8 +1468,26 @@ async function gradeGameLines(force=false){
 async function regradeGameLines(){
   const btn = document.getElementById('gl-regrade-btn');
   if(!confirm('Clear and re-grade all results for the last 14 days? This will fix any incorrect grades.')) return;
-  if(btn){btn.disabled=true;btn.textContent='⏳ Clearing…';}
+  if(btn){btn.disabled=true;btn.textContent='⏳ Loading cloud…';}
 
+  // Step 1: Pull any cloud snapshots that aren't in localStorage (fixes re-grade from Mac)
+  for(let i=1;i<=14;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const dt = d.toISOString().split('T')[0];
+    const key = 'glSnapshot_' + dt;
+    const local = localStorage.getItem(key);
+    if(local) continue; // already have it
+    try{
+      const r = await fetch(`${WORKER_URL}/gamelines/get?date=${dt}`);
+      if(!r.ok) continue;
+      const cloud = await r.json();
+      if(cloud&&cloud.games&&cloud.games.length){
+        localStorage.setItem(key, JSON.stringify(cloud));
+      }
+    }catch(e){}
+  }
+
+  if(btn){btn.textContent='⏳ Clearing…';}
   let cleared=0;
   for(let i=1;i<=14;i++){
     const d = new Date(); d.setDate(d.getDate()-i);
