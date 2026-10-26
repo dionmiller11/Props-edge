@@ -1969,10 +1969,9 @@ async function loadGameLinesData(){
           if(!seen.has(g.id)){ glGames.push({...g,date:g.date||dt}); seen.add(g.id); }
           else{
             const idx=glGames.findIndex(x=>x.id===g.id);
-            // Only take cloud grade if local has no grade — local re-grade wins over stale cloud
+            // Cloud grade always wins — it's the authoritative re-graded source
             if(idx>=0&&(g.result_spread||g.result_total||g.result_ml_home)){
-              const loc=glGames[idx];
-              if(!loc.result_spread&&!loc.result_total) glGames[idx]={...loc,...g};
+              glGames[idx]={...glGames[idx],...g};
             }
           }
         }
