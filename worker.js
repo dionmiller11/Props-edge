@@ -508,18 +508,25 @@ async function handleRequest(request, env) {
   if (url.pathname === '/sim/save' && request.method === 'POST') {
     try {
       const body = await request.json();
-      const { date, predictions } = body;
+      const { date, predictions, force } = body;
       if (!date || !Array.isArray(predictions)) return new Response(JSON.stringify({ ok: false, error: 'missing date or predictions' }), { headers: cors });
       const key = `sim:${date}`;
-      const existRaw = await env.LINE_MONITOR_KV.get(key);
-      let existing = existRaw ? JSON.parse(existRaw) : { date, predictions: [] };
-      const seen = new Set(existing.predictions.map(p => p.gameId + ':' + p.betType));
-      let added = 0;
-      for (const p of predictions) {
-        const k = p.gameId + ':' + p.betType;
-        if (!seen.has(k)) { existing.predictions.push({ ...p, savedAt: Date.now(), result: null }); seen.add(k); added++; }
+      let existing, added;
+      if (force) {
+        // Force mode: fully replace predictions for this date
+        existing = { date, predictions, updatedAt: Date.now() };
+        added = predictions.length;
+      } else {
+        const existRaw = await env.LINE_MONITOR_KV.get(key);
+        existing = existRaw ? JSON.parse(existRaw) : { date, predictions: [] };
+        const seen = new Set(existing.predictions.map(p => p.gameId + ':' + p.betType));
+        added = 0;
+        for (const p of predictions) {
+          const k = p.gameId + ':' + p.betType;
+          if (!seen.has(k)) { existing.predictions.push({ ...p, savedAt: Date.now(), result: null }); seen.add(k); added++; }
+        }
+        existing.updatedAt = Date.now();
       }
-      existing.updatedAt = Date.now();
       await env.LINE_MONITOR_KV.put(key, JSON.stringify(existing), { expirationTtl: 1209600 });
       return new Response(JSON.stringify({ ok: true, total: existing.predictions.length, added }), { headers: cors });
     } catch(e) {

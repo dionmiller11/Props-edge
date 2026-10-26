@@ -1170,7 +1170,7 @@ async function simRegrade(){
         if(result){ pred.result=result; pred.homeScore=game.homeScore; pred.awayScore=game.awayScore; pred.finalTotal=game.total; graded++; }
       }
       // Save back
-      await fetch(`${KV_BASE}/sim/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,predictions:d.predictions})});
+      await fetch(`${KV_BASE}/sim/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,predictions:d.predictions,force:true})});
       totalGraded+=graded;
     }catch(e){}
   }
