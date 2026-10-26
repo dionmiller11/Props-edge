@@ -1395,7 +1395,7 @@ function findBTStat(playerStats, playerName, statKey){
 async function btAutoGrade(){
   const btn = document.getElementById('btAutoGradeBtn');
   btn.disabled=true; btn.textContent='⏳ Grading…';
-  const pending = bets.filter(b=>b.result==='pending');
+  const pending = bets.filter(b=>b.result==='pending'||b.result===null||b.result===undefined);
   if(!pending.length){showToast('No pending bets to grade');btn.disabled=false;btn.textContent='⚡ Auto-Grade';return;}
 
   // Skip 1Q props
