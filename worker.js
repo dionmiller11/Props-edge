@@ -278,7 +278,14 @@ async function monitorGameLines(env) {
 
 // ── FETCH LINEMATE PROPS ──
 async function fetchLinemateProps(sport, token) {
-  const res = await fetchWithTimeout(sport.lmUrl, { headers: { 'Authorization': `Bearer ${token}` } }, 8000);
+  const res = await fetchWithTimeout(sport.lmUrl, { headers: {
+    'Authorization': `Bearer ${token}`,
+    'Origin': 'https://linemate.io',
+    'Referer': 'https://linemate.io/',
+    'linemate-client-country': 'US',
+    'linemate-client-locale': 'en',
+    'linemate-client-platform': 'web',
+  } }, 8000);
   if (res.status === 401) throw new Error('TOKEN_EXPIRED');
   if (!res.ok) return [];
   return res.json();
@@ -686,19 +693,62 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  if (url.pathname === '/linemate/token' && request.method === 'POST') {
+    try {
+      const body = await request.json();
+      if (!body.refreshToken) return new Response(JSON.stringify({ ok: false, error: 'missing refreshToken' }), { headers: cors });
+      await env.LINE_MONITOR_KV.put('linemate:refreshToken', body.refreshToken.trim());
+      return new Response(JSON.stringify({ ok: true }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
   if (url.pathname === '/linemate/token' && request.method === 'GET') {
     try {
       const refreshToken = await env.LINE_MONITOR_KV.get('linemate:refreshToken');
       if (!refreshToken) return new Response(JSON.stringify({ ok: false, error: 'no refresh token stored' }), { headers: cors });
-      const r = await fetch('https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPv1AWRSI71W7GlF5KzKmCpNoSnV-c', {
+      const r = await fetch('https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPvlAWRSI71W7GlE5KzKmCpNoSnV-c', {
                 method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'https://linemate.io/' },
         body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`
       });
       const d = await r.json();
       if (d.error) return new Response(JSON.stringify({ ok: false, error: d.error.message }), { headers: cors });
       if (d.refresh_token) await env.LINE_MONITOR_KV.put('linemate:refreshToken', d.refresh_token);
       return new Response(JSON.stringify({ ok: true, accessToken: d.id_token }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  if (url.pathname === '/linemate/props' && request.method === 'GET') {
+    try {
+      const sport = url.searchParams.get('sport') || 'nba';
+      const refreshToken = await env.LINE_MONITOR_KV.get('linemate:refreshToken');
+      if (!refreshToken) return new Response(JSON.stringify({ ok: false, error: 'no refresh token stored' }), { headers: cors });
+      const r = await fetch('https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPvlAWRSI71W7GlE5KzKmCpNoSnV-c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'https://linemate.io/' },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`
+      });
+      const d = await r.json();
+      if (d.error) return new Response(JSON.stringify({ ok: false, error: d.error.message }), { headers: cors });
+      if (d.refresh_token) await env.LINE_MONITOR_KV.put('linemate:refreshToken', d.refresh_token);
+      const token = d.id_token;
+      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200`;
+      const propsRes = await fetchWithTimeout(lmUrl, { headers: {
+        'Authorization': `Bearer ${token}`,
+        'Origin': 'https://linemate.io',
+        'Referer': 'https://linemate.io/',
+        'linemate-client-country': 'US',
+        'linemate-client-locale': 'en',
+        'linemate-client-platform': 'web',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0',
+      } }, 10000);
+      if (!propsRes.ok) return new Response(JSON.stringify({ ok: false, error: `Linemate ${propsRes.status}` }), { headers: cors });
+      const props = await propsRes.json();
+      return new Response(JSON.stringify({ ok: true, data: props }), { headers: cors });
     } catch(e) {
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
     }
