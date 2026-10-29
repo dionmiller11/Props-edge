@@ -878,7 +878,16 @@ async function loadAll(){
   for (const g of allGames) {
     if (!g.sim) continue;
     if (g.total != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'total', line: g.total, simOverPct: g.sim.overPct, simUnderPct: g.sim.underPct, commence: g.commence });
-    if (g.spread != null) predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'spread', spread: g.spread, simAwayPct: g.sim.awaySpreadPct, simHomePct: g.sim.homeSpreadPct, commence: g.commence });
+    if (g.spread != null) {
+      // Compute homeSpread (always home-perspective: negative = home fav) so worker grades correctly
+      let homeFavSim = null;
+      const detMSim = (g._oddsDetails||'').match(/([A-Za-z]+)\s*([+-]?\d+)/);
+      if(detMSim){ const fa=detMSim[1].toUpperCase(); if(fa===g.home.toUpperCase()) homeFavSim=true; else if(fa===g.away.toUpperCase()) homeFavSim=false; }
+      if(homeFavSim===null&&g.ml_home!=null&&g.ml_away!=null&&Math.abs(g.ml_home)<=800&&Math.abs(g.ml_away)<=800) homeFavSim=g.ml_home<g.ml_away;
+      if(homeFavSim===null) homeFavSim=g.spread<0;
+      const homeSpreadSim = homeFavSim ? -Math.abs(g.spread) : Math.abs(g.spread);
+      predictions.push({ gameId: g.id, sport: g.sport, away: g.away, home: g.home, betType: 'spread', spread: g.spread, homeSpread: homeSpreadSim, ml_home: g.ml_home, ml_away: g.ml_away, simAwayPct: g.sim.awaySpreadPct, simHomePct: g.sim.homeSpreadPct, commence: g.commence });
+    }
   }
   if (predictions.length) {
     fetch(`${WORKER_URL}/sim/save`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date: todayDate, predictions }) }).catch(()=>{});

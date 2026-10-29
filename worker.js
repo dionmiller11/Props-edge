@@ -575,14 +575,22 @@ async function handleRequest(request, env) {
             result = simFavoredOver === wentOver ? 'W' : 'L';
           }
         } else if (p.betType === 'spread') {
-          // p.spread is home-team perspective (negative = home fav, e.g. CLE -10.5 → p.spread=-10.5)
-          // margin = awayScore - homeScore; awayCoverMargin uses -p.spread (away's perspective)
-          const awayCoverMargin = margin - p.spread;
-          if (awayCoverMargin === 0) { result = 'P'; }
+          // Use homeSpread (always home-perspective: negative = home fav) when available
+          // Fall back to deriving it from ml_home/ml_away or spread sign
+          let homeSpread = p.homeSpread != null ? p.homeSpread : null;
+          if (homeSpread == null) {
+            let homeFav = null;
+            if (p.ml_home != null && p.ml_away != null && Math.abs(p.ml_home) <= 800 && Math.abs(p.ml_away) <= 800) homeFav = p.ml_home < p.ml_away;
+            else homeFav = p.spread < 0;
+            homeSpread = homeFav ? -Math.abs(p.spread) : Math.abs(p.spread);
+          }
+          // homeCoverMargin > 0 means home covered, < 0 means away covered
+          const homeCoverMargin = homeScore - awayScore + homeSpread;
+          if (homeCoverMargin === 0) { result = 'P'; }
           else {
             const simFavoredAway = p.simAwayPct > 50;
-            const awayCovers = awayCoverMargin > 0;
-            result = simFavoredAway === awayCovers ? 'W' : 'L';
+            const homeCovered = homeCoverMargin > 0;
+            result = simFavoredAway === !homeCovered ? 'W' : 'L';
           }
         } else if (p.betType === 'ml') {
           if (homeScore === awayScore) { result = 'P'; }
