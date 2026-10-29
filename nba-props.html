@@ -446,14 +446,24 @@ async function fetchOddsAPIProps(apiKey, minRate) {
   const events = await evRes.json();
   if (!events.length) return [];
 
-  const today = new Date();
-  const todayUTC = today.toISOString().split('T')[0];
-  // Filter to games starting today (UTC)
-  const todayEvents = events.filter(ev => (ev.commence_time || '').startsWith(todayUTC));
+  // Use ET date (UTC-5 in standard / UTC-4 in daylight saving)
+  // A 10:30 PM ET game is already "tomorrow" in UTC — so filter by ET date
+  const now = new Date();
+  const etOffset = -4; // EDT; switches to -5 EST in Nov but NBA season runs EDT
+  const etNow = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
+  const todayET = etNow.toISOString().split('T')[0];
+  const tomorrowET = new Date(etNow.getTime() + 24*60*60*1000).toISOString().split('T')[0];
+
+  // Keep games whose ET date is today (covers late-night games that spill into tomorrow UTC)
+  const todayEvents = events.filter(ev => {
+    if (!ev.commence_time) return false;
+    const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 60 * 60 * 1000);
+    const evDate = evET.toISOString().split('T')[0];
+    return evDate === todayET;
+  });
   if (!todayEvents.length) {
     // Fall back to next 2 days if no games today
-    const allEvents = events.slice(0, 8);
-    return allEvents;
+    return events.slice(0, 8);
   }
   return todayEvents;
 }
