@@ -692,6 +692,36 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  // ── NBA STATS PROXY (bypasses CORS on stats.nba.com) ──
+  if (url.pathname.startsWith('/nba/stats/')) {
+    const statsPath = url.pathname.replace('/nba/stats/', '');
+    const statsUrl = `https://stats.nba.com/stats/${statsPath}?${url.searchParams.toString()}`;
+    try {
+      const nbRes = await fetch(statsUrl, {
+        headers: {
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://www.nba.com',
+          'Referer': 'https://www.nba.com/',
+          'x-nba-stats-origin': 'stats',
+          'x-nba-stats-token': 'true',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      const body = await nbRes.text();
+      return new Response(body, {
+        status: nbRes.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=1800'
+        }
+      });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { status: 502, headers: { ...cors } });
+    }
+  }
+
   if (url.pathname === '/linemate/token' && request.method === 'POST') {
     try {
       const body = await request.json();

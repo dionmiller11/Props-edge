@@ -287,15 +287,9 @@ function defBadge(opp){
 let _nbaGameLogCache = null; // null = not loaded, {} = loaded (may be empty)
 let _nbaGameLogLoading = null; // Promise while loading
 
-const NBA_HEADERS = {
-  'Accept':'application/json, text/plain, */*',
-  'Accept-Language':'en-US,en;q=0.9',
-  'Origin':'https://www.nba.com',
-  'Referer':'https://www.nba.com/',
-  'x-nba-stats-origin':'stats',
-  'x-nba-stats-token':'true',
-  'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-};
+// Route all stats.nba.com calls through Cloudflare Worker to avoid CORS blocks
+const NBA_PROXY = 'https://line-monitor.dion-miller11.workers.dev/nba/stats';
+const NBA_HEADERS = {}; // headers are set server-side by the worker
 
 async function loadNBABulkGameLogs(season='2025-26') {
   // Return cached if already loaded
@@ -316,7 +310,7 @@ async function loadNBABulkGameLogs(season='2025-26') {
 
     // leaguegamelog: all players, current season, regular season
     // Returns one row per player-game with PLAYER_ID, PTS, REB, AST, FG3M, STL, BLK, TOV + GAME_DATE
-    const url = `https://stats.nba.com/stats/leaguegamelog?Counter=1000&DateFrom=&DateTo=&Direction=DESC&LeagueID=00&PlayerOrTeam=P&Season=${season}&SeasonType=Regular+Season&Sorter=DATE`;
+    const url = `${NBA_PROXY}/leaguegamelog?Counter=1000&DateFrom=&DateTo=&Direction=DESC&LeagueID=00&PlayerOrTeam=P&Season=${season}&SeasonType=Regular+Season&Sorter=DATE`;
     console.log('Fetching NBA bulk game logs (1 call for all players)…');
     try {
       const ac = new AbortController();
@@ -374,7 +368,7 @@ async function getNBAStatVals(playerId, statCol) {
     return playerData[statCol];
   }
   // Fallback: per-player call with 5s timeout
-  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LeagueID=00`;
+  const url = `${NBA_PROXY}/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LeagueID=00`;
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 5000);
@@ -412,7 +406,7 @@ async function getNBAPlayerId(playerName) {
   try {
     // Pull from bulk game log cache first (has PLAYER_ID but not names)
     // So we still need commonallplayers for name→ID mapping
-    const url = 'https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1';
+    const url = `${NBA_PROXY}/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 10000);
     const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
