@@ -353,6 +353,323 @@ async function monitorProps(env) {
   return { alerts, propsMeta };
 }
 
+// ── MONTE CARLO SIM (worker-side, mirrors game-lines.html) ──
+const MC_N = 10000;
+const SCORE_STATS = {
+  NFL:    { off: 'pointsPerGame',   def: 'opponentPointsPerGame' },
+  NCAAFB: { off: 'pointsPerGame',   def: 'opponentPointsPerGame' },
+  NBA:    { off: 'avgPoints',       def: 'avgPointsAllowed' },
+  WNBA:   { off: 'avgPoints',       def: 'avgPointsAllowed' },
+  MLB:    { off: 'avgRuns',         def: 'avgRunsAllowed' },
+  NHL:    { off: 'avgGoals',        def: 'avgGoalsAllowed' },
+};
+
+function boxMuller() {
+  const u1 = Math.random(), u2 = Math.random();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, sport = '') {
+  const expA = (avgPtsA + avgAllowedH) / 2;
+  const expH = (avgPtsH + avgAllowedA) / 2;
+  const isHockey = sport === 'NHL';
+  const varFactor = isHockey ? 0.30 : 0.22;
+  const minSd = isHockey ? 0.8 : 3;
+  const sdA = Math.max(expA * varFactor, minSd);
+  const sdH = Math.max(expH * varFactor, minSd);
+  let overCount = 0, awaySpreadCount = 0, awayWinCount = 0;
+  for (let i = 0; i < MC_N; i++) {
+    const sA = Math.max(0, expA + sdA * boxMuller());
+    const sH = Math.max(0, expH + sdH * boxMuller());
+    if (sA + sH > total) overCount++;
+    if (sA > sH) awayWinCount++;
+    if (spread !== null && (sA - sH) + spread > 0) awaySpreadCount++;
+  }
+  return {
+    overPct:      Math.round(overCount / MC_N * 100),
+    underPct:     Math.round((MC_N - overCount) / MC_N * 100),
+    awaySpreadPct: spread !== null ? Math.round(awaySpreadCount / MC_N * 100) : null,
+    homeSpreadPct: spread !== null ? Math.round((MC_N - awaySpreadCount) / MC_N * 100) : null,
+    awayWinPct:   Math.round(awayWinCount / MC_N * 100),
+    homeWinPct:   100 - Math.round(awayWinCount / MC_N * 100),
+  };
+}
+
+async function fetchTeamStats(sportPath, teamId) {
+  try {
+    const res = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/teams/${teamId}`, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 5000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const stats = {};
+    for (const item of (data.team?.record?.items || [])) {
+      for (const s of (item.stats || [])) {
+        const v = parseFloat(s.value);
+        if (!isNaN(v) && v > 0 && s.name) stats[s.name] = v;
+      }
+    }
+    return Object.keys(stats).length ? stats : null;
+  } catch(e) { return null; }
+}
+
+async function fetchTeamIds(sportPath, gameId) {
+  try {
+    const res = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/summary?event=${gameId}`, {}, 5000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const comp = data.header?.competitions?.[0];
+    if (!comp) return null;
+    const home = comp.competitors?.find(c => c.homeAway === 'home');
+    const away = comp.competitors?.find(c => c.homeAway === 'away');
+    return { homeId: home?.id, awayId: away?.id };
+  } catch(e) { return null; }
+}
+
+// ── AUTO SIM: fetch today's games, run sim, save predictions to KV ──
+async function runAutoSim(env) {
+  const today = new Date().toISOString().split('T')[0];
+  const activeSports = [
+    { key: 'nfl',   label: 'NFL',    espnPath: 'football/nfl' },
+    { key: 'ncaaf', label: 'NCAAFB', espnPath: 'football/college-football' },
+    { key: 'nba',   label: 'NBA',    espnPath: 'basketball/nba' },
+    { key: 'nhl',   label: 'NHL',    espnPath: 'hockey/nhl' },
+    { key: 'mlb',   label: 'MLB',    espnPath: 'baseball/mlb' },
+  ];
+
+  const allPredictions = [];
+  const log = [];
+
+  for (const sport of activeSports) {
+    // Fetch today's games
+    const games = await fetchESPNGames({ key: sport.key, label: sport.label, espn: sport.espnPath.replace('/', '/'), an: null });
+    if (!games.length) continue;
+
+    const sportLabel = sport.label;
+    const statNames = SCORE_STATS[sportLabel];
+    if (!statNames) continue;
+
+    for (const g of games) {
+      try {
+        const sportDefault = sportLabel === 'NHL' ? 3.0 : sportLabel === 'MLB' ? 4.5 : sportLabel === 'NBA' ? 112 : 22;
+        const defaultTotal = sportLabel === 'NHL' ? 5.5 : sportLabel === 'MLB' ? 8.5 : 44;
+
+        // Get team stats via ESPN
+        const ids = await fetchTeamIds(sport.espnPath, g.id);
+        if (!ids?.homeId || !ids?.awayId) continue;
+        const [awayStats, homeStats] = await Promise.all([
+          fetchTeamStats(sport.espnPath, ids.awayId),
+          fetchTeamStats(sport.espnPath, ids.homeId),
+        ]);
+        const awayOff = awayStats?.[statNames.off] || sportDefault;
+        const awayDef = awayStats?.[statNames.def] || sportDefault;
+        const homeOff = homeStats?.[statNames.off] || sportDefault;
+        const homeDef = homeStats?.[statNames.def] || sportDefault;
+
+        const sim = simGame(awayOff, homeOff, awayDef, homeDef, g.total || defaultTotal, g.spread, sportLabel);
+
+        // Compute homeSpread (always home-perspective: negative = home fav)
+        let homeFav = null;
+        if (g.ml_home != null && g.ml_away != null && Math.abs(g.ml_home) <= 800 && Math.abs(g.ml_away) <= 800) {
+          homeFav = g.ml_home < g.ml_away;
+        } else {
+          homeFav = g.spread != null && g.spread < 0;
+        }
+        const homeSpread = g.spread != null ? (homeFav ? -Math.abs(g.spread) : Math.abs(g.spread)) : null;
+
+        // Spread prediction
+        if (g.spread != null && sim.awaySpreadPct != null) {
+          const conf = Math.max(sim.awaySpreadPct, sim.homeSpreadPct);
+          allPredictions.push({
+            gameId: g.id, sport: sportLabel,
+            away: g.away, home: g.home,
+            betType: 'spread',
+            spread: g.spread, homeSpread,
+            ml_home: g.ml_home, ml_away: g.ml_away,
+            simAwayPct: sim.awaySpreadPct, simHomePct: sim.homeSpreadPct,
+            confidence: conf,
+            commence: g.commence,
+          });
+        }
+        // Total prediction
+        if (g.total != null) {
+          const conf = Math.max(sim.overPct, sim.underPct);
+          allPredictions.push({
+            gameId: g.id, sport: sportLabel,
+            away: g.away, home: g.home,
+            betType: 'total', line: g.total,
+            simOverPct: sim.overPct, simUnderPct: sim.underPct,
+            confidence: conf,
+            commence: g.commence,
+          });
+        }
+        log.push(`${g.away}@${g.home}: spread=${sim.awaySpreadPct}% away, total O${sim.overPct}%`);
+      } catch(e) { continue; }
+    }
+  }
+
+  if (!allPredictions.length) return { saved: 0, log };
+
+  // Save to KV (same format as /sim/save)
+  const kvKey = `sim:${today}`;
+  const existRaw = await env.LINE_MONITOR_KV.get(kvKey);
+  const existing = existRaw ? JSON.parse(existRaw) : { date: today, predictions: [] };
+  const seen = new Set(existing.predictions.map(p => p.gameId + ':' + p.betType));
+  let added = 0;
+  for (const p of allPredictions) {
+    const k = p.gameId + ':' + p.betType;
+    if (!seen.has(k)) {
+      existing.predictions.push({ ...p, savedAt: Date.now(), result: null });
+      seen.add(k);
+      added++;
+    }
+  }
+  existing.updatedAt = Date.now();
+  await env.LINE_MONITOR_KV.put(kvKey, JSON.stringify(existing), { expirationTtl: 1209600 });
+
+  // Build ntfy morning picks digest (60-69% bucket)
+  const picks6069 = allPredictions.filter(p => p.confidence >= 60 && p.confidence <= 69);
+  const picks70plus = allPredictions.filter(p => p.confidence >= 70);
+
+  if (picks6069.length || picks70plus.length) {
+    const lines = [`📅 ${today} — Auto-Sim Picks`];
+    if (picks6069.length) {
+      lines.push(`\n🎯 60-69% CONF (${picks6069.length}):`);
+      for (const p of picks6069.slice(0, 8)) {
+        const side = p.betType === 'spread'
+          ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+          : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
+        lines.push(`  ${p.away}@${p.home} [${p.sport}] → ${side} ${p.confidence}%`);
+      }
+    }
+    if (picks70plus.length) {
+      lines.push(`\n🔥 70%+ CONF (${picks70plus.length}):`);
+      for (const p of picks70plus.slice(0, 8)) {
+        const side = p.betType === 'spread'
+          ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+          : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
+        lines.push(`  ${p.away}@${p.home} [${p.sport}] → ${side} ${p.confidence}%`);
+      }
+    }
+    await sendAlert({
+      title: `🎲 Today's Sim Picks — ${picks6069.length} edge plays`,
+      body: lines.join('\n'),
+      tags: 'dice,chart_with_upwards_trend',
+      priority: 'default',
+    });
+  }
+
+  return { saved: added, total: existing.predictions.length, log };
+}
+
+// ── AUTO GRADE: grade yesterday's predictions and send ntfy results digest ──
+async function runAutoGrade(env) {
+  const now = new Date();
+  // Grade yesterday's date (cron runs at midnight, grade the day just finished)
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const today = now.toISOString().split('T')[0];
+
+  const results = [];
+  for (const dateStr of [yesterday, today]) {
+    const kvKey = `sim:${dateStr}`;
+    const raw = await env.LINE_MONITOR_KV.get(kvKey);
+    if (!raw) continue;
+    const data = JSON.parse(raw);
+
+    let graded = 0;
+    const updated = await Promise.all(data.predictions.map(async p => {
+      if (p.result !== null) return p;
+      try {
+        const sportPath = { nfl:'football/nfl', ncaafb:'football/college-football', ncaaf:'football/college-football', nba:'basketball/nba', wnba:'basketball/wnba', mlb:'baseball/mlb', nhl:'hockey/nhl' }[(p.sport||'').toLowerCase()] || 'football/nfl';
+        const res = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/summary?event=${p.gameId}`, {}, 5000);
+        if (!res.ok) return p;
+        const d = await res.json();
+        const status = d.header?.competitions?.[0]?.status?.type?.name || '';
+        if (!status.toLowerCase().includes('final')) return p;
+        const comp = d.header?.competitions?.[0];
+        const home = comp?.competitors?.find(c => c.homeAway === 'home');
+        const away = comp?.competitors?.find(c => c.homeAway === 'away');
+        if (!home || !away) return p;
+        const homeScore = parseFloat(home.score) || 0;
+        const awayScore = parseFloat(away.score) || 0;
+        const finalTotal = homeScore + awayScore;
+        let result = null;
+        if (p.betType === 'total') {
+          if (finalTotal === p.line) result = 'P';
+          else result = (p.simOverPct > 50) === (finalTotal > p.line) ? 'W' : 'L';
+        } else if (p.betType === 'spread') {
+          let homeSpread = p.homeSpread != null ? p.homeSpread : null;
+          if (homeSpread == null) {
+            let homeFav = null;
+            if (p.ml_home != null && p.ml_away != null && Math.abs(p.ml_home) <= 800 && Math.abs(p.ml_away) <= 800) homeFav = p.ml_home < p.ml_away;
+            else homeFav = p.spread < 0;
+            homeSpread = homeFav ? -Math.abs(p.spread) : Math.abs(p.spread);
+          }
+          const homeCoverMargin = homeScore - awayScore + homeSpread;
+          if (homeCoverMargin === 0) result = 'P';
+          else {
+            const simFavoredAway = p.simAwayPct > 50;
+            const homeCovered = homeCoverMargin > 0;
+            result = simFavoredAway === !homeCovered ? 'W' : 'L';
+          }
+        } else if (p.betType === 'ml') {
+          if (homeScore === awayScore) result = 'P';
+          else result = (p.simAwayPct > 50) === (awayScore > homeScore) ? 'W' : 'L';
+        }
+        if (result) graded++;
+        return { ...p, result, homeScore, awayScore, finalTotal, gradedAt: Date.now() };
+      } catch(e) { return p; }
+    }));
+
+    if (graded > 0) {
+      data.predictions = updated;
+      data.updatedAt = Date.now();
+      await env.LINE_MONITOR_KV.put(kvKey, JSON.stringify(data), { expirationTtl: 1209600 });
+    }
+    results.push({ date: dateStr, graded, predictions: updated });
+  }
+
+  // Build results digest — focus on 60-69% bucket for yesterday
+  const yesterdayData = results.find(r => r.date === yesterday);
+  if (!yesterdayData) return { graded: 0 };
+
+  const all = yesterdayData.predictions.filter(p => p.result !== null);
+  const bucket6069 = all.filter(p => p.confidence >= 60 && p.confidence <= 69);
+  const wins = bucket6069.filter(p => p.result === 'W').length;
+  const losses = bucket6069.filter(p => p.result === 'L').length;
+  const pushes = bucket6069.filter(p => p.result === 'P').length;
+  const total = wins + losses + pushes;
+  const pct = total > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+
+  if (total > 0) {
+    const emoji = pct >= 60 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+    const lines = [
+      `${emoji} ${yesterday} Results (60-69% bucket)`,
+      `Record: ${wins}-${losses}${pushes ? `-${pushes}` : ''} (${pct}%)`,
+      ``,
+    ];
+    for (const p of bucket6069.filter(p => p.result === 'W').slice(0, 5)) {
+      const side = p.betType === 'spread'
+        ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+        : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
+      lines.push(`  ✅ ${p.away}@${p.home} → ${side}`);
+    }
+    for (const p of bucket6069.filter(p => p.result === 'L').slice(0, 5)) {
+      const side = p.betType === 'spread'
+        ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+        : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
+      lines.push(`  ❌ ${p.away}@${p.home} → ${side}`);
+    }
+
+    await sendAlert({
+      title: `📊 Sim Results ${yesterday} — ${wins}-${losses} (${pct}%)`,
+      body: lines.join('\n'),
+      tags: pct >= 60 ? 'white_check_mark' : pct >= 50 ? 'warning' : 'x',
+      priority: pct >= 60 ? 'high' : 'default',
+    });
+  }
+
+  return { graded: results.reduce((a, r) => a + r.graded, 0), yesterday: { total, wins, losses, pct } };
+}
+
 // ── MAIN MONITOR ──
 async function runMonitor(env) {
   await loadSettings(env);
@@ -803,10 +1120,42 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  // ── AUTO SIM TRIGGER (manual test) ──
+  if (url.pathname === '/sim/auto-run' && request.method === 'POST') {
+    try {
+      const result = await runAutoSim(env);
+      return new Response(JSON.stringify({ ok: true, ...result }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── AUTO GRADE TRIGGER (manual test) ──
+  if (url.pathname === '/sim/auto-grade' && request.method === 'POST') {
+    try {
+      const result = await runAutoGrade(env);
+      return new Response(JSON.stringify({ ok: true, ...result }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
   return new Response(JSON.stringify({ status: 'Line Monitor Worker v4 active — sharp money, props, bets, sim' }), { headers: cors });
 }
 
 export default {
   async fetch(request, env, ctx) { return handleRequest(request, env); },
-  async scheduled(event, env, ctx) { ctx.waitUntil(runMonitor(env)); },
+  async scheduled(event, env, ctx) {
+    const cron = event.cron || '';
+    // 0 14 * * *  = 9am ET (UTC-5 in winter, UTC-4 in summer — use 13-14)
+    // 0 5  * * *  = midnight ET
+    if (cron === '0 14 * * *' || cron === '0 13 * * *') {
+      ctx.waitUntil(runAutoSim(env));
+    } else if (cron === '0 5 * * *') {
+      ctx.waitUntil(runAutoGrade(env));
+    } else {
+      // Default: line monitor
+      ctx.waitUntil(runMonitor(env));
+    }
+  },
 };
