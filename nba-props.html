@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NBA Props Edge Finder — Linemate</title>
+<title>NBA Props Edge Finder</title>
 <style>
 :root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00d4ff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -106,10 +106,10 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   </div>
 </header>
 <div class="api-banner">
-  <div class="api-row"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="Paste JWT token from linemate.io DevTools…" oninput="saveKey('lmToken',this.value)"><span class="api-status missing" id="lmStatus">NOT SET</span></div>
   <div class="api-row"><span style="white-space:nowrap;font-size:11px">📡 Odds API:</span><input type="password" id="oddsApiKey" placeholder="the-odds-api.com key…" oninput="saveKey('oddsApiKey',this.value)"><span class="api-status missing" id="oddsStatus">NOT SET</span></div>
+  <div class="api-row" style="opacity:.4;pointer-events:none"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="(deprecated — not used)" disabled><span class="api-status missing" id="lmStatus" style="display:none">NOT SET</span></div>
 </div>
-<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent2);display:inline-block;flex-shrink:0"></span>LINEMATE MODE — real hit rates + lines from 20+ sportsbooks</div>
+<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent2);display:inline-block;flex-shrink:0"></span>SELF-CALC MODE — hit rates from NBA.com game logs · lines + odds from The Odds API</div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('all')">🏀 ALL</button>
   <button class="tab" onclick="switchTab('hits')">🏀 POINTS</button>
@@ -137,7 +137,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button><button class="chip" id="b2bChip" onclick="toggleB2B(this)" style="margin-left:4px">⚠️ B2B FADE</button>
       <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button></div>
   </div>
-  <div class="status-bar" id="statusBar">Ready — paste your Linemate token then click ⚡ RUN SCAN</div>
+  <div class="status-bar" id="statusBar">Ready — paste your Odds API key then click ⚡ RUN SCAN</div>
   <div class="progress-wrap" id="progressWrap"><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div><div class="progress-label" id="progressLabel">Starting…</div></div>
   <div class="summary" id="summary" style="display:none">
     <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL EDGES</div></div>
@@ -172,17 +172,31 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
           <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th>
           <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
         </tr></thead>
-        <tbody id="tableBody"><tr class="loading-row"><td colspan="10"><div class="empty"><div class="empty-icon">🏀</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
+        <tbody id="tableBody"><tr class="loading-row"><td colspan="10"><div class="empty"><div class="empty-icon">🏀</div><p>Paste your Odds API key above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
       </table>
     </div>
   </div>
   </div>
 </main>
-<footer><span id="lastRun">Never run</span><span style="color:var(--accent2)">● LINEMATE · REAL HIT RATES</span></footer>
+<footer><span id="lastRun">Never run</span><span style="color:var(--accent2)">● NBA.COM GAME LOGS · THE ODDS API</span></footer>
 <div class="toast" id="toast"></div>
 <script>
-const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_URL='https://api.linemate.io/api/nba/v1/trends/straights?preferredProviders=betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
+// ── ODDS API MARKETS ──
+const ODDS_MARKETS = 'player_points,player_rebounds,player_assists,player_threes,player_steals,player_blocks,player_points_rebounds_assists,player_turnovers';
+// Map Odds API market keys → internal propKey
+const ODDS_MARKET_MAP = {
+  player_points:'points', player_rebounds:'rebounds', player_assists:'assists',
+  player_threes:'threePointersMade', player_steals:'steals', player_blocks:'blocks',
+  player_points_rebounds_assists:'pointsReboundsAssists', player_turnovers:'turnovers',
+  player_points_rebounds:'pointsRebounds', player_points_assists:'pointsAssists',
+  player_rebounds_assists:'reboundsAssists'
+};
+// Map propKey → stats.nba.com stat column
+const NBA_STAT_COL = {
+  points:'PTS', rebounds:'REB', assists:'AST', threePointersMade:'FG3M',
+  steals:'STL', blocks:'BLK', pointsReboundsAssists:null,
+  pointsRebounds:null, pointsAssists:null, reboundsAssists:null, turnovers:'TOV'
+};
 const PROP_LABELS={points:'Points',rebounds:'Rebounds',assists:'Assists',threePointersMade:'3-Pointers',steals:'Steals',blocks:'Blocks',pointsReboundsAssists:'PTS+REB+AST',pointsAssists:'PTS+AST',pointsRebounds:'PTS+REB',reboundsAssists:'REB+AST',turnovers:'Turnovers',personalFouls:'Fouls'};
 const PITCHER_PROPS=[];
 const TAB_PROPS={all:null,hitter:null,pitcher:[],hits:['points'],total_bases:['rebounds'],rbi:['assists'],runs:['threePointersMade'],strikeouts:['steals'],hits_allowed:['blocks'],walks:['pointsReboundsAssists'],earned_runs:['turnovers']};
@@ -190,9 +204,7 @@ const TAB_TITLES={all:'🏀 ALL NBA PROPS',hitter:'🏀 ALL PROPS',pitcher:'',hi
 const today=new Date(),todayStr=today.toISOString().split('T')[0];
 let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[];
 document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-const _up=new URLSearchParams(window.location.search),_ut=_up.get('token')||_up.get('lmToken');if(_ut){try{localStorage.setItem('lmToken',_ut);}catch(e){}}
-['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
-(async function autoFetchToken(){try{const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');if(!r.ok)return;const d=await r.json();if(d.accessToken){try{localStorage.setItem('lmToken',d.accessToken);}catch(e){}document.getElementById('lmToken').value=d.accessToken;updateStatus('lmToken',true);}}catch(e){}})();
+['oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
 function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.tab').forEach(t=>{const oc=t.getAttribute('onclick')||'';t.classList.toggle('active',oc.includes("'"+tab+"'"));});const isSGP=tab==='sgp';const sp=document.getElementById('sgpPanel');const tw=document.querySelector('.table-wrap');if(sp)sp.style.display=isSGP?'block':'none';if(tw)tw.style.display=isSGP?'none':'block';if(!isSGP)renderTable();}
@@ -268,65 +280,328 @@ function defBadge(opp){
   return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Defense rank ${d.rank}/${d.total}">${d.label}</span>`;
 }
 
+// ── NBA.COM GAME LOG FETCHER ──
+// Returns array of game stat values for a player+stat combo over last N games
+async function fetchNBAGameLog(playerId, statCol, season='2024-25') {
+  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=${season}&SeasonType=Regular+Season&LeagueID=00`;
+  const headers = {
+    'Accept':'application/json, text/plain, */*',
+    'Accept-Language':'en-US,en;q=0.9',
+    'Origin':'https://www.nba.com',
+    'Referer':'https://www.nba.com/',
+    'x-nba-stats-origin':'stats',
+    'x-nba-stats-token':'true',
+    'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  };
+  try {
+    const res = await fetch(url, {headers});
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rs = data?.resultSets?.[0];
+    if (!rs) return null;
+    const colIdx = rs.headers.indexOf(statCol);
+    if (colIdx < 0) return null;
+    // rows are newest first
+    return rs.rowSet.slice(0, 20).map(row => parseFloat(row[colIdx]) || 0);
+  } catch(e) { return null; }
+}
+
+// Calculate hit rate, last10 array, streak for a stat array vs a line+direction
+function calcHitStats(vals, line, direction, nGames=20) {
+  if (!vals || vals.length < 3) return null;
+  const use = vals.slice(0, nGames);
+  const hits = use.filter(v => direction === 'OVER' ? v > line : v < line).length;
+  const games = use.length;
+  const rate = Math.round(hits / games * 100);
+  const last10vals = use.slice(0, 10);
+  const last10 = last10vals.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
+  // streak = consecutive hits from most recent
+  let streak = 0;
+  for (const h of last10) { if (h) streak++; else break; }
+  return {rate, hits, games, last10, streak};
+}
+
+// NBA player ID cache (name → id)
+const _playerIdCache = {};
+
+async function getNBAPlayerId(playerName) {
+  if (_playerIdCache[playerName]) return _playerIdCache[playerName];
+  try {
+    const url = 'https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=2024-25&IsOnlyCurrentSeason=1';
+    const res = await fetch(url, {
+      headers: {
+        'Accept':'application/json',
+        'Origin':'https://www.nba.com',
+        'Referer':'https://www.nba.com/',
+        'x-nba-stats-origin':'stats',
+        'x-nba-stats-token':'true',
+        'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rs = data?.resultSets?.[0];
+    if (!rs) return null;
+    const nameIdx = rs.headers.indexOf('DISPLAY_FIRST_LAST');
+    const idIdx = rs.headers.indexOf('PERSON_ID');
+    for (const row of rs.rowSet) {
+      const name = row[nameIdx] || '';
+      const id = row[idIdx];
+      _playerIdCache[name] = id;
+      // Also cache by last name + first initial for fuzzy matching
+      const parts = name.split(' ');
+      if (parts.length >= 2) {
+        const short = parts[0][0] + '. ' + parts.slice(1).join(' ');
+        _playerIdCache[short] = id;
+      }
+    }
+    return _playerIdCache[playerName] || null;
+  } catch(e) { return null; }
+}
+
+// Fetch today's NBA player props from The Odds API
+async function fetchOddsAPIProps(apiKey, minRate) {
+  // First get events
+  const eventsUrl = `https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=${apiKey}&dateFormat=iso`;
+  const evRes = await fetch(eventsUrl);
+  if (!evRes.ok) throw new Error('Odds API events error: ' + evRes.status);
+  const events = await evRes.json();
+  if (!events.length) return [];
+
+  const today = new Date();
+  const todayUTC = today.toISOString().split('T')[0];
+  // Filter to games starting today (UTC)
+  const todayEvents = events.filter(ev => (ev.commence_time || '').startsWith(todayUTC));
+  if (!todayEvents.length) {
+    // Fall back to next 2 days if no games today
+    const allEvents = events.slice(0, 8);
+    return allEvents;
+  }
+  return todayEvents;
+}
+
 async function runScan(){
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
-  setStatus('running','📡 Fetching NBA props from Linemate…');setLoadingRow();
+  setStatus('running','📡 Fetching today\'s NBA games…');setLoadingRow();
   b2bTeams = await getB2BTeams('basketball/nba');
   await fetchNBADefense();
-  try{
-    setProgress(20,'Fetching Linemate NBA trends…');
-    const res=await fetch(LINEMATE_URL,{credentials:'include'});
-    if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const data=await res.json();
-    if(!Array.isArray(data)||data.length===0){console.warn('Linemate NBA: empty response',data);setStatus('done','⚠️ Linemate returned 0 NBA props — no games today or API issue');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
-    if(data.length>0)console.log('NBA sample item:',JSON.stringify(data[0]).slice(0,600));
-    setProgress(60,'Processing '+data.length+' props…');
-    const results=[];
-    for(const item of data){
-      try{
-        const p=item.player||{};
-        const playerName=p.fullName||(p.firstName&&p.lastName?p.firstName+' '+p.lastName:null)||p.firstName||'Unknown';
-        const team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=p.position||p.pos||'';
-        const rawName=item.market?.name||'';
-        const propType=rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
-        const propLabel=PROP_LABELS[propType]||rawName.replace(/_/g,' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())||propType;
-        const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-        const direction=(item.outcome||'over').toUpperCase();
-        const topLine=item.line;
-        const books=item.market?.books||{};
-        let bestLine=topLine||null,bestOverOdds=null,bestUnderOdds=null,bookOverCount=0,bookUnderCount=0;
-        for(const bk of Object.keys(books)){const b=books[bk];const ol=b?.over?.current?.value||b?.line;const oo=b?.over?.current?.odds?.american;const uo=b?.under?.current?.odds?.american;if(ol&&!bestLine)bestLine=ol;if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds))bestOverOdds=oo;}if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds))bestUnderOdds=uo;}}
-        if(!bestLine)continue;
-        const signals=item.signals||[];
-        const allSignals=[];
-        for(const sig of signals){const pct=parseInt((sig.annotation||'').replace('%',''))||0;if(!pct)continue;const m=(sig.description||'').match(/(\d+)\s+of\s+(?:last\s+)?(\d+)/i);allSignals.push({type:sig.type||'UNKNOWN',rate:pct,hits:m?parseInt(m[1]):Math.round(pct/100*10),games:m?parseInt(m[2]):10,desc:sig.description||''});}
-        const primary=allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
-        if(!primary||!primary.rate)continue;
-        const hitRate=primary.rate;
-        if(hitRate<minRate)continue;
-        const hits=primary.hits,games=primary.games;
-        const last10=Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(games-hits,10)).fill(0)).slice(0,10);
-        const streak=(hits===games&&games>=2)?Math.min(games,10):0;
-        const bestOdds=direction==='OVER'?bestOverOdds:bestUnderOdds;
-        results.push({player:playerName,team,position:pos,propKey:propType,prop:propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,line:String(bestLine),direction,rate:hitRate,hits,games,last10,streak,hotStreak:streak>=3,opposingTeam:opp,gameTime,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',matchupNote:'vs '+opp,bestOdds,bookCount:bookOverCount+bookUnderCount,bookAgreePct:bookOverCount+bookUnderCount>0?Math.round((direction==='OVER'?bookOverCount:bookUnderCount)/(bookOverCount+bookUnderCount)*100):null,sport:'NBA',category:propType,b2b:b2bTeams.has(team.toUpperCase())});
-      }catch(e){console.warn('NBA item parse error',e);}
+
+  const apiKey = getStored('oddsApiKey');
+  if (!apiKey) {
+    hideProgress();
+    showError('Add your Odds API key above — get a free key at the-odds-api.com');
+    setStatus('error','❌ No Odds API key — add it above');
+    btn.disabled=false; btn.textContent='⚡ RUN SCAN';
+    return;
+  }
+
+  try {
+    setProgress(10, 'Fetching today\'s NBA games from Odds API…');
+    const events = await fetchOddsAPIProps(apiKey, minRate);
+    if (!events.length) {
+      setStatus('done','⚠️ No NBA games found today');
+      btn.disabled=false; btn.textContent='⚡ RUN SCAN';
+      hideProgress();
+      return;
     }
+    console.log('NBA events:', events.length);
+
+    // Fetch prop odds for all events in parallel (batches of 3 to avoid rate limit)
+    setProgress(20, `Fetching prop lines for ${events.length} games…`);
+    const MARKETS = ODDS_MARKETS;
+    const eventProps = {};
+
+    // Process events in batches
+    const BATCH = 3;
+    for (let i = 0; i < events.length; i += BATCH) {
+      const batch = events.slice(i, i + BATCH);
+      await Promise.all(batch.map(async ev => {
+        try {
+          const url = `https://api.the-odds-api.com/v4/sports/basketball_nba/events/${ev.id}/odds?apiKey=${apiKey}&regions=us&markets=${MARKETS}&oddsFormat=american&dateFormat=iso`;
+          const res = await fetch(url);
+          if (!res.ok) { console.warn('Props fetch failed for', ev.id, res.status); return; }
+          const data = await res.json();
+          eventProps[ev.id] = {event: ev, odds: data};
+        } catch(e) { console.warn('Props error', e.message); }
+      }));
+      if (i + BATCH < events.length) await new Promise(r => setTimeout(r, 300));
+    }
+
+    // Parse all player props into a map: playerName+market -> {line, overOdds, underOdds, bookCount, team, opp, gameTime}
+    setProgress(40, 'Parsing prop lines…');
+    const propMap = {}; // key: playerName|marketKey → best line info
+
+    for (const evId of Object.keys(eventProps)) {
+      const {event: ev, odds: evOdds} = eventProps[evId];
+      if (!evOdds?.bookmakers) continue;
+      const homeTeam = ev.home_team || '';
+      const awayTeam = ev.away_team || '';
+      const gameTime = ev.commence_time ? new Date(ev.commence_time).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+
+      for (const bk of (evOdds.bookmakers || [])) {
+        for (const market of (bk.markets || [])) {
+          const propKey = ODDS_MARKET_MAP[market.key];
+          if (!propKey) continue;
+          for (const outcome of (market.outcomes || [])) {
+            const playerName = outcome.description || outcome.name;
+            if (!playerName) continue;
+            const side = (outcome.name || '').toLowerCase(); // 'over' or 'under'
+            const line = parseFloat(outcome.point) || 0;
+            if (!line) continue;
+            const odds = parseInt(outcome.price) || -110;
+            const mapKey = playerName + '|' + propKey;
+
+            if (!propMap[mapKey]) {
+              propMap[mapKey] = {
+                player: playerName, propKey,
+                line, overOdds: null, underOdds: null,
+                overBookCount: 0, underBookCount: 0,
+                team: awayTeam, opposingTeam: homeTeam, gameTime,
+                eventId: evId
+              };
+            }
+            const pm = propMap[mapKey];
+            // Update best odds (closest to 0 = best value)
+            if (side === 'over') {
+              pm.overBookCount++;
+              if (pm.overOdds === null || Math.abs(odds) < Math.abs(pm.overOdds)) pm.overOdds = odds;
+            } else {
+              pm.underBookCount++;
+              if (pm.underOdds === null || Math.abs(odds) < Math.abs(pm.underOdds)) pm.underOdds = odds;
+            }
+            // Use consensus line (mode/most common)
+            pm.line = line;
+          }
+        }
+      }
+    }
+
+    const propEntries = Object.values(propMap);
+    console.log('Unique player+market combos:', propEntries.length);
+
+    if (!propEntries.length) {
+      hideProgress();
+      showError('No prop lines found — markets may not be posted yet, or check your Odds API key');
+      setStatus('error','❌ No prop lines found');
+      btn.disabled=false; btn.textContent='⚡ RUN SCAN';
+      return;
+    }
+
+    // Pre-load NBA player ID map once
+    setProgress(50, 'Loading NBA player roster…');
+    try { await getNBAPlayerId('__preload__'); } catch(e) {}
+
+    // For each player+prop, fetch their game log and calc hit rates
+    setProgress(55, 'Calculating hit rates from NBA.com game logs…');
+    const results = [];
+    let processed = 0;
+    const total = propEntries.length;
+
+    // Process in batches to avoid hammering stats.nba.com
+    const LOG_BATCH = 5;
+    for (let i = 0; i < propEntries.length; i += LOG_BATCH) {
+      const batch = propEntries.slice(i, i + LOG_BATCH);
+      await Promise.all(batch.map(async pm => {
+        try {
+          processed++;
+          const pct = 55 + Math.round((processed / total) * 35);
+          if (processed % 5 === 0) setProgress(pct, `Calculating hit rates… ${processed}/${total}`);
+
+          const statCol = NBA_STAT_COL[pm.propKey];
+          // For combo stats (PRA, PRA etc) we handle below
+          const playerId = await getNBAPlayerId(pm.player);
+          if (!playerId) return;
+
+          let vals = null;
+          if (statCol) {
+            vals = await fetchNBAGameLog(playerId, statCol);
+          } else {
+            // Combo stat — fetch component stats and add them
+            let cols = [];
+            if (pm.propKey === 'pointsReboundsAssists') cols = ['PTS','REB','AST'];
+            else if (pm.propKey === 'pointsRebounds') cols = ['PTS','REB'];
+            else if (pm.propKey === 'pointsAssists') cols = ['PTS','AST'];
+            else if (pm.propKey === 'reboundsAssists') cols = ['REB','AST'];
+            if (!cols.length) return;
+            const arrays = await Promise.all(cols.map(c => fetchNBAGameLog(playerId, c)));
+            if (arrays.some(a => !a)) return;
+            const len = Math.min(...arrays.map(a => a.length));
+            vals = Array.from({length: len}, (_, i) => arrays.reduce((s, a) => s + (a[i] || 0), 0));
+          }
+
+          if (!vals || vals.length < 3) return;
+
+          // Try both OVER and UNDER — keep whichever meets minRate
+          for (const direction of ['OVER', 'UNDER']) {
+            const stats = calcHitStats(vals, pm.line, direction, 20);
+            if (!stats || stats.rate < minRate) continue;
+
+            const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
+            const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+            const bookCount = pm.overBookCount + pm.underBookCount;
+            const bookAgreePct = bookCount > 0
+              ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
+              : null;
+
+            results.push({
+              player: pm.player,
+              team: pm.team,
+              position: '',
+              propKey: pm.propKey,
+              prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
+              line: String(pm.line),
+              direction,
+              rate: stats.rate,
+              hits: stats.hits,
+              games: stats.games,
+              last10: stats.last10,
+              streak: stats.streak,
+              hotStreak: stats.streak >= 3,
+              opposingTeam: pm.opposingTeam,
+              gameTime: pm.gameTime,
+              matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
+              matchupNote: 'vs ' + pm.opposingTeam,
+              bestOdds,
+              bookCount,
+              bookAgreePct,
+              sport: 'NBA',
+              category: pm.propKey,
+              b2b: b2bTeams.has((pm.team || '').toUpperCase())
+            });
+          }
+        } catch(e) { console.warn('Hit rate calc error:', pm.player, e.message); }
+      }));
+      // Small delay between batches to be polite to stats.nba.com
+      if (i + LOG_BATCH < propEntries.length) await new Promise(r => setTimeout(r, 200));
+    }
+
     setProgress(95,'Sorting…');
-    const seen={};allData=results.filter(p=>{const k=p.player+p.propKey+p.direction;if(seen[k]&&seen[k]>=p.rate)return false;seen[k]=p.rate;return true;}).sort((a,b)=>(b.rate||0)-(a.rate||0));
-    hideProgress();populateTeamFilter();renderTable();updateSummary();
-    document.getElementById('summary').style.display='grid';
-    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
-    document.getElementById('dataTs').textContent='Linemate · '+new Date().toLocaleTimeString();
-    setStatus('done','✅ '+allData.length+' NBA prop edges from Linemate — '+new Date().toLocaleTimeString());
-    document.getElementById('lastRun').textContent='Last run: '+new Date().toLocaleString();
-    // ── SAVE SNAPSHOT FOR DAILY RECAP ──
-    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NBA');
-saveLineHistory(allData||[...((typeof hitterData!=="undefined"?hitterData:[])),((typeof pitcherData!=="undefined"?pitcherData:[]))]);
-  }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);}
-  btn.disabled=false;btn.textContent='⚡ RUN SCAN';
+    const seen = {};
+    allData = results
+      .filter(p => {
+        const k = p.player + p.propKey + p.direction;
+        if (seen[k] && seen[k] >= p.rate) return false;
+        seen[k] = p.rate;
+        return true;
+      })
+      .sort((a, b) => (b.rate || 0) - (a.rate || 0));
+
+    hideProgress(); populateTeamFilter(); renderTable(); updateSummary();
+    document.getElementById('summary').style.display = 'grid';
+    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
+    document.getElementById('dataTs').textContent = 'NBA.com + Odds API · ' + new Date().toLocaleTimeString();
+    setStatus('done', '✅ ' + allData.length + ' NBA prop edges (last 20 games) — ' + new Date().toLocaleTimeString());
+    document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
+    if (window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NBA');
+    saveLineHistory(allData || []);
+  } catch(err) {
+    hideProgress(); showError(err.message); setStatus('error','❌ '+err.message);
+    console.error('runScan error:', err);
+  }
+  btn.disabled=false; btn.textContent='⚡ RUN SCAN';
 }
 function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
 function toHr(t){if(!t)return 999;const h=parseInt(t.split(':')[0]);const pm=t.toLowerCase().includes('pm');return pm&&h!==12?h+12:(!pm&&h===12?0:h);}
@@ -346,7 +621,7 @@ function renderTable(){
     const dir=p.direction||'OVER',dc=dir==='OVER'?'var(--accent2)':'var(--miss)',op=p.bestOdds;
     const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
-    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">LM</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA",propType:p.propType||p.prop})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
+    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">NBA</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA",propType:p.propType||p.prop})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
   }).join('');
 }
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-pitchers').textContent=q.filter(p=>p.propKey==='pointsReboundsAssists').length;}
@@ -358,9 +633,9 @@ function calcParlayOdds(legs){let d=1;legs.forEach(()=>{d*=(110/210+1);});const 
 function renderParlay(){document.getElementById('parlayCount').textContent=parlayLegs.length+(parlayLegs.length===1?' leg':' legs');document.getElementById('parlayOdds').textContent=parlayLegs.length>=2?calcParlayOdds(parlayLegs):'—';const c=document.getElementById('parlayLegsEl');if(!parlayLegs.length){c.innerHTML='<div class="parlay-empty">Add plays using + on each row</div>';return;}c.innerHTML=parlayLegs.map((l,i)=>`<div class="parlay-leg"><div class="parlay-leg-info"><div class="parlay-leg-player">${esc(l.player)} <span style="color:var(--muted);font-size:10px">${esc(l.team)}</span></div><div class="parlay-leg-prop">${esc(l.prop)} <span style="color:${l.direction==='UNDER'?'var(--miss)':'var(--accent2)'}">${l.direction==='UNDER'?'▼':'▲'} ${l.direction}</span> ${l.rate}%</div></div><button class="parlay-remove" onclick="removeFromParlay(${i})">✕</button></div>`).join('');}
 function copyParlay(){if(!parlayLegs.length){showToast('No legs');return;}const t=parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.team}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');navigator.clipboard.writeText(`🎰 NBA PARLAY — ${today.toLocaleDateString()}\n${calcParlayOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${t}`).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));}
 function exportCSV(){const rows=allData;const csv=['Player,Team,Prop,Direction,Line,Rate%,Hits,Games,Opp,GameTime,Streak',...rows.map(p=>[`"${p.player}"`,p.team,`"${p.prop}"`,p.direction,p.line,p.rate,p.hits,p.games,p.opposingTeam||'',p.gameTime||'',p.streak||0].join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`nba-props-${todayStr}.csv`;a.click();URL.revokeObjectURL(url);showToast('📊 Exported');}
-function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏀 Player Props\n\n| Player | Team | Prop | Dir | Rate | Opp | Time | Streak |\n|--------|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}G |`).join('\n')}\n`;const md=`---\ntags: [props, nba, betting, linemate]\ndate: ${todayStr}\nsport: NBA\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏀 NBA Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NBA Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
+function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏀 Player Props\n\n| Player | Team | Prop | Dir | Rate | Opp | Time | Streak |\n|--------|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}G |`).join('\n')}\n`;const md=`---\ntags: [props, nba, betting]\ndate: ${todayStr}\nsport: NBA\nsource: nba.com+odds-api\ntotal_edges: ${rows.length}\n---\n\n# 🏀 NBA Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via NBA.com game logs · Lines via The Odds API · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NBA Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching NBA props from Linemate…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="11"><span class="spinner"></span> Fetching NBA props from Odds API + NBA.com game logs…</td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

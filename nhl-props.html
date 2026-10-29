@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NHL Props Edge Finder — Linemate</title>
+<title>NHL Props Edge Finder</title>
 <style>
 :root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#00cfff;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--teal:#00e5cc;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -100,10 +100,10 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
   </div>
 </header>
 <div class="api-banner">
-  <div class="api-row"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="Paste JWT token from linemate.io DevTools…" oninput="saveKey('lmToken',this.value)"><span class="api-status missing" id="lmStatus">NOT SET</span></div>
+  <div class="api-row" style="opacity:.4;pointer-events:none"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="(deprecated — not used)" disabled><span class="api-status missing" id="lmStatus" style="display:none">NOT SET</span></div>
   <div class="api-row"><span style="white-space:nowrap;font-size:11px">📡 Odds API:</span><input type="password" id="oddsApiKey" placeholder="the-odds-api.com key…" oninput="saveKey('oddsApiKey',this.value)"><span class="api-status missing" id="oddsStatus">NOT SET</span></div>
 </div>
-<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;flex-shrink:0"></span>LINEMATE MODE — real hit rates + lines from 20+ sportsbooks</div>
+<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;flex-shrink:0"></span>SELF-CALC MODE — hit rates from NHL.com game logs · lines + odds from The Odds API</div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('all')">🏒 ALL</button>
   <button class="tab" onclick="switchTab('goals')">🥅 GOALS</button>
@@ -135,7 +135,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
     <div class="filter-group" style="margin-left:auto"><button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
       <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button></div>
   </div>
-  <div class="status-bar" id="statusBar">Ready — paste your Linemate token then click ⚡ RUN SCAN</div>
+  <div class="status-bar" id="statusBar">Ready — paste your Odds API key then click ⚡ RUN SCAN</div>
   <div class="progress-wrap" id="progressWrap"><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div><div class="progress-label" id="progressLabel">Starting…</div></div>
   <div class="summary" id="summary" style="display:none">
     <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL EDGES</div></div>
@@ -170,7 +170,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
           <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th>
           <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
         </tr></thead>
-        <tbody id="tableBody"><tr class="loading-row"><td colspan="11"><div class="empty"><div class="empty-icon">🏒</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
+        <tbody id="tableBody"><tr class="loading-row"><td colspan="11"><div class="empty"><div class="empty-icon">🏒</div><p>Paste your Odds API key above then hit ⚡ RUN SCAN.</p></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -178,8 +178,20 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <footer><span id="lastRun">Never run</span><span style="color:var(--teal)">● LINEMATE · REAL HIT RATES</span></footer>
 <div class="toast" id="toast"></div>
 <script>
-const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_URL='https://api.linemate.io/api/nhl/v1/trends/straights?preferredProviders=betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
+// ── ODDS API (NHL) ──
+const NHL_ODDS_MARKETS = 'player_points,player_goals,player_assists,player_shots_on_goal,player_blocked_shots,player_power_play_points';
+const NHL_MARKET_MAP = {
+  player_goals:'goals', player_assists:'assists', player_points:'points',
+  player_shots_on_goal:'shotsOnGoal', player_blocked_shots:'blockedShots',
+  player_power_play_points:'powerPlayPoints', player_saves:'saves',
+  player_goals_assists:'goalsAssists'
+};
+// Map propKey → NHL API stat field name
+const NHL_STAT_COL = {
+  goals:'goals', assists:'assists', points:'points',
+  shotsOnGoal:'shotsOnGoal', blockedShots:'blockedShots',
+  powerPlayPoints:'powerPlayPoints', saves:'saves', goalsAssists:null
+};
 
 const PROP_LABELS={
   goals:'Goals',
@@ -227,24 +239,7 @@ const today=new Date(),todayStr=today.toISOString().split('T')[0];
 let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[],searchQuery='';
 document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 
-const _up=new URLSearchParams(window.location.search),_ut=_up.get('token')||_up.get('lmToken');
-if(_ut){try{localStorage.setItem('lmToken',_ut);}catch(e){}}
-['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
-
-// Auto-fetch fresh Linemate token from worker (uses stored refresh token)
-(async function autoFetchToken(){
-  try{
-    const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');
-    if(!r.ok) return;
-    const d=await r.json();
-    if(d.accessToken){
-      try{localStorage.setItem('lmToken',d.accessToken);}catch(e){}
-      document.getElementById('lmToken').value=d.accessToken;
-      updateStatus('lmToken',true);
-      document.getElementById('statusBar').textContent='✅ Linemate token auto-loaded — ready to scan';
-    }
-  }catch(e){}
-})();
+['oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
 
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
 function updateStatus(k,ok){if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
@@ -349,62 +344,247 @@ function mpBadgeHtml(mp,isGoalie){
   return`<span class="mp-badge" style="background:${bg};color:${col};border-color:${bc}" title="MoneyPuck: xG/60=${x.toFixed(2)}  Shots/60=${sog}  GP=${mp.gamesPlayed}">xG ${x.toFixed(2)}</span>`;
 }
 
+// ── NHL.COM GAME LOG FETCHER ──
+// NHL API returns player game logs; open CORS from browser
+const _nhlPlayerCache = {}; // name → {id, pos}
+
+async function loadNHLRoster() {
+  if (Object.keys(_nhlPlayerCache).length > 10) return; // already loaded
+  try {
+    // Fetch all current players via NHL stats API
+    const url = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20242025%20and%20gameTypeId%3D2';
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const p of (data.data || [])) {
+      const name = (p.skaterFullName || '').trim();
+      if (name) _nhlPlayerCache[name] = {id: p.playerId, pos: p.positionCode};
+    }
+    console.log('NHL skater roster loaded:', Object.keys(_nhlPlayerCache).length);
+  } catch(e) { console.warn('NHL roster load failed:', e.message); }
+}
+
+async function loadNHLGoalieRoster() {
+  try {
+    const url = 'https://api.nhle.com/stats/rest/en/goalie/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22wins%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=200&cayenneExp=seasonId%3D20242025%20and%20gameTypeId%3D2';
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const p of (data.data || [])) {
+      const name = (p.goalieFullName || '').trim();
+      if (name) _nhlPlayerCache[name] = {id: p.playerId, pos: 'G'};
+    }
+  } catch(e) {}
+}
+
+async function fetchNHLGameLog(playerId, isGoalie) {
+  try {
+    const season = '20242025';
+    const url = isGoalie
+      ? `https://api-web.nhle.com/v1/player/${playerId}/game-log/${season}/2`
+      : `https://api-web.nhle.com/v1/player/${playerId}/game-log/${season}/2`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+function calcNHLHitStats(gameLog, statKey, line, direction, nGames=20) {
+  const games = (gameLog?.gameLog || []).slice(0, nGames);
+  if (games.length < 3) return null;
+  const vals = games.map(g => {
+    if (statKey === 'goalsAssists') return (parseFloat(g.goals)||0) + (parseFloat(g.assists)||0);
+    return parseFloat(g[statKey]) || 0;
+  });
+  const hits = vals.filter(v => direction === 'OVER' ? v > line : v < line).length;
+  const rate = Math.round(hits / vals.length * 100);
+  const last10vals = vals.slice(0, 10);
+  const last10 = last10vals.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
+  let streak = 0;
+  for (const h of last10) { if (h) streak++; else break; }
+  return {rate, hits, games: vals.length, last10, streak};
+}
+
+function calcHitStats(vals, line, direction, nGames=20) {
+  if (!vals || vals.length < 3) return null;
+  const use = vals.slice(0, nGames);
+  const hits = use.filter(v => direction === 'OVER' ? v > line : v < line).length;
+  const games = use.length;
+  const rate = Math.round(hits / games * 100);
+  const last10vals = use.slice(0, 10);
+  const last10 = last10vals.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
+  let streak = 0;
+  for (const h of last10) { if (h) streak++; else break; }
+  return {rate, hits, games, last10, streak};
+}
+
 async function runScan(){
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
   ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
-  setStatus('running','📡 Fetching NHL props + MoneyPuck…');setLoadingRow();
-  // Fetch MoneyPuck in parallel with Linemate
+  setStatus('running','📡 Fetching NHL props…');setLoadingRow();
   await fetchMoneyPuck();
-  try{
-    setProgress(20,'Fetching Linemate NHL trends…');
-    const res=await fetch(LINEMATE_URL,{credentials:'include'});
-    if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const raw=await res.json();const data=Array.isArray(raw)?raw:(raw.data||raw.trends||raw.items||[]);setProgress(60,'Processing '+data.length+' props…');
-    const results=[];
-    for(const item of data){
-      try{
-        const playerName=(item.player?.firstName&&item.player?.lastName)?item.player.firstName+' '+item.player.lastName:(item.player?.fullName||'Unknown');
-        const team=item.team?.code||'—',opp=item.opposingTeam?.code||'—',pos=item.player?.position||'';
-        const propType=toMarketKey(item.market?.name||''),propLabel=PROP_LABELS[propType]||item.market?.name||propType;
-        const isGoalie=GOALIE_PROPS.includes(propType);
-        const gameTime=item.timestamp?new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-        // Line is directly on item
-        const bestLine=item.line!=null?item.line:null;
-        if(bestLine==null)continue;
-        // Direction from item.outcome
-        const direction=(item.outcome||'over').toUpperCase();
-        // Extract all signals, store all for toggling; primary = RECENT_FORM (overall)
-        const signals=item.signals||[];
-        const allSignals=extractAllSignals(signals);
-        const primary=allSignals.find(s=>s.type==='RECENT_FORM')||allSignals.find(s=>s.type==='LAST_10')||allSignals[0];
-        if(!primary||!primary.rate)continue;
-        const hitRate=primary.rate,hitHits=primary.hits,hitGames=primary.games,hitDesc=primary.desc;
-        if(hitRate===0)continue;
-        const last10=Array(Math.min(hitHits,10)).fill(1).concat(Array(Math.max(0,Math.min(hitGames,10)-Math.min(hitHits,10))).fill(0)).slice(0,10);
-        const streak=(hitHits===hitGames&&hitGames>=2)?hitGames:0;
-        const mpData=getMPData(playerName,isGoalie);
-        const base={player:playerName,team,position:pos,propKey:propType,isGoalie,line:String(bestLine),opposingTeam:opp,gameTime,matchupNote:'vs '+opp,bookCount:0,bookAgreePct:null,sport:'NHL',category:propType,allSignals,mpData};
-        if(hitRate>=minRate){
-          const dirLabel=direction==='UNDER'?'U':'O';
-          results.push({...base,prop:propLabel+' '+dirLabel+bestLine,direction,rate:hitRate,hits:hitHits,games:hitGames,last10,streak,hotStreak:streak>=3,matchupGrade:hitRate>=90?'A':hitRate>=80?'B':'C',bestOdds:null,signalDesc:hitDesc});
-        }
-      }catch(e){}
+
+  const apiKey = getStored('oddsApiKey');
+  if (!apiKey) {
+    hideProgress();
+    showError('Add your Odds API key above — get a free key at the-odds-api.com');
+    setStatus('error','❌ No Odds API key — add it above');
+    btn.disabled=false; btn.textContent='⚡ RUN SCAN';
+    return;
+  }
+
+  try {
+    setProgress(10, 'Fetching today\'s NHL games from Odds API…');
+    const eventsUrl = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events?apiKey=${apiKey}&dateFormat=iso`;
+    const evRes = await fetch(eventsUrl);
+    if (!evRes.ok) throw new Error('Odds API NHL events error: ' + evRes.status);
+    const events = await evRes.json();
+
+    const todayStr2 = new Date().toISOString().split('T')[0];
+    const todayEvents = events.filter(ev => (ev.commence_time || '').startsWith(todayStr2));
+    const useEvents = todayEvents.length ? todayEvents : events.slice(0, 6);
+
+    if (!useEvents.length) {
+      hideProgress();
+      setStatus('done','⚠️ No NHL games found today');
+      btn.disabled=false; btn.textContent='⚡ RUN SCAN'; return;
     }
+
+    setProgress(20, `Fetching prop lines for ${useEvents.length} NHL games…`);
+    const eventProps = {};
+    const BATCH = 3;
+    for (let i = 0; i < useEvents.length; i += BATCH) {
+      const batch = useEvents.slice(i, i + BATCH);
+      await Promise.all(batch.map(async ev => {
+        try {
+          const url = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events/${ev.id}/odds?apiKey=${apiKey}&regions=us&markets=${NHL_ODDS_MARKETS}&oddsFormat=american&dateFormat=iso`;
+          const res = await fetch(url);
+          if (!res.ok) return;
+          eventProps[ev.id] = {event: ev, odds: await res.json()};
+        } catch(e) {}
+      }));
+      if (i + BATCH < useEvents.length) await new Promise(r => setTimeout(r, 300));
+    }
+
+    setProgress(40, 'Parsing NHL prop lines…');
+    const propMap = {};
+    for (const evId of Object.keys(eventProps)) {
+      const {event: ev, odds: evOdds} = eventProps[evId];
+      if (!evOdds?.bookmakers) continue;
+      const gameTime = ev.commence_time ? new Date(ev.commence_time).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+      const homeTeam = ev.home_team || '', awayTeam = ev.away_team || '';
+      for (const bk of (evOdds.bookmakers || [])) {
+        for (const market of (bk.markets || [])) {
+          const propKey = NHL_MARKET_MAP[market.key];
+          if (!propKey) continue;
+          for (const outcome of (market.outcomes || [])) {
+            const playerName = outcome.description || outcome.name;
+            if (!playerName) continue;
+            const side = (outcome.name || '').toLowerCase();
+            const line = parseFloat(outcome.point) || 0;
+            if (!line) continue;
+            const odds = parseInt(outcome.price) || -110;
+            const mapKey = playerName + '|' + propKey;
+            if (!propMap[mapKey]) {
+              propMap[mapKey] = {player: playerName, propKey, line, overOdds: null, underOdds: null,
+                overBookCount: 0, underBookCount: 0, team: awayTeam, opposingTeam: homeTeam, gameTime};
+            }
+            const pm = propMap[mapKey];
+            if (side === 'over') { pm.overBookCount++; if (pm.overOdds===null||Math.abs(odds)<Math.abs(pm.overOdds)) pm.overOdds=odds; }
+            else { pm.underBookCount++; if (pm.underOdds===null||Math.abs(odds)<Math.abs(pm.underOdds)) pm.underOdds=odds; }
+            pm.line = line;
+          }
+        }
+      }
+    }
+
+    const propEntries = Object.values(propMap);
+    if (!propEntries.length) {
+      hideProgress();
+      showError('No NHL prop lines found — markets may not be posted yet');
+      setStatus('error','❌ No prop lines found');
+      btn.disabled=false; btn.textContent='⚡ RUN SCAN'; return;
+    }
+
+    setProgress(50, 'Loading NHL player roster…');
+    await Promise.all([loadNHLRoster(), loadNHLGoalieRoster()]);
+
+    setProgress(55, 'Calculating hit rates from NHL.com game logs…');
+    const results = [];
+    let processed = 0;
+    const total = propEntries.length;
+    const LOG_BATCH = 5;
+
+    for (let i = 0; i < propEntries.length; i += LOG_BATCH) {
+      const batch = propEntries.slice(i, i + LOG_BATCH);
+      await Promise.all(batch.map(async pm => {
+        try {
+          processed++;
+          if (processed % 5 === 0) setProgress(55 + Math.round(processed/total*35), `Hit rates… ${processed}/${total}`);
+
+          const pInfo = _nhlPlayerCache[pm.player];
+          if (!pInfo) return;
+          const isGoalie = pInfo.pos === 'G';
+          const statKey = NHL_STAT_COL[pm.propKey];
+          if (statKey === undefined) return;
+
+          const gameLog = await fetchNHLGameLog(pInfo.id, isGoalie);
+          if (!gameLog?.gameLog?.length) return;
+
+          const mpData = getMPData(pm.player, isGoalie);
+
+          // Try both OVER and UNDER
+          for (const direction of ['OVER', 'UNDER']) {
+            const stats = calcNHLHitStats(gameLog, statKey || pm.propKey, pm.line, direction, 20);
+            if (!stats || stats.rate < minRate) continue;
+
+            const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
+            const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+            const bookCount = pm.overBookCount + pm.underBookCount;
+            const bookAgreePct = bookCount > 0
+              ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
+              : null;
+
+            results.push({
+              player: pm.player, team: pm.team, position: pInfo.pos,
+              propKey: pm.propKey, isGoalie,
+              prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
+              line: String(pm.line), direction,
+              rate: stats.rate, hits: stats.hits, games: stats.games,
+              last10: stats.last10, streak: stats.streak, hotStreak: stats.streak >= 3,
+              opposingTeam: pm.opposingTeam, gameTime: pm.gameTime,
+              matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
+              matchupNote: 'vs ' + pm.opposingTeam,
+              bestOdds, bookCount, bookAgreePct,
+              sport: 'NHL', category: pm.propKey, allSignals: [], mpData
+            });
+          }
+        } catch(e) { console.warn('NHL hit rate error:', pm.player, e.message); }
+      }));
+      if (i + LOG_BATCH < propEntries.length) await new Promise(r => setTimeout(r, 200));
+    }
+
     setProgress(95,'Sorting…');
-    const seen={};allData=results.filter(p=>{const k=p.player+p.propKey+p.direction;if(seen[k]&&seen[k]>=p.rate)return false;seen[k]=p.rate;return true;}).sort((a,b)=>(b.rate||0)-(a.rate||0));
-    hideProgress();populateTeamFilter();renderTable();updateSummary();
-    document.getElementById('summary').style.display='grid';
-    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
-    document.getElementById('dataTs').textContent='Linemate · '+new Date().toLocaleTimeString();
-    setStatus('done','✅ '+allData.length+' NHL prop edges from Linemate — '+new Date().toLocaleTimeString());
-    document.getElementById('lastRun').textContent='Last run: '+new Date().toLocaleString();
-    // ── SAVE SNAPSHOT FOR DAILY RECAP / QUICK PICKS ──
-    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NHL');
+    const seen = {};
+    allData = results
+      .filter(p => { const k=p.player+p.propKey+p.direction; if(seen[k]&&seen[k]>=p.rate)return false; seen[k]=p.rate; return true; })
+      .sort((a,b) => (b.rate||0)-(a.rate||0));
+
+    hideProgress(); populateTeamFilter(); renderTable(); updateSummary();
+    document.getElementById('summary').style.display = 'grid';
+    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
+    document.getElementById('dataTs').textContent = 'NHL.com + Odds API · ' + new Date().toLocaleTimeString();
+    setStatus('done', '✅ ' + allData.length + ' NHL prop edges (last 20 games) — ' + new Date().toLocaleTimeString());
+    document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
+    if (window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NHL');
     saveLineHistory(allData);
-  }catch(err){hideProgress();showError(err.message);setStatus('error','❌ '+err.message);}
-  btn.disabled=false;btn.textContent='⚡ RUN SCAN';
+  } catch(err) {
+    hideProgress(); showError(err.message); setStatus('error','❌ '+err.message);
+    console.error('NHL runScan error:', err);
+  }
+  btn.disabled=false; btn.textContent='⚡ RUN SCAN';
 }
 
 function calcStreak(hits,games){return(hits===games&&games>=2)?games:0;}
@@ -487,7 +667,7 @@ function copyParlay(){if(!parlayLegs.length){showToast('No legs');return;}const 
 function exportCSV(){const rows=allData;const csv=['Player,Team,Prop,Direction,Line,Rate%,Hits,Games,Opp,GameTime,Streak',...rows.map(p=>[`"${p.player}"`,p.team,`"${p.prop}"`,p.direction,p.line,p.rate,p.hits,p.games,p.opposingTeam||'',p.gameTime||'',p.streak||0].join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`nhl-props-${todayStr}.csv`;a.click();URL.revokeObjectURL(url);showToast('📊 Exported');}
 function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏒 Player Props\n\n| Player | Team | Prop | Dir | Rate | Opp | Time | Streak |\n|--------|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}G |`).join('\n')}\n`;const md=`---\ntags: [props, nhl, betting, linemate]\ndate: ${todayStr}\nsport: NHL\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏒 NHL Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NHL Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="11"><span class="spinner"></span> Fetching NHL props from Linemate…</td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="11"><span class="spinner"></span> Fetching NHL props from Odds API + NHL.com game logs…</td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -500,8 +680,8 @@ window.savePropsSnapshot=function(plays,sport){const ds=new Date().toISOString()
 (function(){
   function autoRun(){
     setTimeout(function(){
-      const token=getStored('lmToken');
-      if(token&&document.getElementById('runBtn')&&!document.getElementById('runBtn').disabled){
+      const key=getStored('oddsApiKey');
+      if(key&&document.getElementById('runBtn')&&!document.getElementById('runBtn').disabled){
         runScan();
       }
     },800);
