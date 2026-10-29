@@ -279,7 +279,6 @@ async function monitorGameLines(env) {
 // ── FETCH LINEMATE PROPS ──
 async function fetchLinemateProps(sport, token) {
   const res = await fetchWithTimeout(sport.lmUrl, { headers: {
-    'Authorization': `Bearer ${token}`,
     'Origin': 'https://linemate.io',
     'Referer': 'https://linemate.io/',
     'linemate-client-country': 'US',
@@ -738,7 +737,6 @@ if (url.pathname.startsWith('/moneypuck/')) {
       const token = d.id_token;
       const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
-        'Authorization': `Bearer ${token}`,
         'Origin': 'https://linemate.io',
         'Referer': 'https://linemate.io/',
         'linemate-client-country': 'US',

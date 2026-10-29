@@ -182,7 +182,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <div class="toast" id="toast"></div>
 <script>
 const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_URL='https://api.linemate.io/api/nba/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
+const LINEMATE_URL='https://line-monitor.dion-miller11.workers.dev/linemate/props?sport=nba';
 const PROP_LABELS={points:'Points',rebounds:'Rebounds',assists:'Assists',threePointersMade:'3-Pointers',steals:'Steals',blocks:'Blocks',pointsReboundsAssists:'PTS+REB+AST',pointsAssists:'PTS+AST',pointsRebounds:'PTS+REB',reboundsAssists:'REB+AST',turnovers:'Turnovers',personalFouls:'Fouls'};
 const PITCHER_PROPS=[];
 const TAB_PROPS={all:null,hitter:null,pitcher:[],hits:['points'],total_bases:['rebounds'],rbi:['assists'],runs:['threePointersMade'],strikeouts:['steals'],hits_allowed:['blocks'],walks:['pointsReboundsAssists'],earned_runs:['turnovers']};
@@ -280,7 +280,9 @@ async function runScan(){
     setProgress(20,'Fetching Linemate NBA trends…');
     const res=await fetch(LINEMATE_URL);
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const data=await res.json();
+    const wrapper=await res.json();
+    if(!wrapper.ok)throw new Error('Linemate API error: '+(wrapper.error||'unknown'));
+    const data=wrapper.data;
     if(!Array.isArray(data)||data.length===0){console.warn('Linemate NBA: empty response',data);setStatus('done','⚠️ Linemate returned 0 NBA props — no games today or API issue');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
     if(data.length>0)console.log('NBA sample item:',JSON.stringify(data[0]).slice(0,600));
     setProgress(60,'Processing '+data.length+' props…');
