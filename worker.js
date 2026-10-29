@@ -542,13 +542,14 @@ async function handleRequest(request, env) {
 
   if (url.pathname === '/sim/results') {
     const date = url.searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const forceRegrade = url.searchParams.get('regrade') === '1';
     const raw = await env.LINE_MONITOR_KV.get(`sim:${date}`);
     if (!raw) return new Response(JSON.stringify({ found: false, date, predictions: [] }), { headers: cors });
     const data = JSON.parse(raw);
 
     let graded = 0;
     const updated = await Promise.all(data.predictions.map(async p => {
-      if (p.result !== null) return p;
+      if (p.result !== null && !forceRegrade) return p;
       try {
         const sportPath = { nfl:'football/nfl', ncaafb:'football/college-football', ncaaf:'football/college-football', nba:'basketball/nba', wnba:'basketball/wnba', mlb:'baseball/mlb', nhl:'hockey/nhl' }[(p.sport||'').toLowerCase()] || 'football/nfl';
         const res = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/summary?event=${p.gameId}`, {}, 5000);
@@ -567,17 +568,29 @@ async function handleRequest(request, env) {
 
         let result = null;
         if (p.betType === 'total') {
-          const simFavoredOver = p.simOverPct > 50;
-          const wentOver = finalTotal > p.line;
-          result = simFavoredOver === wentOver ? 'W' : 'L';
+          if (finalTotal === p.line) { result = 'P'; }
+          else {
+            const simFavoredOver = p.simOverPct > 50;
+            const wentOver = finalTotal > p.line;
+            result = simFavoredOver === wentOver ? 'W' : 'L';
+          }
         } else if (p.betType === 'spread') {
-          const simFavoredAway = p.simAwayPct > 50;
-          const awayCovers = margin + p.spread > 0;
-          result = simFavoredAway === awayCovers ? 'W' : 'L';
+          // p.spread is home-team perspective (negative = home fav, e.g. CLE -10.5 → p.spread=-10.5)
+          // margin = awayScore - homeScore; awayCoverMargin uses -p.spread (away's perspective)
+          const awayCoverMargin = margin - p.spread;
+          if (awayCoverMargin === 0) { result = 'P'; }
+          else {
+            const simFavoredAway = p.simAwayPct > 50;
+            const awayCovers = awayCoverMargin > 0;
+            result = simFavoredAway === awayCovers ? 'W' : 'L';
+          }
         } else if (p.betType === 'ml') {
-          const simFavoredAway = p.simAwayPct > 50;
-          const awayWon = awayScore > homeScore;
-          result = simFavoredAway === awayWon ? 'W' : 'L';
+          if (homeScore === awayScore) { result = 'P'; }
+          else {
+            const simFavoredAway = p.simAwayPct > 50;
+            const awayWon = awayScore > homeScore;
+            result = simFavoredAway === awayWon ? 'W' : 'L';
+          }
         }
         if (result) graded++;
         return { ...p, result, homeScore, awayScore, finalTotal, gradedAt: Date.now() };
