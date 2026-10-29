@@ -269,7 +269,6 @@ function defBadge(opp){
 }
 
 async function runScan(){
-  const token=getStored('lmToken');if(!token){showError('Paste your Linemate JWT token above first.');return;}
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
@@ -279,8 +278,7 @@ async function runScan(){
   await fetchNBADefense();
   try{
     setProgress(20,'Fetching Linemate NBA trends…');
-    const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
-    if(res.status===401){try{localStorage.removeItem('lmToken');}catch(e){}throw new Error('Token expired — refreshing, try scan again in 5s');}
+    const res=await fetch(LINEMATE_URL);
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
     const data=await res.json();
     if(!Array.isArray(data)||data.length===0){console.warn('Linemate NBA: empty response',data);setStatus('done','⚠️ Linemate returned 0 NBA props — no games today or API issue');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}

@@ -350,15 +350,6 @@ function mpBadgeHtml(mp,isGoalie){
 }
 
 async function runScan(){
-  let token=getStored('lmToken');
-  if(!token){
-    // Try auto-fetching from worker
-    try{
-      const r=await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/token');
-      if(r.ok){const d=await r.json();if(d.accessToken){token=d.accessToken;try{localStorage.setItem('lmToken',token);}catch(e){}document.getElementById('lmToken').value=token;updateStatus('lmToken',true);}}
-    }catch(e){}
-    if(!token){showError('Paste your Linemate JWT token above first.');return;}
-  }
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
   btn.disabled=true;btn.textContent='⏳ Scanning...';
   document.getElementById('summary').style.display='none';document.getElementById('errorBox').style.display='none';
@@ -368,8 +359,7 @@ async function runScan(){
   await fetchMoneyPuck();
   try{
     setProgress(20,'Fetching Linemate NHL trends…');
-    const res=await fetch(LINEMATE_URL,{headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
-    if(res.status===401)throw new Error('Token expired — get a new one from linemate.io DevTools');
+    const res=await fetch(LINEMATE_URL);
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
     const raw=await res.json();const data=Array.isArray(raw)?raw:(raw.data||raw.trends||raw.items||[]);setProgress(60,'Processing '+data.length+' props…');
     const results=[];
