@@ -179,7 +179,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <div class="toast" id="toast"></div>
 <script>
 const LINEMATE_PROVIDERS='betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_URL='https://line-monitor.dion-miller11.workers.dev/linemate/props?sport=nhl';
+const LINEMATE_URL='https://api.linemate.io/api/nhl/v1/trends/straights?preferredProviders=betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
 
 const PROP_LABELS={
   goals:'Goals',
@@ -359,11 +359,9 @@ async function runScan(){
   await fetchMoneyPuck();
   try{
     setProgress(20,'Fetching Linemate NHL trends…');
-    const res=await fetch(LINEMATE_URL);
+    const res=await fetch(LINEMATE_URL,{credentials:'include'});
     if(!res.ok)throw new Error('Linemate API error: '+res.status);
-    const wrapper=await res.json();
-    if(!wrapper.ok)throw new Error('Linemate API error: '+(wrapper.error||'unknown'));
-    const data=wrapper.data;setProgress(60,'Processing '+data.length+' props…');
+    const raw=await res.json();const data=Array.isArray(raw)?raw:(raw.data||raw.trends||raw.items||[]);setProgress(60,'Processing '+data.length+' props…');
     const results=[];
     for(const item of data){
       try{
