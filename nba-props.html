@@ -297,7 +297,7 @@ const NBA_HEADERS = {
   'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 
-async function loadNBABulkGameLogs(season='2024-25') {
+async function loadNBABulkGameLogs(season='2025-26') {
   // Return cached if already loaded
   if (_nbaGameLogCache !== null) return _nbaGameLogCache;
   // Deduplicate concurrent calls
@@ -374,7 +374,7 @@ async function getNBAStatVals(playerId, statCol) {
     return playerData[statCol];
   }
   // Fallback: per-player call with 5s timeout
-  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=2024-25&SeasonType=Regular+Season&LeagueID=00`;
+  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LeagueID=00`;
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 5000);
@@ -412,7 +412,7 @@ async function getNBAPlayerId(playerName) {
   try {
     // Pull from bulk game log cache first (has PLAYER_ID but not names)
     // So we still need commonallplayers for name→ID mapping
-    const url = 'https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=2024-25&IsOnlyCurrentSeason=1';
+    const url = 'https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1';
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 10000);
     const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
@@ -582,7 +582,7 @@ async function runScan(){
     setProgress(50, 'Loading NBA rosters + game logs (1 bulk call)…');
     const [,] = await Promise.all([
       getNBAPlayerId('__preload__').catch(() => {}),
-      loadNBABulkGameLogs('2024-25').catch(() => {})
+      loadNBABulkGameLogs('2025-26').catch(() => {})
     ]);
 
     // For each player+prop, look up stats from bulk cache (no per-player HTTP calls)
