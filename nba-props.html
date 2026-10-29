@@ -280,28 +280,112 @@ function defBadge(opp){
   return `<span style="font-size:9px;padding:1px 4px;border-radius:2px;font-family:var(--font);font-weight:700;color:${d.color};background:rgba(0,0,0,.2);border:1px solid ${d.color};margin-left:3px" title="Defense rank ${d.rank}/${d.total}">${d.label}</span>`;
 }
 
-// ── NBA.COM GAME LOG FETCHER ──
-// Returns array of game stat values for a player+stat combo over last N games
-async function fetchNBAGameLog(playerId, statCol, season='2024-25') {
-  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=${season}&SeasonType=Regular+Season&LeagueID=00`;
-  const headers = {
-    'Accept':'application/json, text/plain, */*',
-    'Accept-Language':'en-US,en;q=0.9',
-    'Origin':'https://www.nba.com',
-    'Referer':'https://www.nba.com/',
-    'x-nba-stats-origin':'stats',
-    'x-nba-stats-token':'true',
-    'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  };
+// ── NBA BULK GAME LOG CACHE ──
+// Single bulk fetch: leaguegamelog returns all players' games in one call.
+// Structure: { playerId: { PTS:[...], REB:[...], AST:[...], ... } }
+// Games are ordered newest-first.
+let _nbaGameLogCache = null; // null = not loaded, {} = loaded (may be empty)
+let _nbaGameLogLoading = null; // Promise while loading
+
+const NBA_HEADERS = {
+  'Accept':'application/json, text/plain, */*',
+  'Accept-Language':'en-US,en;q=0.9',
+  'Origin':'https://www.nba.com',
+  'Referer':'https://www.nba.com/',
+  'x-nba-stats-origin':'stats',
+  'x-nba-stats-token':'true',
+  'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+};
+
+async function loadNBABulkGameLogs(season='2024-25') {
+  // Return cached if already loaded
+  if (_nbaGameLogCache !== null) return _nbaGameLogCache;
+  // Deduplicate concurrent calls
+  if (_nbaGameLogLoading) return _nbaGameLogLoading;
+
+  _nbaGameLogLoading = (async () => {
+    // Check sessionStorage first
+    try {
+      const cached = sessionStorage.getItem('nbaGameLogs_' + season);
+      if (cached) {
+        _nbaGameLogCache = JSON.parse(cached);
+        console.log('NBA game logs loaded from sessionStorage:', Object.keys(_nbaGameLogCache).length, 'players');
+        return _nbaGameLogCache;
+      }
+    } catch(e) {}
+
+    // leaguegamelog: all players, current season, regular season
+    // Returns one row per player-game with PLAYER_ID, PTS, REB, AST, FG3M, STL, BLK, TOV + GAME_DATE
+    const url = `https://stats.nba.com/stats/leaguegamelog?Counter=1000&DateFrom=&DateTo=&Direction=DESC&LeagueID=00&PlayerOrTeam=P&Season=${season}&SeasonType=Regular+Season&Sorter=DATE`;
+    console.log('Fetching NBA bulk game logs (1 call for all players)…');
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 30000); // 30s timeout for bulk call
+      const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('leaguegamelog HTTP ' + res.status);
+      const data = await res.json();
+      const rs = data?.resultSets?.[0];
+      if (!rs) throw new Error('No resultSets in leaguegamelog');
+
+      const h = rs.headers;
+      const idIdx = h.indexOf('PLAYER_ID');
+      const statIdxMap = {
+        PTS: h.indexOf('PTS'), REB: h.indexOf('REB'), AST: h.indexOf('AST'),
+        FG3M: h.indexOf('FG3M'), STL: h.indexOf('STL'), BLK: h.indexOf('BLK'),
+        TOV: h.indexOf('TOV')
+      };
+
+      // Build per-player arrays (rows already newest-first due to DESC sort)
+      const cache = {};
+      for (const row of rs.rowSet) {
+        const pid = row[idIdx];
+        if (!pid) continue;
+        if (!cache[pid]) cache[pid] = {PTS:[],REB:[],AST:[],FG3M:[],STL:[],BLK:[],TOV:[]};
+        const p = cache[pid];
+        if (p.PTS.length >= 20) continue; // keep last 20 games only
+        for (const [col, idx] of Object.entries(statIdxMap)) {
+          if (idx >= 0) p[col].push(parseFloat(row[idx]) || 0);
+        }
+      }
+
+      _nbaGameLogCache = cache;
+      console.log('NBA bulk game logs loaded:', Object.keys(cache).length, 'players,', rs.rowSet.length, 'rows');
+
+      // Cache in sessionStorage (expires when tab closes)
+      try { sessionStorage.setItem('nbaGameLogs_' + season, JSON.stringify(cache)); } catch(e) {}
+      return cache;
+    } catch(e) {
+      console.warn('Bulk NBA game log failed:', e.message, '— will fall back to per-player');
+      _nbaGameLogCache = {}; // mark as attempted so we don't retry
+      return {};
+    }
+  })();
+
+  return _nbaGameLogLoading;
+}
+
+// Get stat values for a specific player+stat from bulk cache.
+// Falls back to per-player API call if bulk cache empty or player missing.
+async function getNBAStatVals(playerId, statCol) {
+  const cache = _nbaGameLogCache || {};
+  const playerData = cache[playerId];
+  if (playerData && playerData[statCol] && playerData[statCol].length >= 3) {
+    return playerData[statCol];
+  }
+  // Fallback: per-player call with 5s timeout
+  const url = `https://stats.nba.com/stats/playergamelog?PlayerID=${playerId}&Season=2024-25&SeasonType=Regular+Season&LeagueID=00`;
   try {
-    const res = await fetch(url, {headers});
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 5000);
+    const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
+    clearTimeout(timer);
     if (!res.ok) return null;
     const data = await res.json();
     const rs = data?.resultSets?.[0];
     if (!rs) return null;
     const colIdx = rs.headers.indexOf(statCol);
     if (colIdx < 0) return null;
-    // rows are newest first
     return rs.rowSet.slice(0, 20).map(row => parseFloat(row[colIdx]) || 0);
   } catch(e) { return null; }
 }
@@ -315,29 +399,24 @@ function calcHitStats(vals, line, direction, nGames=20) {
   const rate = Math.round(hits / games * 100);
   const last10vals = use.slice(0, 10);
   const last10 = last10vals.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
-  // streak = consecutive hits from most recent
   let streak = 0;
   for (const h of last10) { if (h) streak++; else break; }
   return {rate, hits, games, last10, streak};
 }
 
-// NBA player ID cache (name → id)
+// NBA player name → ID cache
 const _playerIdCache = {};
 
 async function getNBAPlayerId(playerName) {
   if (_playerIdCache[playerName]) return _playerIdCache[playerName];
   try {
+    // Pull from bulk game log cache first (has PLAYER_ID but not names)
+    // So we still need commonallplayers for name→ID mapping
     const url = 'https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=2024-25&IsOnlyCurrentSeason=1';
-    const res = await fetch(url, {
-      headers: {
-        'Accept':'application/json',
-        'Origin':'https://www.nba.com',
-        'Referer':'https://www.nba.com/',
-        'x-nba-stats-origin':'stats',
-        'x-nba-stats-token':'true',
-        'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10000);
+    const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
+    clearTimeout(timer);
     if (!res.ok) return null;
     const data = await res.json();
     const rs = data?.resultSets?.[0];
@@ -348,7 +427,6 @@ async function getNBAPlayerId(playerName) {
       const name = row[nameIdx] || '';
       const id = row[idIdx];
       _playerIdCache[name] = id;
-      // Also cache by last name + first initial for fuzzy matching
       const parts = name.split(' ');
       if (parts.length >= 2) {
         const short = parts[0][0] + '. ' + parts.slice(1).join(' ');
@@ -490,93 +568,91 @@ async function runScan(){
       return;
     }
 
-    // Pre-load NBA player ID map once
-    setProgress(50, 'Loading NBA player roster…');
-    try { await getNBAPlayerId('__preload__'); } catch(e) {}
+    // Load NBA player name→ID map AND bulk game logs in parallel — 2 calls total
+    setProgress(50, 'Loading NBA rosters + game logs (1 bulk call)…');
+    const [,] = await Promise.all([
+      getNBAPlayerId('__preload__').catch(() => {}),
+      loadNBABulkGameLogs('2024-25').catch(() => {})
+    ]);
 
-    // For each player+prop, fetch their game log and calc hit rates
-    setProgress(55, 'Calculating hit rates from NBA.com game logs…');
+    // For each player+prop, look up stats from bulk cache (no per-player HTTP calls)
+    setProgress(60, `Calculating hit rates for ${propEntries.length} props…`);
     const results = [];
     let processed = 0;
     const total = propEntries.length;
 
-    // Process in batches to avoid hammering stats.nba.com
-    const LOG_BATCH = 5;
-    for (let i = 0; i < propEntries.length; i += LOG_BATCH) {
-      const batch = propEntries.slice(i, i + LOG_BATCH);
-      await Promise.all(batch.map(async pm => {
-        try {
-          processed++;
-          const pct = 55 + Math.round((processed / total) * 35);
-          if (processed % 5 === 0) setProgress(pct, `Calculating hit rates… ${processed}/${total}`);
+    // All in parallel — no batching needed since it's all local lookups from cache
+    await Promise.all(propEntries.map(async pm => {
+      try {
+        processed++;
+        if (processed % 10 === 0) {
+          const pct = 60 + Math.round((processed / total) * 30);
+          setProgress(pct, `Calculating hit rates… ${processed}/${total}`);
+        }
 
-          const statCol = NBA_STAT_COL[pm.propKey];
-          // For combo stats (PRA, PRA etc) we handle below
-          const playerId = await getNBAPlayerId(pm.player);
-          if (!playerId) return;
+        const statCol = NBA_STAT_COL[pm.propKey];
+        const playerId = await getNBAPlayerId(pm.player);
+        if (!playerId) return;
 
-          let vals = null;
-          if (statCol) {
-            vals = await fetchNBAGameLog(playerId, statCol);
-          } else {
-            // Combo stat — fetch component stats and add them
-            let cols = [];
-            if (pm.propKey === 'pointsReboundsAssists') cols = ['PTS','REB','AST'];
-            else if (pm.propKey === 'pointsRebounds') cols = ['PTS','REB'];
-            else if (pm.propKey === 'pointsAssists') cols = ['PTS','AST'];
-            else if (pm.propKey === 'reboundsAssists') cols = ['REB','AST'];
-            if (!cols.length) return;
-            const arrays = await Promise.all(cols.map(c => fetchNBAGameLog(playerId, c)));
-            if (arrays.some(a => !a)) return;
-            const len = Math.min(...arrays.map(a => a.length));
-            vals = Array.from({length: len}, (_, i) => arrays.reduce((s, a) => s + (a[i] || 0), 0));
-          }
+        let vals = null;
+        if (statCol) {
+          vals = await getNBAStatVals(playerId, statCol);
+        } else {
+          // Combo stat — sum component arrays from bulk cache
+          let cols = [];
+          if (pm.propKey === 'pointsReboundsAssists') cols = ['PTS','REB','AST'];
+          else if (pm.propKey === 'pointsRebounds') cols = ['PTS','REB'];
+          else if (pm.propKey === 'pointsAssists') cols = ['PTS','AST'];
+          else if (pm.propKey === 'reboundsAssists') cols = ['REB','AST'];
+          if (!cols.length) return;
+          const arrays = await Promise.all(cols.map(c => getNBAStatVals(playerId, c)));
+          if (arrays.some(a => !a)) return;
+          const len = Math.min(...arrays.map(a => a.length));
+          vals = Array.from({length: len}, (_, gi) => arrays.reduce((s, a) => s + (a[gi] || 0), 0));
+        }
 
-          if (!vals || vals.length < 3) return;
+        if (!vals || vals.length < 3) return;
 
-          // Try both OVER and UNDER — keep whichever meets minRate
-          for (const direction of ['OVER', 'UNDER']) {
-            const stats = calcHitStats(vals, pm.line, direction, 20);
-            if (!stats || stats.rate < minRate) continue;
+        // Try both OVER and UNDER — keep whichever meets minRate
+        for (const direction of ['OVER', 'UNDER']) {
+          const stats = calcHitStats(vals, pm.line, direction, 20);
+          if (!stats || stats.rate < minRate) continue;
 
-            const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
-            const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
-            const bookCount = pm.overBookCount + pm.underBookCount;
-            const bookAgreePct = bookCount > 0
-              ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
-              : null;
+          const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
+          const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+          const bookCount = pm.overBookCount + pm.underBookCount;
+          const bookAgreePct = bookCount > 0
+            ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
+            : null;
 
-            results.push({
-              player: pm.player,
-              team: pm.team,
-              position: '',
-              propKey: pm.propKey,
-              prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
-              line: String(pm.line),
-              direction,
-              rate: stats.rate,
-              hits: stats.hits,
-              games: stats.games,
-              last10: stats.last10,
-              streak: stats.streak,
-              hotStreak: stats.streak >= 3,
-              opposingTeam: pm.opposingTeam,
-              gameTime: pm.gameTime,
-              matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
-              matchupNote: 'vs ' + pm.opposingTeam,
-              bestOdds,
-              bookCount,
-              bookAgreePct,
-              sport: 'NBA',
-              category: pm.propKey,
-              b2b: b2bTeams.has((pm.team || '').toUpperCase())
-            });
-          }
-        } catch(e) { console.warn('Hit rate calc error:', pm.player, e.message); }
-      }));
-      // Small delay between batches to be polite to stats.nba.com
-      if (i + LOG_BATCH < propEntries.length) await new Promise(r => setTimeout(r, 200));
-    }
+          results.push({
+            player: pm.player,
+            team: pm.team,
+            position: '',
+            propKey: pm.propKey,
+            prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
+            line: String(pm.line),
+            direction,
+            rate: stats.rate,
+            hits: stats.hits,
+            games: stats.games,
+            last10: stats.last10,
+            streak: stats.streak,
+            hotStreak: stats.streak >= 3,
+            opposingTeam: pm.opposingTeam,
+            gameTime: pm.gameTime,
+            matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
+            matchupNote: 'vs ' + pm.opposingTeam,
+            bestOdds,
+            bookCount,
+            bookAgreePct,
+            sport: 'NBA',
+            category: pm.propKey,
+            b2b: b2bTeams.has((pm.team || '').toUpperCase())
+          });
+        }
+      } catch(e) { console.warn('Hit rate calc error:', pm.player, e.message); }
+    }));
 
     setProgress(95,'Sorting…');
     const seen = {};
