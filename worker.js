@@ -598,25 +598,40 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-// ── NBA via balldontlie.io (free, no auth, worker-friendly) ──
-// Fetch entire NBA roster once via balldontlie, return name→id map
+// ── NBA via ESPN public API (no key, worker-friendly) ──
+// Search ESPN for player ID by name
+async function lookupESPNPlayerId(playerName) {
+  try {
+    const q = encodeURIComponent(playerName);
+    const url = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&mode=prefix&type=player&sport=basketball&league=nba`;
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const items = data?.items || [];
+    for (const item of items) {
+      if (item?.type === 'player' && item?.id) return item.id;
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+// Fetch entire NBA roster from ESPN athletes endpoint, return name→id map
 async function fetchNBARosterMap() {
   try {
     const map = {};
-    let cursor = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const url = `https://api.balldontlie.io/v1/players/active?per_page=100&cursor=${cursor}`;
+    // ESPN active NBA players — paginate through all
+    for (let page = 1; page <= 10; page++) {
+      const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes?limit=100&page=${page}&active=true`;
       const res = await fetchWithTimeout(url, {}, 10000);
       if (!res.ok) break;
       const data = await res.json();
-      const players = data?.data || [];
-      for (const p of players) {
-        const fullName = `${p.first_name} ${p.last_name}`.toLowerCase().replace(/[^a-z ]/g, '');
-        if (fullName.trim()) map[fullName.trim()] = p.id;
+      const athletes = data?.athletes || data?.items || [];
+      if (athletes.length === 0) break;
+      for (const a of athletes) {
+        const name = (a?.fullName || a?.displayName || '').toLowerCase().replace(/[^a-z ]/g, '').trim();
+        if (name && a?.id) map[name] = a.id;
       }
-      cursor = data?.meta?.next_cursor;
-      hasMore = !!cursor && players.length > 0;
+      if (!data?.pageCount || page >= data.pageCount) break;
     }
     return map;
   } catch(e) { return {}; }
@@ -636,26 +651,42 @@ function lookupNBAPlayerId(rosterMap, playerName) {
 
 async function fetchNBAPlayerGameLog(playerId) {
   try {
-    // balldontlie game log: season 2026 = 2026-27 season
-    const url = `https://api.balldontlie.io/v1/stats?player_ids[]=${playerId}&seasons[]=2026&per_page=20&postseason=false`;
+    // ESPN game log for current season
+    const url = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
     const res = await fetchWithTimeout(url, {}, 8000);
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.data || null;
+    // ESPN returns categories + events; build game array
+    const categories = data?.categories || [];
+    const events = data?.events?.previousEvents || data?.events || [];
+    if (!categories.length || !events.length) return null;
+    // Find stat indices
+    const statNames = categories.map(c => c.name?.toLowerCase());
+    const games = [];
+    for (const ev of events) {
+      const stats = ev?.stats || ev?.athlete?.statistics || [];
+      if (!stats.length) continue;
+      const g = {};
+      statNames.forEach((name, i) => { g[name] = parseFloat(stats[i]) || 0; });
+      games.push(g);
+    }
+    return games.length ? games : null;
   } catch(e) { return null; }
 }
 
 function getNBAStatVals(games, propKey) {
+  // ESPN stat names vary; try multiple keys
+  const get = (g, ...keys) => { for (const k of keys) if (g[k] !== undefined) return g[k]; return 0; };
   const statMap = {
-    points: g => g.pts || 0,
-    rebounds: g => g.reb || 0,
-    assists: g => g.ast || 0,
-    threes: g => g.fg3m || 0,
-    blocks: g => g.blk || 0,
-    steals: g => g.stl || 0,
-    pra: g => (g.pts || 0) + (g.reb || 0) + (g.ast || 0),
-    pr: g => (g.pts || 0) + (g.reb || 0),
-    pa: g => (g.pts || 0) + (g.ast || 0),
+    points: g => get(g, 'points', 'pts'),
+    rebounds: g => get(g, 'rebounds', 'totalRebounds', 'reb'),
+    assists: g => get(g, 'assists', 'ast'),
+    threes: g => get(g, 'threePointFieldGoalsMade', '3pm', 'fg3m'),
+    blocks: g => get(g, 'blocks', 'blk'),
+    steals: g => get(g, 'steals', 'stl'),
+    pra: g => get(g, 'points', 'pts') + get(g, 'rebounds', 'totalRebounds', 'reb') + get(g, 'assists', 'ast'),
+    pr: g => get(g, 'points', 'pts') + get(g, 'rebounds', 'totalRebounds', 'reb'),
+    pa: g => get(g, 'points', 'pts') + get(g, 'assists', 'ast'),
   };
   const fn = statMap[propKey];
   if (!fn || !games) return null;
@@ -1485,7 +1516,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const result = { steps: {}, source: 'balldontlie' };
+    const result = { steps: {}, source: 'espn' };
     try {
       // Step 1: fetch roster from balldontlie
       const rosterMap = await fetchNBARosterMap();
