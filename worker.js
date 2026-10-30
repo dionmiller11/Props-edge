@@ -561,11 +561,38 @@ async function runAutoSim(env) {
 }
 
 // ── AUTO PROPS: fetch today's NBA props, compute hit rate + edge, send top plays ──
-const PROP_MARKET_MAP = {
-  player_points: 'points', player_rebounds: 'rebounds', player_assists: 'assists',
-  player_threes: 'threes', player_blocks: 'blocks', player_steals: 'steals',
-  player_points_rebounds_assists: 'pra', player_points_rebounds: 'pr', player_points_assists: 'pa',
+// ── Per-sport prop configs ──
+const SPORT_PROP_CONFIG = {
+  NBA: {
+    oddsKey: 'basketball_nba',
+    markets: 'player_points,player_rebounds,player_assists,player_threes,player_blocks,player_steals,player_points_rebounds_assists,player_points_rebounds,player_points_assists',
+    marketMap: {
+      player_points:'points', player_rebounds:'rebounds', player_assists:'assists',
+      player_threes:'threes', player_blocks:'blocks', player_steals:'steals',
+      player_points_rebounds_assists:'pra', player_points_rebounds:'pr', player_points_assists:'pa',
+    },
+  },
+  NHL: {
+    oddsKey: 'icehockey_nhl',
+    markets: 'player_points,player_goals,player_assists,player_shots_on_goal,player_blocked_shots',
+    marketMap: {
+      player_points:'points', player_goals:'goals', player_assists:'assists',
+      player_shots_on_goal:'shotsOnGoal', player_blocked_shots:'blockedShots',
+    },
+  },
+  MLB: {
+    oddsKey: 'baseball_mlb',
+    markets: 'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored,pitcher_strikeouts,pitcher_outs,pitcher_hits_allowed',
+    marketMap: {
+      batter_hits:'hits', batter_total_bases:'totalBases', batter_home_runs:'homeRuns',
+      batter_rbis:'rbi', batter_runs_scored:'runs',
+      pitcher_strikeouts:'strikeOuts', pitcher_outs:'outs', pitcher_hits_allowed:'hits',
+    },
+  },
 };
+
+// Legacy NBA-only references kept for compat
+const PROP_MARKET_MAP = SPORT_PROP_CONFIG.NBA.marketMap;
 const PROP_STAT_COL = {
   points: 'PTS', rebounds: 'REB', assists: 'AST', threes: 'FG3M',
   blocks: 'BLK', steals: 'STL',
@@ -619,141 +646,238 @@ function calcHitRate(vals, line, direction, nGames = 20) {
   return { rate, hits, games, avg: Math.round(avg * 10) / 10, edge: Math.round(edge * 10) / 10, streak };
 }
 
+// ── NHL stat fetcher via api.nhle.com ──
+async function fetchNHLPlayerLog(playerName) {
+  try {
+    // Search NHL roster for player ID
+    const rosterUrl = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20252026%20and%20gameTypeId%3D2';
+    const res = await fetchWithTimeout(rosterUrl, {}, 10000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const nameLower = playerName.toLowerCase();
+    const player = (data.data || []).find(p => (p.skaterFullName || '').toLowerCase() === nameLower);
+    if (!player) return null;
+    // Fetch game log
+    const logUrl = `https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=true&sort=%5B%7B%22property%22%3A%22gameDate%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=20&cayenneExp=seasonId%3D20252026%20and%20gameTypeId%3D2%20and%20playerId%3D${player.playerId}`;
+    const logRes = await fetchWithTimeout(logUrl, {}, 8000);
+    if (!logRes.ok) return null;
+    const logData = await logRes.json();
+    return { rows: logData.data || [], playerId: player.playerId };
+  } catch(e) { return null; }
+}
+
+function getNHLStatVals(rows, propKey) {
+  const colMap = {
+    points: r => (r.goals || 0) + (r.assists || 0),
+    goals: r => r.goals || 0,
+    assists: r => r.assists || 0,
+    shotsOnGoal: r => r.shots || 0,
+    blockedShots: r => r.blockedShots || 0,
+  };
+  const fn = colMap[propKey];
+  if (!fn) return null;
+  return rows.map(fn);
+}
+
+// ── MLB stat fetcher via statsapi.mlb.com ──
+async function fetchMLBPlayerLog(playerName) {
+  try {
+    // Search for player by name
+    const searchUrl = `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(playerName)}&sportIds=1`;
+    const res = await fetchWithTimeout(searchUrl, {}, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const people = data.people || [];
+    if (!people.length) return null;
+    const playerId = people[0].id;
+    const isPitcher = (people[0].primaryPosition?.code || '') === '1';
+    const group = isPitcher ? 'pitching' : 'hitting';
+    const logUrl = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=${group}&season=2026&gameType=R`;
+    const logRes = await fetchWithTimeout(logUrl, {}, 8000);
+    if (!logRes.ok) return null;
+    const logData = await logRes.json();
+    const splits = logData.stats?.[0]?.splits || [];
+    return { splits, isPitcher };
+  } catch(e) { return null; }
+}
+
+function getMLBStatVals(splits, propKey) {
+  const colMap = {
+    hits: s => parseInt(s.stat?.hits || 0),
+    totalBases: s => parseInt(s.stat?.totalBases || 0),
+    homeRuns: s => parseInt(s.stat?.homeRuns || 0),
+    rbi: s => parseInt(s.stat?.rbi || 0),
+    runs: s => parseInt(s.stat?.runs || 0),
+    strikeOuts: s => parseInt(s.stat?.strikeOuts || 0),
+    outs: s => (parseInt(s.stat?.inningsPitched || 0) * 3),
+    // pitcher hits allowed uses same key but different split
+  };
+  const fn = colMap[propKey];
+  if (!fn) return null;
+  return splits.map(fn);
+}
+
 async function runAutoProps(env) {
   const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
   if (!oddsApiKey) return { skipped: true, reason: 'no odds api key' };
 
   const workerUrl = 'https://line-monitor.dion-miller11.workers.dev';
 
-  // Fetch today's NBA events
-  let events = [];
-  try {
-    const res = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
-    if (!res.ok) return { skipped: true, reason: `odds api ${res.status}` };
-    events = await res.json();
-  } catch(e) { return { skipped: true, reason: e.message }; }
-
-  // Filter to ET today
   const etOffset = -4;
   const etNow = new Date(Date.now() + etOffset * 3600000);
   const todayET = etNow.toISOString().split('T')[0];
-  const todayEvents = events.filter(ev => {
-    if (!ev.commence_time) return false;
-    const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
-    return evET.toISOString().split('T')[0] === todayET;
-  });
-  if (!todayEvents.length) return { skipped: true, reason: 'no games today' };
 
-  // Fetch prop odds for each event
-  const MARKETS = Object.keys(PROP_MARKET_MAP).join(',');
-  const propMap = {};
-
-  for (const ev of todayEvents) {
-    try {
-      const res = await fetchWithTimeout(
-        `https://api.the-odds-api.com/v4/sports/basketball_nba/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${MARKETS}&oddsFormat=american&dateFormat=iso`,
-        {}, 8000
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      for (const bk of (data.bookmakers || [])) {
-        for (const market of (bk.markets || [])) {
-          const propKey = PROP_MARKET_MAP[market.key];
-          if (!propKey) continue;
-          for (const outcome of (market.outcomes || [])) {
-            const playerName = outcome.description || outcome.name;
-            if (!playerName) continue;
-            const side = (outcome.name || '').toLowerCase();
-            const line = parseFloat(outcome.point);
-            if (!line) continue;
-            const mapKey = playerName + '|' + propKey;
-            if (!propMap[mapKey]) propMap[mapKey] = {
-              player: playerName, propKey, line,
-              overOdds: null, underOdds: null,
-              team: ev.away_team, opp: ev.home_team, gameTime: ev.commence_time,
-            };
-            const pm = propMap[mapKey];
-            if (side === 'over') { if (pm.overOdds === null) pm.overOdds = parseInt(outcome.price); }
-            else { if (pm.underOdds === null) pm.underOdds = parseInt(outcome.price); }
-          }
-        }
-      }
-    } catch(e) { continue; }
-    await new Promise(r => setTimeout(r, 200));
-  }
-
-  const propEntries = Object.values(propMap).filter(p => PROP_STAT_COL[p.propKey]);
-  if (!propEntries.length) return { skipped: true, reason: 'no props parsed' };
-
-  // Cache player IDs to avoid repeat lookups
-  const playerIdCache = {};
-  async function getPlayerId(name) {
-    if (playerIdCache[name]) return playerIdCache[name];
-    const id = await fetchNBAPlayerId(name, workerUrl);
-    if (id) playerIdCache[name] = id;
-    return id;
-  }
-
-  // Compute hit rate + edge for each prop
-  const edgePlays = [];
   const MIN_RATE = 65;
   const MIN_EDGE = 2.0;
   const MIN_GAMES = 8;
+  const edgePlays = [];
 
-  // Process in small batches to avoid hammering NBA stats API
-  const BATCH = 5;
-  for (let i = 0; i < propEntries.length; i += BATCH) {
-    const batch = propEntries.slice(i, i + BATCH);
-    await Promise.all(batch.map(async pm => {
+  // ── Scan each sport ──
+  for (const [sport, cfg] of Object.entries(SPORT_PROP_CONFIG)) {
+    // Fetch events
+    let events = [];
+    try {
+      const res = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+      if (!res.ok) continue;
+      events = await res.json();
+    } catch(e) { continue; }
+
+    const todayEvents = events.filter(ev => {
+      if (!ev.commence_time) return false;
+      const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
+      return evET.toISOString().split('T')[0] === todayET;
+    });
+    if (!todayEvents.length) continue;
+
+    // Fetch prop lines for each event
+    const propMap = {};
+    for (const ev of todayEvents) {
       try {
-        const statCol = PROP_STAT_COL[pm.propKey];
-        const playerId = await getPlayerId(pm.player);
-        if (!playerId) return;
-        const logData = await fetchNBAPlayerGameLog(playerId, workerUrl);
-        if (!logData) return;
-        const colIdx = logData.headers.indexOf(statCol);
-        if (colIdx < 0) return;
-        const vals = logData.rows.map(r => parseFloat(r[colIdx]) || 0);
-        if (vals.length < MIN_GAMES) return;
-
-        for (const direction of ['OVER', 'UNDER']) {
-          const stats = calcHitRate(vals, pm.line, direction, 20);
-          if (!stats || stats.rate < MIN_RATE || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
-          const odds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
-          edgePlays.push({
-            player: pm.player,
-            prop: `${pm.propKey.replace(/_/g, ' ')} ${direction === 'OVER' ? 'O' : 'U'}${pm.line}`,
-            direction, line: pm.line, rate: stats.rate,
-            avg: stats.avg, edge: stats.edge,
-            games: stats.games, streak: stats.streak,
-            odds: odds || -110,
-            team: pm.team, opp: pm.opp,
-            gameTime: pm.gameTime,
-          });
+        const res = await fetchWithTimeout(
+          `https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${cfg.markets}&oddsFormat=american&dateFormat=iso`,
+          {}, 8000
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const bk of (data.bookmakers || [])) {
+          for (const market of (bk.markets || [])) {
+            const propKey = cfg.marketMap[market.key];
+            if (!propKey) continue;
+            for (const outcome of (market.outcomes || [])) {
+              const playerName = outcome.description || outcome.name;
+              if (!playerName) continue;
+              const side = (outcome.name || '').toLowerCase();
+              const line = parseFloat(outcome.point);
+              if (!line) continue;
+              const mapKey = playerName + '|' + propKey;
+              if (!propMap[mapKey]) propMap[mapKey] = {
+                player: playerName, propKey, line, sport,
+                overOdds: null, underOdds: null,
+                team: ev.away_team, opp: ev.home_team, gameTime: ev.commence_time,
+              };
+              const pm = propMap[mapKey];
+              if (side === 'over') { if (pm.overOdds === null) pm.overOdds = parseInt(outcome.price); }
+              else { if (pm.underOdds === null) pm.underOdds = parseInt(outcome.price); }
+            }
+          }
         }
-      } catch(e) { /* skip */ }
-    }));
-    await new Promise(r => setTimeout(r, 100));
-  }
+      } catch(e) { continue; }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    const propEntries = Object.values(propMap);
+    if (!propEntries.length) continue;
+
+    // Fetch game logs and compute hit rates
+    const BATCH = sport === 'NBA' ? 5 : 3;
+    // Cache player lookups per sport scan
+    const nbaIdCache = {};
+
+    for (let i = 0; i < propEntries.length; i += BATCH) {
+      const batch = propEntries.slice(i, i + BATCH);
+      await Promise.all(batch.map(async pm => {
+        try {
+          let vals = null;
+
+          if (sport === 'NBA') {
+            let playerId = nbaIdCache[pm.player];
+            if (!playerId) {
+              playerId = await fetchNBAPlayerId(pm.player, workerUrl);
+              if (playerId) nbaIdCache[pm.player] = playerId;
+            }
+            if (!playerId) return;
+            const logData = await fetchNBAPlayerGameLog(playerId, workerUrl);
+            if (!logData) return;
+            const statCol = PROP_STAT_COL[pm.propKey];
+            if (!statCol) return;
+            const colIdx = logData.headers.indexOf(statCol);
+            if (colIdx < 0) return;
+            vals = logData.rows.map(r => parseFloat(r[colIdx]) || 0);
+
+          } else if (sport === 'NHL') {
+            const logData = await fetchNHLPlayerLog(pm.player);
+            if (!logData) return;
+            vals = getNHLStatVals(logData.rows, pm.propKey);
+
+          } else if (sport === 'MLB') {
+            const logData = await fetchMLBPlayerLog(pm.player);
+            if (!logData) return;
+            vals = getMLBStatVals(logData.splits, pm.propKey);
+          }
+
+          if (!vals || vals.length < MIN_GAMES) return;
+
+          for (const direction of ['OVER', 'UNDER']) {
+            const stats = calcHitRate(vals, pm.line, direction, 20);
+            if (!stats || stats.rate < MIN_RATE || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
+            const odds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+            edgePlays.push({
+              player: pm.player, sport,
+              prop: `${pm.propKey} ${direction === 'OVER' ? 'O' : 'U'}${pm.line}`,
+              direction, line: pm.line, rate: stats.rate,
+              avg: stats.avg, edge: stats.edge,
+              games: stats.games, streak: stats.streak,
+              odds: odds || -110,
+              team: pm.team, opp: pm.opp,
+              gameTime: pm.gameTime,
+            });
+          }
+        } catch(e) { /* skip */ }
+      }));
+      await new Promise(r => setTimeout(r, 100));
+    }
+  } // end sport loop
 
   if (!edgePlays.length) return { plays: 0, reason: `no plays cleared ${MIN_RATE}%+ rate + ${MIN_EDGE}+ edge` };
 
   // Sort by rate desc, then edge desc
   edgePlays.sort((a, b) => b.rate - a.rate || b.edge - a.edge);
 
-  // Send ntfy
-  const lines = [`🏀 NBA Props Edge — ${todayET}`, `${edgePlays.length} plays cleared ${MIN_RATE}%+ / ${MIN_EDGE}+ edge\n`];
-  for (const p of edgePlays.slice(0, 10)) {
-    const t = p.gameTime ? new Date(p.gameTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
-    const streakNote = p.streak >= 3 ? ` 🔥${p.streak}` : '';
-    lines.push(`${p.player} — ${p.prop}`);
-    lines.push(`  ${p.rate}% (${p.avg} avg, +${p.edge} edge)${streakNote} ${t}`);
+  // Send ntfy — group by sport
+  const SPORT_EMOJI = { NBA: '🏀', NHL: '🏒', MLB: '⚾' };
+  const byGroup = {};
+  for (const p of edgePlays) {
+    if (!byGroup[p.sport]) byGroup[p.sport] = [];
+    byGroup[p.sport].push(p);
+  }
+
+  const msgLines = [`🎯 Props Edge — ${todayET}`, `${edgePlays.length} plays cleared ${MIN_RATE}%+ / ${MIN_EDGE}+ edge\n`];
+  for (const [sport, plays] of Object.entries(byGroup)) {
+    const emoji = SPORT_EMOJI[sport] || '🎯';
+    msgLines.push(`${emoji} ${sport} (${plays.length})`);
+    for (const p of plays.slice(0, 6)) {
+      const t = p.gameTime ? new Date(p.gameTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+      const streakNote = p.streak >= 3 ? ` 🔥${p.streak}` : '';
+      msgLines.push(`${p.player} — ${p.prop}`);
+      msgLines.push(`  ${p.rate}% (avg ${p.avg}, +${p.edge} edge)${streakNote} ${t}`);
+    }
+    msgLines.push('');
   }
 
   await sendAlert({
-    title: `🏀 ${edgePlays.length} NBA Prop Edges — ${todayET}`,
-    body: lines.join('\n'),
-    tags: 'basketball,fire',
+    title: `🎯 ${edgePlays.length} Prop Edges (NBA/NHL/MLB) — ${todayET}`,
+    body: msgLines.join('\n'),
+    tags: 'sports,fire',
     priority: edgePlays.length >= 5 ? 'high' : 'default',
   });
 
