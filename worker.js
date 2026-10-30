@@ -600,7 +600,7 @@ const PROP_STAT_COL = {
 
 async function fetchNBAPlayerGameLog(playerId, workerUrl) {
   try {
-    const url = `${workerUrl}/nba/stats/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LastNGames=20`;
+    const url = `${workerUrl}/nba/stats/playergamelog?PlayerID=${playerId}&Season=2026-27&SeasonType=Regular+Season&LastNGames=20`;
     const res = await fetchWithTimeout(url, {}, 8000);
     if (!res.ok) return null;
     const data = await res.json();
@@ -614,7 +614,7 @@ async function fetchNBAPlayerGameLog(playerId, workerUrl) {
 // Fetch entire NBA roster once, return name→id map
 async function fetchNBARosterMap(workerUrl) {
   try {
-    const url = `${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`;
+    const url = `${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2026-27&IsOnlyCurrentSeason=1`;
     const res = await fetchWithTimeout(url, {}, 12000);
     if (!res.ok) return {};
     const data = await res.json();
@@ -669,7 +669,7 @@ function calcHitRate(vals, line, direction, nGames = 20) {
 async function fetchNHLPlayerLog(playerName) {
   try {
     // Search NHL roster for player ID
-    const rosterUrl = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20252026%20and%20gameTypeId%3D2';
+    const rosterUrl = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20262027%20and%20gameTypeId%3D2';
     const res = await fetchWithTimeout(rosterUrl, {}, 10000);
     if (!res.ok) return null;
     const data = await res.json();
@@ -677,7 +677,7 @@ async function fetchNHLPlayerLog(playerName) {
     const player = (data.data || []).find(p => (p.skaterFullName || '').toLowerCase() === nameLower);
     if (!player) return null;
     // Fetch game log
-    const logUrl = `https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=true&sort=%5B%7B%22property%22%3A%22gameDate%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=20&cayenneExp=seasonId%3D20252026%20and%20gameTypeId%3D2%20and%20playerId%3D${player.playerId}`;
+    const logUrl = `https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=true&sort=%5B%7B%22property%22%3A%22gameDate%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=20&cayenneExp=seasonId%3D20262027%20and%20gameTypeId%3D2%20and%20playerId%3D${player.playerId}`;
     const logRes = await fetchWithTimeout(logUrl, {}, 8000);
     if (!logRes.ok) return null;
     const logData = await logRes.json();
@@ -1479,7 +1479,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
     const result = { steps: {} };
     try {
       // Step 1: fetch roster
-      const rosterRes = await fetchWithTimeout(`${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`, {}, 12000);
+      const rosterRes = await fetchWithTimeout(`${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2026-27&IsOnlyCurrentSeason=1`, {}, 12000);
       result.steps.rosterStatus = rosterRes.status;
       if (!rosterRes.ok) {
         result.steps.rosterError = await rosterRes.text();
@@ -1503,7 +1503,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
       }
 
       // Step 3: fetch game log for Harden
-      const logRes = await fetchWithTimeout(`${workerUrl}/nba/stats/playergamelog?PlayerID=${hardenId}&Season=2025-26&SeasonType=Regular+Season&LastNGames=20`, {}, 8000);
+      const logRes = await fetchWithTimeout(`${workerUrl}/nba/stats/playergamelog?PlayerID=${hardenId}&Season=2026-27&SeasonType=Regular+Season&LastNGames=20`, {}, 8000);
       result.steps.logStatus = logRes.status;
       if (!logRes.ok) {
         result.steps.logError = await logRes.text();
