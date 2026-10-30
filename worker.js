@@ -1500,18 +1500,32 @@ if (url.pathname.startsWith('/moneypuck/')) {
   if (url.pathname === '/props/debug' && request.method === 'POST') {
     const result = { steps: {}, source: 'espn-search' };
     try {
-      // Direct ESPN search for James Harden + game log (no roster prefetch)
-      result.steps.searchPlayer = 'James Harden';
-      const games = await fetchNBAPlayerGameLog('James Harden');
-      result.steps.logRows = games?.length || 0;
-      if (games?.length) {
-        result.steps.sampleGame = games[0];
-        result.steps.sampleGameKeys = Object.keys(games[0]);
-        // Try to find points-like key
-        const g = games[0];
-        result.steps.pointsVal = g.points ?? g.pts ?? g['points'] ?? 'not found';
-      } else {
-        result.steps.logError = 'no games returned';
+      // Step 1: raw ESPN search
+      const q = encodeURIComponent('James Harden');
+      const searchUrl = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&type=player&sport=basketball&league=nba`;
+      const sRes = await fetchWithTimeout(searchUrl, {}, 8000);
+      result.steps.searchStatus = sRes.status;
+      const sData = await sRes.json();
+      result.steps.searchKeys = Object.keys(sData);
+      const candidates = sData?.items?.[0]?.contents || sData?.results || sData?.items || [];
+      result.steps.candidateCount = candidates.length;
+      result.steps.firstCandidate = candidates[0];
+      let playerId = null;
+      for (const c of candidates) {
+        if (c?.type === 'player' || c?.athlete?.id) { playerId = c?.id || c?.athlete?.id; break; }
+      }
+      result.steps.playerId = playerId;
+
+      if (playerId) {
+        // Step 2: raw game log
+        const logUrl = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
+        const lRes = await fetchWithTimeout(logUrl, {}, 8000);
+        result.steps.logStatus = lRes.status;
+        const lData = await lRes.json();
+        result.steps.logTopKeys = Object.keys(lData);
+        result.steps.categoriesCount = (lData?.categories || []).length;
+        result.steps.seasonTypesCount = (lData?.seasonTypes || []).length;
+        result.steps.rawLogSample = JSON.stringify(lData).slice(0, 500);
       }
     } catch(e) {
       result.error = e.message;
