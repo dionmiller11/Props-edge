@@ -598,77 +598,71 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-// ── NBA via NBA_STATS_PROXY fallback → ESPN search per player ──
-// No roster prefetch needed: search ESPN per player name → get ID → game log
+// ── NBA via balldontlie.io (requires free API key stored in KV) ──
+let _bdlKey = null;
+async function getBDLKey(env) {
+  if (_bdlKey) return _bdlKey;
+  try { _bdlKey = await env.LINE_MONITOR_KV.get('config:bdl_key'); } catch(e) {}
+  return _bdlKey;
+}
 
-async function fetchNBARosterMap() {
-  // No-op: we look up per player instead
-  return {};
+async function fetchNBARosterMap(env) {
+  try {
+    const key = await getBDLKey(env);
+    if (!key) return {};
+    const map = {};
+    let cursor = null;
+    for (let i = 0; i < 10; i++) {
+      const u = `https://api.balldontlie.io/v1/players/active?per_page=100${cursor ? '&cursor=' + cursor : ''}`;
+      const res = await fetchWithTimeout(u, { headers: { 'Authorization': key } }, 10000);
+      if (!res.ok) break;
+      const data = await res.json();
+      for (const p of data?.data || []) {
+        const name = `${p.first_name} ${p.last_name}`.toLowerCase().replace(/[^a-z ]/g, '').trim();
+        if (name) map[name] = p.id;
+      }
+      cursor = data?.meta?.next_cursor;
+      if (!cursor) break;
+    }
+    return map;
+  } catch(e) { return {}; }
 }
 
 function lookupNBAPlayerId(rosterMap, playerName) {
-  // rosterMap unused; per-player ESPN search done in fetchNBAPlayerGameLog
-  return playerName; // pass name through as sentinel
+  const clean = playerName.toLowerCase().replace(/[^a-z ]/g, '');
+  if (rosterMap[clean]) return rosterMap[clean];
+  const parts = clean.split(' ');
+  const last = parts[parts.length - 1];
+  for (const [name, id] of Object.entries(rosterMap)) {
+    if (name.endsWith(' ' + last) || name === last) return id;
+  }
+  return null;
 }
 
-async function fetchNBAPlayerGameLog(playerNameOrId) {
+async function fetchNBAPlayerGameLog(playerId, env) {
   try {
-    // Step 1: search ESPN for player ID
-    const q = encodeURIComponent(playerNameOrId);
-    const searchUrl = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&type=player&sport=basketball&league=nba`;
-    const sRes = await fetchWithTimeout(searchUrl, {}, 8000);
-    if (!sRes.ok) return null;
-    const sData = await sRes.json();
-    // ESPN search: results may be under items[].contents or results
-    const candidates = sData?.items?.[0]?.contents || sData?.results || sData?.items || [];
-    let playerId = null;
-    for (const c of candidates) {
-      if (c?.type === 'player' || c?.athlete?.id) {
-        playerId = c?.id || c?.athlete?.id;
-        break;
-      }
-    }
-    if (!playerId) return null;
-
-    // Step 2: fetch game log
-    const logUrl = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
-    const lRes = await fetchWithTimeout(logUrl, {}, 8000);
-    if (!lRes.ok) return null;
-    const lData = await lRes.json();
-
-    const categories = lData?.categories || [];
-    const eventList = lData?.seasonTypes?.[0]?.categories?.[0]?.events
-      || lData?.events?.previousEvents
-      || lData?.events
-      || [];
-    if (!categories.length || !eventList.length) return null;
-
-    const statLabels = categories.map(c => (c.displayName || c.name || '').toLowerCase());
-    const games = [];
-    for (const ev of eventList) {
-      const stats = ev?.stats || [];
-      if (!stats.length) continue;
-      const g = {};
-      statLabels.forEach((lbl, i) => { g[lbl] = parseFloat(stats[i]) || 0; });
-      games.push(g);
-    }
-    return games.length ? games : null;
+    const key = await getBDLKey(env);
+    if (!key) return null;
+    const url = `https://api.balldontlie.io/v1/stats?player_ids[]=${playerId}&seasons[]=2026&per_page=20&postseason=false`;
+    const res = await fetchWithTimeout(url, { headers: { 'Authorization': key } }, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.data || null;
   } catch(e) { return null; }
 }
 
 function getNBAStatVals(games, propKey) {
-  // ESPN stat names vary; try multiple keys
-  const get = (g, ...keys) => { for (const k of keys) if (g[k] !== undefined) return g[k]; return 0; };
+  // balldontlie field names
   const statMap = {
-    points: g => get(g, 'points', 'pts'),
-    rebounds: g => get(g, 'rebounds', 'totalRebounds', 'reb'),
-    assists: g => get(g, 'assists', 'ast'),
-    threes: g => get(g, 'threePointFieldGoalsMade', '3pm', 'fg3m'),
-    blocks: g => get(g, 'blocks', 'blk'),
-    steals: g => get(g, 'steals', 'stl'),
-    pra: g => get(g, 'points', 'pts') + get(g, 'rebounds', 'totalRebounds', 'reb') + get(g, 'assists', 'ast'),
-    pr: g => get(g, 'points', 'pts') + get(g, 'rebounds', 'totalRebounds', 'reb'),
-    pa: g => get(g, 'points', 'pts') + get(g, 'assists', 'ast'),
+    points: g => g.pts || 0,
+    rebounds: g => g.reb || 0,
+    assists: g => g.ast || 0,
+    threes: g => g.fg3m || 0,
+    blocks: g => g.blk || 0,
+    steals: g => g.stl || 0,
+    pra: g => (g.pts || 0) + (g.reb || 0) + (g.ast || 0),
+    pr: g => (g.pts || 0) + (g.reb || 0),
+    pa: g => (g.pts || 0) + (g.ast || 0),
   };
   const fn = statMap[propKey];
   if (!fn || !games) return null;
@@ -839,7 +833,7 @@ async function runAutoProps(env) {
     // For NBA: fetch full roster once, then do fast local lookups
     let nbaRosterMap = {};
     if (sport === 'NBA') {
-      nbaRosterMap = await fetchNBARosterMap();
+      nbaRosterMap = await fetchNBARosterMap(env);
     }
 
     for (let i = 0; i < propEntries.length; i += BATCH) {
@@ -851,7 +845,7 @@ async function runAutoProps(env) {
           if (sport === 'NBA') {
             const playerId = lookupNBAPlayerId(nbaRosterMap, pm.player);
             if (!playerId) return;
-            const games = await fetchNBAPlayerGameLog(playerId);
+            const games = await fetchNBAPlayerGameLog(playerId, env);
             if (!games || games.length === 0) return;
             vals = getNBAStatVals(games, pm.propKey);
             if (!vals) return;
@@ -1498,34 +1492,24 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const result = { steps: {}, source: 'espn-search' };
+    const result = { steps: {}, source: 'balldontlie' };
     try {
-      // Step 1: raw ESPN search
-      const q = encodeURIComponent('James Harden');
-      const searchUrl = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&type=player&sport=basketball&league=nba`;
-      const sRes = await fetchWithTimeout(searchUrl, {}, 8000);
-      result.steps.searchStatus = sRes.status;
-      const sData = await sRes.json();
-      result.steps.searchKeys = Object.keys(sData);
-      const candidates = sData?.items?.[0]?.contents || sData?.results || sData?.items || [];
-      result.steps.candidateCount = candidates.length;
-      result.steps.firstCandidate = candidates[0];
-      let playerId = null;
-      for (const c of candidates) {
-        if (c?.type === 'player' || c?.athlete?.id) { playerId = c?.id || c?.athlete?.id; break; }
+      const key = await getBDLKey(env);
+      result.steps.hasKey = !!key;
+      if (!key) {
+        result.steps.error = 'No balldontlie key. POST /config/bdl-key with {"key":"YOUR_KEY"}';
+        return new Response(JSON.stringify(result), { headers: cors });
       }
-      result.steps.playerId = playerId;
-
-      if (playerId) {
-        // Step 2: raw game log
-        const logUrl = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
-        const lRes = await fetchWithTimeout(logUrl, {}, 8000);
-        result.steps.logStatus = lRes.status;
-        const lData = await lRes.json();
-        result.steps.logTopKeys = Object.keys(lData);
-        result.steps.categoriesCount = (lData?.categories || []).length;
-        result.steps.seasonTypesCount = (lData?.seasonTypes || []).length;
-        result.steps.rawLogSample = JSON.stringify(lData).slice(0, 500);
+      // Step 1: roster
+      const rMap = await fetchNBARosterMap(env);
+      result.steps.rosterSize = Object.keys(rMap).length;
+      result.steps.sampleNames = Object.keys(rMap).slice(0, 5);
+      const hardenId = lookupNBAPlayerId(rMap, 'James Harden');
+      result.steps.hardenId = hardenId;
+      if (hardenId) {
+        const games = await fetchNBAPlayerGameLog(hardenId, env);
+        result.steps.logRows = games?.length || 0;
+        if (games?.length) result.steps.sampleGame = games[0];
       }
     } catch(e) {
       result.error = e.message;
@@ -1549,6 +1533,19 @@ if (url.pathname.startsWith('/moneypuck/')) {
       const body = await request.json();
       if (!body.key) return new Response(JSON.stringify({ ok: false, error: 'missing key' }), { status: 400, headers: cors });
       await env.LINE_MONITOR_KV.put('config:odds_api_key', body.key);
+      return new Response(JSON.stringify({ ok: true, saved: true }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── CONFIG: store balldontlie API key ──
+  if (url.pathname === '/config/bdl-key' && request.method === 'POST') {
+    try {
+      const body = await request.json();
+      if (!body.key) return new Response(JSON.stringify({ ok: false, error: 'missing key' }), { status: 400, headers: cors });
+      await env.LINE_MONITOR_KV.put('config:bdl_key', body.key);
+      _bdlKey = body.key;
       return new Response(JSON.stringify({ ok: true, saved: true }), { headers: cors });
     } catch(e) {
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
