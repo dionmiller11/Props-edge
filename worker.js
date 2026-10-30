@@ -1473,31 +1473,55 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
-  // ── PROPS DEBUG: show raw scan results before filtering ──
+  // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
-    if (!oddsApiKey) return new Response(JSON.stringify({ error: 'no key' }), { headers: cors });
-    const etOffset = -4;
-    const etNow = new Date(Date.now() + etOffset * 3600000);
-    const todayET = etNow.toISOString().split('T')[0];
-    // Just fetch NBA events + one event's props to confirm pipeline works
+    const workerUrl = 'https://line-monitor.dion-miller11.workers.dev';
+    const result = { steps: {} };
     try {
-      const evRes = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
-      const events = await evRes.json();
-      const todayEvents = events.filter(ev => {
-        const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
-        return evET.toISOString().split('T')[0] === todayET;
-      });
-      if (!todayEvents.length) return new Response(JSON.stringify({ todayET, events: events.length, todayEvents: 0 }), { headers: cors });
-      // Fetch props for first event
-      const ev = todayEvents[0];
-      const prRes = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=player_points&oddsFormat=american`, {}, 8000);
-      const prData = await prRes.json();
-      const sample = (prData.bookmakers?.[0]?.markets?.[0]?.outcomes || []).slice(0, 5);
-      return new Response(JSON.stringify({ todayET, totalEvents: events.length, todayEvents: todayEvents.length, firstGame: `${ev.away_team} @ ${ev.home_team}`, sampleOutcomes: sample }), { headers: cors });
+      // Step 1: fetch roster
+      const rosterRes = await fetchWithTimeout(`${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`, {}, 12000);
+      result.steps.rosterStatus = rosterRes.status;
+      if (!rosterRes.ok) {
+        result.steps.rosterError = await rosterRes.text();
+        return new Response(JSON.stringify(result), { headers: cors });
+      }
+      const rosterData = await rosterRes.json();
+      const rs = rosterData?.resultSets?.[0];
+      result.steps.rosterRows = rs?.rowSet?.length || 0;
+      result.steps.rosterHeaders = rs?.headers?.slice(0, 5);
+
+      // Step 2: find James Harden
+      const rosterMap = await fetchNBARosterMap(workerUrl);
+      result.steps.rosterMapSize = Object.keys(rosterMap).length;
+      const hardenId = lookupNBAPlayerId(rosterMap, 'James Harden');
+      result.steps.hardenId = hardenId;
+
+      if (!hardenId) {
+        // Show first 5 names in map for debugging
+        result.steps.sampleNames = Object.keys(rosterMap).slice(0, 5);
+        return new Response(JSON.stringify(result), { headers: cors });
+      }
+
+      // Step 3: fetch game log for Harden
+      const logRes = await fetchWithTimeout(`${workerUrl}/nba/stats/playergamelog?PlayerID=${hardenId}&Season=2025-26&SeasonType=Regular+Season&LastNGames=20`, {}, 8000);
+      result.steps.logStatus = logRes.status;
+      if (!logRes.ok) {
+        result.steps.logError = await logRes.text();
+        return new Response(JSON.stringify(result), { headers: cors });
+      }
+      const logData = await logRes.json();
+      const logRs = logData?.resultSets?.[0];
+      result.steps.logRows = logRs?.rowSet?.length || 0;
+      result.steps.logHeaders = logRs?.headers?.slice(0, 10);
+      const ptsIdx = logRs?.headers?.indexOf('PTS');
+      if (ptsIdx >= 0 && logRs.rowSet?.length) {
+        result.steps.lastGamePts = logRs.rowSet[0][ptsIdx];
+        result.steps.recentPts = logRs.rowSet.slice(0, 5).map(r => r[ptsIdx]);
+      }
     } catch(e) {
-      return new Response(JSON.stringify({ error: e.message }), { headers: cors });
+      result.error = e.message;
     }
+    return new Response(JSON.stringify(result), { headers: cors });
   }
 
   // ── AUTO PROPS TRIGGER (manual test) ──
