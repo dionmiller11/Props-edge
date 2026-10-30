@@ -598,35 +598,25 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-async function fetchNBAPlayerGameLog(playerId, workerUrl) {
+// ── NBA via balldontlie.io (free, no auth, worker-friendly) ──
+// Fetch entire NBA roster once via balldontlie, return name→id map
+async function fetchNBARosterMap() {
   try {
-    const url = `${workerUrl}/nba/stats/playergamelog?PlayerID=${playerId}&Season=2026-27&SeasonType=Regular+Season&LastNGames=20`;
-    const res = await fetchWithTimeout(url, {}, 8000);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rs = data?.resultSets?.[0];
-    if (!rs) return null;
-    const headers = rs.headers || [];
-    return { headers, rows: rs.rowSet || [] };
-  } catch(e) { return null; }
-}
-
-// Fetch entire NBA roster once, return name→id map
-async function fetchNBARosterMap(workerUrl) {
-  try {
-    const url = `${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2026-27&IsOnlyCurrentSeason=1`;
-    const res = await fetchWithTimeout(url, {}, 12000);
-    if (!res.ok) return {};
-    const data = await res.json();
-    const rs = data?.resultSets?.[0];
-    if (!rs) return {};
-    const nameIdx = rs.headers.indexOf('DISPLAY_FIRST_LAST');
-    const idIdx = rs.headers.indexOf('PERSON_ID');
-    if (nameIdx < 0 || idIdx < 0) return {};
     const map = {};
-    for (const row of rs.rowSet) {
-      const name = (row[nameIdx] || '').toLowerCase().replace(/[^a-z ]/g, '');
-      if (name) map[name] = row[idIdx];
+    let cursor = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const url = `https://api.balldontlie.io/v1/players/active?per_page=100&cursor=${cursor}`;
+      const res = await fetchWithTimeout(url, {}, 10000);
+      if (!res.ok) break;
+      const data = await res.json();
+      const players = data?.data || [];
+      for (const p of players) {
+        const fullName = `${p.first_name} ${p.last_name}`.toLowerCase().replace(/[^a-z ]/g, '');
+        if (fullName.trim()) map[fullName.trim()] = p.id;
+      }
+      cursor = data?.meta?.next_cursor;
+      hasMore = !!cursor && players.length > 0;
     }
     return map;
   } catch(e) { return {}; }
@@ -644,9 +634,32 @@ function lookupNBAPlayerId(rosterMap, playerName) {
   return null;
 }
 
-async function fetchNBAPlayerId(playerName, workerUrl) {
-  const map = await fetchNBARosterMap(workerUrl);
-  return lookupNBAPlayerId(map, playerName);
+async function fetchNBAPlayerGameLog(playerId) {
+  try {
+    // balldontlie game log: season 2026 = 2026-27 season
+    const url = `https://api.balldontlie.io/v1/stats?player_ids[]=${playerId}&seasons[]=2026&per_page=20&postseason=false`;
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.data || null;
+  } catch(e) { return null; }
+}
+
+function getNBAStatVals(games, propKey) {
+  const statMap = {
+    points: g => g.pts || 0,
+    rebounds: g => g.reb || 0,
+    assists: g => g.ast || 0,
+    threes: g => g.fg3m || 0,
+    blocks: g => g.blk || 0,
+    steals: g => g.stl || 0,
+    pra: g => (g.pts || 0) + (g.reb || 0) + (g.ast || 0),
+    pr: g => (g.pts || 0) + (g.reb || 0),
+    pa: g => (g.pts || 0) + (g.ast || 0),
+  };
+  const fn = statMap[propKey];
+  if (!fn || !games) return null;
+  return games.map(fn);
 }
 
 function calcHitRate(vals, line, direction, nGames = 20) {
@@ -813,7 +826,7 @@ async function runAutoProps(env) {
     // For NBA: fetch full roster once, then do fast local lookups
     let nbaRosterMap = {};
     if (sport === 'NBA') {
-      nbaRosterMap = await fetchNBARosterMap(workerUrl);
+      nbaRosterMap = await fetchNBARosterMap();
     }
 
     for (let i = 0; i < propEntries.length; i += BATCH) {
@@ -825,13 +838,10 @@ async function runAutoProps(env) {
           if (sport === 'NBA') {
             const playerId = lookupNBAPlayerId(nbaRosterMap, pm.player);
             if (!playerId) return;
-            const logData = await fetchNBAPlayerGameLog(playerId, workerUrl);
-            if (!logData) return;
-            const statCol = PROP_STAT_COL[pm.propKey];
-            if (!statCol) return;
-            const colIdx = logData.headers.indexOf(statCol);
-            if (colIdx < 0) return;
-            vals = logData.rows.map(r => parseFloat(r[colIdx]) || 0);
+            const games = await fetchNBAPlayerGameLog(playerId);
+            if (!games || games.length === 0) return;
+            vals = getNBAStatVals(games, pm.propKey);
+            if (!vals) return;
 
           } else if (sport === 'NHL') {
             const logData = await fetchNHLPlayerLog(pm.player);
@@ -1475,48 +1485,27 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const workerUrl = 'https://line-monitor.dion-miller11.workers.dev';
-    const result = { steps: {} };
+    const result = { steps: {}, source: 'balldontlie' };
     try {
-      // Step 1: fetch roster
-      const rosterRes = await fetchWithTimeout(`${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2026-27&IsOnlyCurrentSeason=1`, {}, 12000);
-      result.steps.rosterStatus = rosterRes.status;
-      if (!rosterRes.ok) {
-        result.steps.rosterError = await rosterRes.text();
-        return new Response(JSON.stringify(result), { headers: cors });
-      }
-      const rosterData = await rosterRes.json();
-      const rs = rosterData?.resultSets?.[0];
-      result.steps.rosterRows = rs?.rowSet?.length || 0;
-      result.steps.rosterHeaders = rs?.headers?.slice(0, 5);
+      // Step 1: fetch roster from balldontlie
+      const rosterMap = await fetchNBARosterMap();
+      result.steps.rosterMapSize = Object.keys(rosterMap).length;
+      result.steps.sampleNames = Object.keys(rosterMap).slice(0, 5);
 
       // Step 2: find James Harden
-      const rosterMap = await fetchNBARosterMap(workerUrl);
-      result.steps.rosterMapSize = Object.keys(rosterMap).length;
       const hardenId = lookupNBAPlayerId(rosterMap, 'James Harden');
       result.steps.hardenId = hardenId;
 
       if (!hardenId) {
-        // Show first 5 names in map for debugging
-        result.steps.sampleNames = Object.keys(rosterMap).slice(0, 5);
         return new Response(JSON.stringify(result), { headers: cors });
       }
 
-      // Step 3: fetch game log for Harden
-      const logRes = await fetchWithTimeout(`${workerUrl}/nba/stats/playergamelog?PlayerID=${hardenId}&Season=2026-27&SeasonType=Regular+Season&LastNGames=20`, {}, 8000);
-      result.steps.logStatus = logRes.status;
-      if (!logRes.ok) {
-        result.steps.logError = await logRes.text();
-        return new Response(JSON.stringify(result), { headers: cors });
-      }
-      const logData = await logRes.json();
-      const logRs = logData?.resultSets?.[0];
-      result.steps.logRows = logRs?.rowSet?.length || 0;
-      result.steps.logHeaders = logRs?.headers?.slice(0, 10);
-      const ptsIdx = logRs?.headers?.indexOf('PTS');
-      if (ptsIdx >= 0 && logRs.rowSet?.length) {
-        result.steps.lastGamePts = logRs.rowSet[0][ptsIdx];
-        result.steps.recentPts = logRs.rowSet.slice(0, 5).map(r => r[ptsIdx]);
+      // Step 3: fetch game log for Harden from balldontlie
+      const games = await fetchNBAPlayerGameLog(hardenId);
+      result.steps.logRows = games?.length || 0;
+      if (games?.length) {
+        result.steps.recentPts = games.slice(0, 5).map(g => g.pts);
+        result.steps.sampleGame = games[0];
       }
     } catch(e) {
       result.error = e.message;
