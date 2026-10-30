@@ -598,61 +598,84 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-// ── NBA via balldontlie.io (requires free API key stored in KV) ──
-let _bdlKey = null;
-async function getBDLKey(env) {
-  if (_bdlKey) return _bdlKey;
-  try { _bdlKey = await env.LINE_MONITOR_KV.get('config:bdl_key'); } catch(e) {}
-  return _bdlKey;
-}
+// ── NBA via cdn.nba.com box scores (public CDN, no auth, no bot block) ──
+// Strategy: fetch recent game IDs from schedule, then box score per game, extract player stats
 
-async function fetchNBARosterMap(env) {
+async function fetchNBARecentGameIds(nGames = 20) {
   try {
-    const key = await getBDLKey(env);
-    if (!key) return {};
-    const map = {};
-    let cursor = null;
-    for (let i = 0; i < 10; i++) {
-      const u = `https://api.balldontlie.io/v1/players/active?per_page=100${cursor ? '&cursor=' + cursor : ''}`;
-      const res = await fetchWithTimeout(u, { headers: { 'Authorization': key } }, 10000);
-      if (!res.ok) break;
-      const data = await res.json();
-      for (const p of data?.data || []) {
-        const name = `${p.first_name} ${p.last_name}`.toLowerCase().replace(/[^a-z ]/g, '').trim();
-        if (name) map[name] = p.id;
-      }
-      cursor = data?.meta?.next_cursor;
-      if (!cursor) break;
-    }
-    return map;
-  } catch(e) { return {}; }
-}
-
-function lookupNBAPlayerId(rosterMap, playerName) {
-  const clean = playerName.toLowerCase().replace(/[^a-z ]/g, '');
-  if (rosterMap[clean]) return rosterMap[clean];
-  const parts = clean.split(' ');
-  const last = parts[parts.length - 1];
-  for (const [name, id] of Object.entries(rosterMap)) {
-    if (name.endsWith(' ' + last) || name === last) return id;
-  }
-  return null;
-}
-
-async function fetchNBAPlayerGameLog(playerId, env) {
-  try {
-    const key = await getBDLKey(env);
-    if (!key) return null;
-    const url = `https://api.balldontlie.io/v1/stats?player_ids[]=${playerId}&seasons[]=2026&per_page=20&postseason=false`;
-    const res = await fetchWithTimeout(url, { headers: { 'Authorization': key } }, 8000);
-    if (!res.ok) return null;
+    // NBA CDN schedule for current season
+    const url = 'https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json';
+    const res = await fetchWithTimeout(url, {}, 12000);
+    if (!res.ok) return [];
     const data = await res.json();
-    return data?.data || null;
+    const gameDates = data?.leagueSchedule?.gameDates || [];
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '/');
+    const pastGames = [];
+    for (const gd of gameDates) {
+      if (gd.gameDate > today) continue;
+      for (const g of gd.games || []) {
+        if (g.gameStatus >= 3) pastGames.push(g.gameId); // status 3 = final
+      }
+    }
+    return pastGames.slice(-nGames);
+  } catch(e) { return []; }
+}
+
+// Cache: player name → array of game stat objects
+const _nbaStatCache = {};
+
+async function fetchNBAPlayerGameLog(playerName, env) {
+  const key = playerName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  if (_nbaStatCache[key]) return _nbaStatCache[key];
+  try {
+    const gameIds = await fetchNBARecentGameIds(20);
+    if (!gameIds.length) return null;
+    const games = [];
+    // Fetch box scores in parallel batches of 5
+    for (let i = 0; i < gameIds.length && games.length < 20; i += 5) {
+      const batch = gameIds.slice(i, i + 5);
+      const results = await Promise.all(batch.map(async gid => {
+        try {
+          const url = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gid}.json`;
+          const r = await fetchWithTimeout(url, {}, 6000);
+          if (!r.ok) return null;
+          return await r.json();
+        } catch(e) { return null; }
+      }));
+      for (const bs of results) {
+        if (!bs) continue;
+        const allPlayers = [
+          ...(bs?.game?.homeTeam?.players || []),
+          ...(bs?.game?.awayTeam?.players || []),
+        ];
+        const parts = key.split(' ');
+        const last = parts[parts.length - 1];
+        for (const p of allPlayers) {
+          const pName = `${p.firstName} ${p.familyName}`.toLowerCase().replace(/[^a-z ]/g, '').trim();
+          if (pName === key || pName.endsWith(' ' + last)) {
+            const s = p.statistics || {};
+            games.push({
+              pts: s.points || 0,
+              reb: s.reboundsTotal || 0,
+              ast: s.assists || 0,
+              fg3m: s.threePointersMade || 0,
+              blk: s.blocks || 0,
+              stl: s.steals || 0,
+            });
+            break;
+          }
+        }
+      }
+    }
+    if (games.length) _nbaStatCache[key] = games;
+    return games.length ? games : null;
   } catch(e) { return null; }
 }
 
+async function fetchNBARosterMap(env) { return {}; } // not needed with CDN approach
+function lookupNBAPlayerId(rosterMap, playerName) { return playerName; }
+
 function getNBAStatVals(games, propKey) {
-  // balldontlie field names
   const statMap = {
     points: g => g.pts || 0,
     rebounds: g => g.reb || 0,
@@ -833,7 +856,7 @@ async function runAutoProps(env) {
     // For NBA: fetch full roster once, then do fast local lookups
     let nbaRosterMap = {};
     if (sport === 'NBA') {
-      nbaRosterMap = await fetchNBARosterMap(env);
+      nbaRosterMap = await fetchNBARosterMap();
     }
 
     for (let i = 0; i < propEntries.length; i += BATCH) {
@@ -845,7 +868,7 @@ async function runAutoProps(env) {
           if (sport === 'NBA') {
             const playerId = lookupNBAPlayerId(nbaRosterMap, pm.player);
             if (!playerId) return;
-            const games = await fetchNBAPlayerGameLog(playerId, env);
+            const games = await fetchNBAPlayerGameLog(playerId);
             if (!games || games.length === 0) return;
             vals = getNBAStatVals(games, pm.propKey);
             if (!vals) return;
@@ -1492,25 +1515,17 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const result = { steps: {}, source: 'balldontlie' };
+    const result = { steps: {}, source: 'cdn.nba.com' };
     try {
-      const key = await getBDLKey(env);
-      result.steps.hasKey = !!key;
-      if (!key) {
-        result.steps.error = 'No balldontlie key. POST /config/bdl-key with {"key":"YOUR_KEY"}';
-        return new Response(JSON.stringify(result), { headers: cors });
-      }
-      // Step 1: roster
-      const rMap = await fetchNBARosterMap(env);
-      result.steps.rosterSize = Object.keys(rMap).length;
-      result.steps.sampleNames = Object.keys(rMap).slice(0, 5);
-      const hardenId = lookupNBAPlayerId(rMap, 'James Harden');
-      result.steps.hardenId = hardenId;
-      if (hardenId) {
-        const games = await fetchNBAPlayerGameLog(hardenId, env);
-        result.steps.logRows = games?.length || 0;
-        if (games?.length) result.steps.sampleGame = games[0];
-      }
+      // Step 1: fetch recent game IDs
+      const gameIds = await fetchNBARecentGameIds(10);
+      result.steps.gameIdCount = gameIds.length;
+      result.steps.sampleGameIds = gameIds.slice(0, 3);
+      // Step 2: fetch Harden game log
+      const games = await fetchNBAPlayerGameLog('James Harden');
+      result.steps.logRows = games?.length || 0;
+      if (games?.length) result.steps.sampleGame = games[0];
+      else result.steps.logNote = 'no games found — season may have too few games or CDN format changed';
     } catch(e) {
       result.error = e.message;
     }
