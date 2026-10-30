@@ -611,23 +611,42 @@ async function fetchNBAPlayerGameLog(playerId, workerUrl) {
   } catch(e) { return null; }
 }
 
-async function fetchNBAPlayerId(playerName, workerUrl) {
+// Fetch entire NBA roster once, return name→id map
+async function fetchNBARosterMap(workerUrl) {
   try {
     const url = `${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`;
-    const res = await fetchWithTimeout(url, {}, 10000);
-    if (!res.ok) return null;
+    const res = await fetchWithTimeout(url, {}, 12000);
+    if (!res.ok) return {};
     const data = await res.json();
     const rs = data?.resultSets?.[0];
-    if (!rs) return null;
+    if (!rs) return {};
     const nameIdx = rs.headers.indexOf('DISPLAY_FIRST_LAST');
     const idIdx = rs.headers.indexOf('PERSON_ID');
-    if (nameIdx < 0 || idIdx < 0) return null;
-    const nameLower = playerName.toLowerCase();
+    if (nameIdx < 0 || idIdx < 0) return {};
+    const map = {};
     for (const row of rs.rowSet) {
-      if ((row[nameIdx] || '').toLowerCase() === nameLower) return row[idIdx];
+      const name = (row[nameIdx] || '').toLowerCase().replace(/[^a-z ]/g, '');
+      if (name) map[name] = row[idIdx];
     }
-    return null;
-  } catch(e) { return null; }
+    return map;
+  } catch(e) { return {}; }
+}
+
+function lookupNBAPlayerId(rosterMap, playerName) {
+  const clean = playerName.toLowerCase().replace(/[^a-z ]/g, '');
+  if (rosterMap[clean]) return rosterMap[clean];
+  // Fuzzy: try last name match if full name misses
+  const parts = clean.split(' ');
+  const last = parts[parts.length - 1];
+  for (const [name, id] of Object.entries(rosterMap)) {
+    if (name.endsWith(' ' + last) || name === last) return id;
+  }
+  return null;
+}
+
+async function fetchNBAPlayerId(playerName, workerUrl) {
+  const map = await fetchNBARosterMap(workerUrl);
+  return lookupNBAPlayerId(map, playerName);
 }
 
 function calcHitRate(vals, line, direction, nGames = 20) {
@@ -790,8 +809,12 @@ async function runAutoProps(env) {
 
     // Fetch game logs and compute hit rates
     const BATCH = sport === 'NBA' ? 5 : 3;
-    // Cache player lookups per sport scan
-    const nbaIdCache = {};
+
+    // For NBA: fetch full roster once, then do fast local lookups
+    let nbaRosterMap = {};
+    if (sport === 'NBA') {
+      nbaRosterMap = await fetchNBARosterMap(workerUrl);
+    }
 
     for (let i = 0; i < propEntries.length; i += BATCH) {
       const batch = propEntries.slice(i, i + BATCH);
@@ -800,11 +823,7 @@ async function runAutoProps(env) {
           let vals = null;
 
           if (sport === 'NBA') {
-            let playerId = nbaIdCache[pm.player];
-            if (!playerId) {
-              playerId = await fetchNBAPlayerId(pm.player, workerUrl);
-              if (playerId) nbaIdCache[pm.player] = playerId;
-            }
+            const playerId = lookupNBAPlayerId(nbaRosterMap, pm.player);
             if (!playerId) return;
             const logData = await fetchNBAPlayerGameLog(playerId, workerUrl);
             if (!logData) return;
