@@ -746,9 +746,9 @@ async function runAutoProps(env) {
   const etNow = new Date(Date.now() + etOffset * 3600000);
   const todayET = etNow.toISOString().split('T')[0];
 
-  const MIN_RATE = 65;
-  const MIN_EDGE = 1.5;
-  const MIN_GAMES = 8;
+  const MIN_RATE = 55;
+  const MIN_EDGE = 0.5;
+  const MIN_GAMES = 5;
   const edgePlays = [];
 
   // ── Scan each sport ──
