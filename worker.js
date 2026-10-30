@@ -598,76 +598,58 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-// ── NBA via ESPN public API (no key, worker-friendly) ──
-// Search ESPN for player ID by name
-async function lookupESPNPlayerId(playerName) {
-  try {
-    const q = encodeURIComponent(playerName);
-    const url = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&mode=prefix&type=player&sport=basketball&league=nba`;
-    const res = await fetchWithTimeout(url, {}, 8000);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const items = data?.items || [];
-    for (const item of items) {
-      if (item?.type === 'player' && item?.id) return item.id;
-    }
-    return null;
-  } catch(e) { return null; }
-}
+// ── NBA via NBA_STATS_PROXY fallback → ESPN search per player ──
+// No roster prefetch needed: search ESPN per player name → get ID → game log
 
-// Fetch entire NBA roster from ESPN athletes endpoint, return name→id map
 async function fetchNBARosterMap() {
-  try {
-    const map = {};
-    // ESPN active NBA players — paginate through all
-    for (let page = 1; page <= 10; page++) {
-      const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes?limit=100&page=${page}&active=true`;
-      const res = await fetchWithTimeout(url, {}, 10000);
-      if (!res.ok) break;
-      const data = await res.json();
-      const athletes = data?.athletes || data?.items || [];
-      if (athletes.length === 0) break;
-      for (const a of athletes) {
-        const name = (a?.fullName || a?.displayName || '').toLowerCase().replace(/[^a-z ]/g, '').trim();
-        if (name && a?.id) map[name] = a.id;
-      }
-      if (!data?.pageCount || page >= data.pageCount) break;
-    }
-    return map;
-  } catch(e) { return {}; }
+  // No-op: we look up per player instead
+  return {};
 }
 
 function lookupNBAPlayerId(rosterMap, playerName) {
-  const clean = playerName.toLowerCase().replace(/[^a-z ]/g, '');
-  if (rosterMap[clean]) return rosterMap[clean];
-  // Fuzzy: try last name match if full name misses
-  const parts = clean.split(' ');
-  const last = parts[parts.length - 1];
-  for (const [name, id] of Object.entries(rosterMap)) {
-    if (name.endsWith(' ' + last) || name === last) return id;
-  }
-  return null;
+  // rosterMap unused; per-player ESPN search done in fetchNBAPlayerGameLog
+  return playerName; // pass name through as sentinel
 }
 
-async function fetchNBAPlayerGameLog(playerId) {
+async function fetchNBAPlayerGameLog(playerNameOrId) {
   try {
-    // ESPN game log for current season
-    const url = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
-    const res = await fetchWithTimeout(url, {}, 8000);
-    if (!res.ok) return null;
-    const data = await res.json();
-    // ESPN returns categories + events; build game array
-    const categories = data?.categories || [];
-    const events = data?.events?.previousEvents || data?.events || [];
-    if (!categories.length || !events.length) return null;
-    // Find stat indices
-    const statNames = categories.map(c => c.name?.toLowerCase());
+    // Step 1: search ESPN for player ID
+    const q = encodeURIComponent(playerNameOrId);
+    const searchUrl = `https://site.web.api.espn.com/apis/common/v3/search?query=${q}&limit=5&type=player&sport=basketball&league=nba`;
+    const sRes = await fetchWithTimeout(searchUrl, {}, 8000);
+    if (!sRes.ok) return null;
+    const sData = await sRes.json();
+    // ESPN search: results may be under items[].contents or results
+    const candidates = sData?.items?.[0]?.contents || sData?.results || sData?.items || [];
+    let playerId = null;
+    for (const c of candidates) {
+      if (c?.type === 'player' || c?.athlete?.id) {
+        playerId = c?.id || c?.athlete?.id;
+        break;
+      }
+    }
+    if (!playerId) return null;
+
+    // Step 2: fetch game log
+    const logUrl = `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog?season=2027`;
+    const lRes = await fetchWithTimeout(logUrl, {}, 8000);
+    if (!lRes.ok) return null;
+    const lData = await lRes.json();
+
+    const categories = lData?.categories || [];
+    const eventList = lData?.seasonTypes?.[0]?.categories?.[0]?.events
+      || lData?.events?.previousEvents
+      || lData?.events
+      || [];
+    if (!categories.length || !eventList.length) return null;
+
+    const statLabels = categories.map(c => (c.displayName || c.name || '').toLowerCase());
     const games = [];
-    for (const ev of events) {
-      const stats = ev?.stats || ev?.athlete?.statistics || [];
+    for (const ev of eventList) {
+      const stats = ev?.stats || [];
       if (!stats.length) continue;
       const g = {};
-      statNames.forEach((name, i) => { g[name] = parseFloat(stats[i]) || 0; });
+      statLabels.forEach((lbl, i) => { g[lbl] = parseFloat(stats[i]) || 0; });
       games.push(g);
     }
     return games.length ? games : null;
@@ -1516,27 +1498,20 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const result = { steps: {}, source: 'espn' };
+    const result = { steps: {}, source: 'espn-search' };
     try {
-      // Step 1: fetch roster from balldontlie
-      const rosterMap = await fetchNBARosterMap();
-      result.steps.rosterMapSize = Object.keys(rosterMap).length;
-      result.steps.sampleNames = Object.keys(rosterMap).slice(0, 5);
-
-      // Step 2: find James Harden
-      const hardenId = lookupNBAPlayerId(rosterMap, 'James Harden');
-      result.steps.hardenId = hardenId;
-
-      if (!hardenId) {
-        return new Response(JSON.stringify(result), { headers: cors });
-      }
-
-      // Step 3: fetch game log for Harden from balldontlie
-      const games = await fetchNBAPlayerGameLog(hardenId);
+      // Direct ESPN search for James Harden + game log (no roster prefetch)
+      result.steps.searchPlayer = 'James Harden';
+      const games = await fetchNBAPlayerGameLog('James Harden');
       result.steps.logRows = games?.length || 0;
       if (games?.length) {
-        result.steps.recentPts = games.slice(0, 5).map(g => g.pts);
         result.steps.sampleGame = games[0];
+        result.steps.sampleGameKeys = Object.keys(games[0]);
+        // Try to find points-like key
+        const g = games[0];
+        result.steps.pointsVal = g.points ?? g.pts ?? g['points'] ?? 'not found';
+      } else {
+        result.steps.logError = 'no games returned';
       }
     } catch(e) {
       result.error = e.message;
