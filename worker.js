@@ -560,6 +560,206 @@ async function runAutoSim(env) {
   return { saved: added, total: existing.predictions.length, log };
 }
 
+// ── AUTO PROPS: fetch today's NBA props, compute hit rate + edge, send top plays ──
+const PROP_MARKET_MAP = {
+  player_points: 'points', player_rebounds: 'rebounds', player_assists: 'assists',
+  player_threes: 'threes', player_blocks: 'blocks', player_steals: 'steals',
+  player_points_rebounds_assists: 'pra', player_points_rebounds: 'pr', player_points_assists: 'pa',
+};
+const PROP_STAT_COL = {
+  points: 'PTS', rebounds: 'REB', assists: 'AST', threes: 'FG3M',
+  blocks: 'BLK', steals: 'STL',
+};
+
+async function fetchNBAPlayerGameLog(playerId, workerUrl) {
+  try {
+    const url = `${workerUrl}/nba/stats/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LastNGames=20`;
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rs = data?.resultSets?.[0];
+    if (!rs) return null;
+    const headers = rs.headers || [];
+    return { headers, rows: rs.rowSet || [] };
+  } catch(e) { return null; }
+}
+
+async function fetchNBAPlayerId(playerName, workerUrl) {
+  try {
+    const url = `${workerUrl}/nba/stats/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`;
+    const res = await fetchWithTimeout(url, {}, 10000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rs = data?.resultSets?.[0];
+    if (!rs) return null;
+    const nameIdx = rs.headers.indexOf('DISPLAY_FIRST_LAST');
+    const idIdx = rs.headers.indexOf('PERSON_ID');
+    if (nameIdx < 0 || idIdx < 0) return null;
+    const nameLower = playerName.toLowerCase();
+    for (const row of rs.rowSet) {
+      if ((row[nameIdx] || '').toLowerCase() === nameLower) return row[idIdx];
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+function calcHitRate(vals, line, direction, nGames = 20) {
+  if (!vals || vals.length < 5) return null;
+  const use = vals.slice(0, nGames);
+  const hits = use.filter(v => direction === 'OVER' ? v > line : v < line).length;
+  const games = use.length;
+  const rate = Math.round(hits / games * 100);
+  const avg = use.reduce((a, b) => a + b, 0) / games;
+  const edge = direction === 'OVER' ? avg - line : line - avg;
+  let streak = 0;
+  for (const v of use) {
+    if (direction === 'OVER' ? v > line : v < line) streak++;
+    else break;
+  }
+  return { rate, hits, games, avg: Math.round(avg * 10) / 10, edge: Math.round(edge * 10) / 10, streak };
+}
+
+async function runAutoProps(env) {
+  const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
+  if (!oddsApiKey) return { skipped: true, reason: 'no odds api key' };
+
+  const workerUrl = 'https://line-monitor.dion-miller11.workers.dev';
+
+  // Fetch today's NBA events
+  let events = [];
+  try {
+    const res = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+    if (!res.ok) return { skipped: true, reason: `odds api ${res.status}` };
+    events = await res.json();
+  } catch(e) { return { skipped: true, reason: e.message }; }
+
+  // Filter to ET today
+  const etOffset = -4;
+  const etNow = new Date(Date.now() + etOffset * 3600000);
+  const todayET = etNow.toISOString().split('T')[0];
+  const todayEvents = events.filter(ev => {
+    if (!ev.commence_time) return false;
+    const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
+    return evET.toISOString().split('T')[0] === todayET;
+  });
+  if (!todayEvents.length) return { skipped: true, reason: 'no games today' };
+
+  // Fetch prop odds for each event
+  const MARKETS = Object.keys(PROP_MARKET_MAP).join(',');
+  const propMap = {};
+
+  for (const ev of todayEvents) {
+    try {
+      const res = await fetchWithTimeout(
+        `https://api.the-odds-api.com/v4/sports/basketball_nba/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${MARKETS}&oddsFormat=american&dateFormat=iso`,
+        {}, 8000
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const bk of (data.bookmakers || [])) {
+        for (const market of (bk.markets || [])) {
+          const propKey = PROP_MARKET_MAP[market.key];
+          if (!propKey) continue;
+          for (const outcome of (market.outcomes || [])) {
+            const playerName = outcome.description || outcome.name;
+            if (!playerName) continue;
+            const side = (outcome.name || '').toLowerCase();
+            const line = parseFloat(outcome.point);
+            if (!line) continue;
+            const mapKey = playerName + '|' + propKey;
+            if (!propMap[mapKey]) propMap[mapKey] = {
+              player: playerName, propKey, line,
+              overOdds: null, underOdds: null,
+              team: ev.away_team, opp: ev.home_team, gameTime: ev.commence_time,
+            };
+            const pm = propMap[mapKey];
+            if (side === 'over') { if (pm.overOdds === null) pm.overOdds = parseInt(outcome.price); }
+            else { if (pm.underOdds === null) pm.underOdds = parseInt(outcome.price); }
+          }
+        }
+      }
+    } catch(e) { continue; }
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  const propEntries = Object.values(propMap).filter(p => PROP_STAT_COL[p.propKey]);
+  if (!propEntries.length) return { skipped: true, reason: 'no props parsed' };
+
+  // Cache player IDs to avoid repeat lookups
+  const playerIdCache = {};
+  async function getPlayerId(name) {
+    if (playerIdCache[name]) return playerIdCache[name];
+    const id = await fetchNBAPlayerId(name, workerUrl);
+    if (id) playerIdCache[name] = id;
+    return id;
+  }
+
+  // Compute hit rate + edge for each prop
+  const edgePlays = [];
+  const MIN_RATE = 65;
+  const MIN_EDGE = 2.0;
+  const MIN_GAMES = 8;
+
+  // Process in small batches to avoid hammering NBA stats API
+  const BATCH = 5;
+  for (let i = 0; i < propEntries.length; i += BATCH) {
+    const batch = propEntries.slice(i, i + BATCH);
+    await Promise.all(batch.map(async pm => {
+      try {
+        const statCol = PROP_STAT_COL[pm.propKey];
+        const playerId = await getPlayerId(pm.player);
+        if (!playerId) return;
+        const logData = await fetchNBAPlayerGameLog(playerId, workerUrl);
+        if (!logData) return;
+        const colIdx = logData.headers.indexOf(statCol);
+        if (colIdx < 0) return;
+        const vals = logData.rows.map(r => parseFloat(r[colIdx]) || 0);
+        if (vals.length < MIN_GAMES) return;
+
+        for (const direction of ['OVER', 'UNDER']) {
+          const stats = calcHitRate(vals, pm.line, direction, 20);
+          if (!stats || stats.rate < MIN_RATE || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
+          const odds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+          edgePlays.push({
+            player: pm.player,
+            prop: `${pm.propKey.replace(/_/g, ' ')} ${direction === 'OVER' ? 'O' : 'U'}${pm.line}`,
+            direction, line: pm.line, rate: stats.rate,
+            avg: stats.avg, edge: stats.edge,
+            games: stats.games, streak: stats.streak,
+            odds: odds || -110,
+            team: pm.team, opp: pm.opp,
+            gameTime: pm.gameTime,
+          });
+        }
+      } catch(e) { /* skip */ }
+    }));
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  if (!edgePlays.length) return { plays: 0, reason: `no plays cleared ${MIN_RATE}%+ rate + ${MIN_EDGE}+ edge` };
+
+  // Sort by rate desc, then edge desc
+  edgePlays.sort((a, b) => b.rate - a.rate || b.edge - a.edge);
+
+  // Send ntfy
+  const lines = [`🏀 NBA Props Edge — ${todayET}`, `${edgePlays.length} plays cleared ${MIN_RATE}%+ / ${MIN_EDGE}+ edge\n`];
+  for (const p of edgePlays.slice(0, 10)) {
+    const t = p.gameTime ? new Date(p.gameTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+    const streakNote = p.streak >= 3 ? ` 🔥${p.streak}` : '';
+    lines.push(`${p.player} — ${p.prop}`);
+    lines.push(`  ${p.rate}% (${p.avg} avg, +${p.edge} edge)${streakNote} ${t}`);
+  }
+
+  await sendAlert({
+    title: `🏀 ${edgePlays.length} NBA Prop Edges — ${todayET}`,
+    body: lines.join('\n'),
+    tags: 'basketball,fire',
+    priority: edgePlays.length >= 5 ? 'high' : 'default',
+  });
+
+  return { plays: edgePlays.length, topPlay: edgePlays[0]?.player };
+}
+
 // ── AUTO GRADE: grade yesterday's predictions and send ntfy results digest ──
 async function runAutoGrade(env) {
   const now = new Date();
@@ -1130,6 +1330,28 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  // ── AUTO PROPS TRIGGER (manual test) ──
+  if (url.pathname === '/props/auto-run' && request.method === 'POST') {
+    try {
+      const result = await runAutoProps(env);
+      return new Response(JSON.stringify({ ok: true, ...result }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── CONFIG: store Odds API key ──
+  if (url.pathname === '/config/odds-api-key' && request.method === 'POST') {
+    try {
+      const body = await request.json();
+      if (!body.key) return new Response(JSON.stringify({ ok: false, error: 'missing key' }), { status: 400, headers: cors });
+      await env.LINE_MONITOR_KV.put('config:odds_api_key', body.key);
+      return new Response(JSON.stringify({ ok: true, saved: true }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
   // ── AUTO GRADE TRIGGER (manual test) ──
   if (url.pathname === '/sim/auto-grade' && request.method === 'POST') {
     try {
@@ -1150,7 +1372,8 @@ export default {
     // 0 14 * * *  = 9am ET (UTC-5 in winter, UTC-4 in summer — use 13-14)
     // 0 5  * * *  = midnight ET
     if (cron === '0 14 * * *' || cron === '0 13 * * *') {
-      ctx.waitUntil(runAutoSim(env));
+      // Run sim + props in parallel every morning
+      ctx.waitUntil(Promise.all([runAutoSim(env), runAutoProps(env)]));
     } else if (cron === '0 5 * * *') {
       ctx.waitUntil(runAutoGrade(env));
     } else {
