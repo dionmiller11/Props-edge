@@ -728,7 +728,7 @@ async function runAutoProps(env) {
   const todayET = etNow.toISOString().split('T')[0];
 
   const MIN_RATE = 65;
-  const MIN_EDGE = 2.0;
+  const MIN_EDGE = 1.5;
   const MIN_GAMES = 8;
   const edgePlays = [];
 
@@ -1451,6 +1451,33 @@ if (url.pathname.startsWith('/moneypuck/')) {
       return new Response(JSON.stringify({ ok: true, ...result }), { headers: cors });
     } catch(e) {
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── PROPS DEBUG: show raw scan results before filtering ──
+  if (url.pathname === '/props/debug' && request.method === 'POST') {
+    const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
+    if (!oddsApiKey) return new Response(JSON.stringify({ error: 'no key' }), { headers: cors });
+    const etOffset = -4;
+    const etNow = new Date(Date.now() + etOffset * 3600000);
+    const todayET = etNow.toISOString().split('T')[0];
+    // Just fetch NBA events + one event's props to confirm pipeline works
+    try {
+      const evRes = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+      const events = await evRes.json();
+      const todayEvents = events.filter(ev => {
+        const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
+        return evET.toISOString().split('T')[0] === todayET;
+      });
+      if (!todayEvents.length) return new Response(JSON.stringify({ todayET, events: events.length, todayEvents: 0 }), { headers: cors });
+      // Fetch props for first event
+      const ev = todayEvents[0];
+      const prRes = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/basketball_nba/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=player_points&oddsFormat=american`, {}, 8000);
+      const prData = await prRes.json();
+      const sample = (prData.bookmakers?.[0]?.markets?.[0]?.outcomes || []).slice(0, 5);
+      return new Response(JSON.stringify({ todayET, totalEvents: events.length, todayEvents: todayEvents.length, firstGame: `${ev.away_team} @ ${ev.home_team}`, sampleOutcomes: sample }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { headers: cors });
     }
   }
 
