@@ -659,34 +659,18 @@ btn.disabled=false; btn.textContent='⚡ RUN SCAN';
 }
 // ── LINEMATE ODDS ──
 const LM_PROVIDERS = 'betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LM_MLB_URL = 'https://api.linemate.io/api/mlb/v1/trends/straights?preferredProviders='+LM_PROVIDERS+'&lineTypes=MAIN&trendTypes=PLAYER&limit=200';
 async function fetchLinemateOdds(){
-const token = getStored('lmToken');
-if(!token) return {};
 try {
-const res = await fetch(LM_MLB_URL, {headers:{'Authorization':'Bearer '+token}});
+const res = await fetch('https://line-monitor.dion-miller11.workers.dev/props/mlb');
 if(!res.ok) return {};
-const data = await res.json();
+const d = await res.json();
+if(!d.ok) return {};
 const odds = {};
-for(const item of data){
-try {
-const name = (item.player?.fullName||'').toLowerCase();
-if(!name) continue;
-const books = item.market?.books||{};
-const rawMkt = (item.market?.name||'').toLowerCase();
+for(const p of (d.props||[])){
+const name = p.player.toLowerCase();
+const rawMkt = p.market.toLowerCase();
 if(!odds[name]) odds[name] = {};
-let bestLine=null, bestOver=null, bestUnder=null, bookCount=0;
-for(const bk of Object.keys(books)){
-const b = books[bk];
-const line = b?.over?.current?.value;
-const oo = b?.over?.current?.odds?.american;
-const uo = b?.under?.current?.odds?.american;
-if(line){ if(!bestLine)bestLine=line; bookCount++; }
-if(oo&&(!bestOver||Math.abs(oo)<Math.abs(bestOver)))bestOver=oo;
-if(uo&&(!bestUnder||Math.abs(uo)<Math.abs(bestUnder)))bestUnder=uo;
-}
-if(bestLine) odds[name][rawMkt]={line:bestLine,over:bestOver,under:bestUnder,books:bookCount};
-} catch(e){}
+odds[name][rawMkt] = {line: p.line, over: p.overOdds, under: p.underOdds, books: 1};
 }
 return odds;
 } catch(e){ return {}; }

@@ -1683,19 +1683,11 @@ if (url.pathname.startsWith('/moneypuck/')) {
   if (url.pathname === '/linemate/props' && request.method === 'GET') {
     try {
       const sport = url.searchParams.get('sport') || 'nba';
-      const refreshToken = await env.LINE_MONITOR_KV.get('linemate:refreshToken');
-      if (!refreshToken) return new Response(JSON.stringify({ ok: false, error: 'no refresh token stored' }), { headers: cors });
-      const r = await fetch('https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPvlAWRSI71W7GlE5KzKmCpNoSnV-c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'https://linemate.io/' },
-        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`
-      });
-      const d = await r.json();
-      if (d.error) return new Response(JSON.stringify({ ok: false, error: d.error.message }), { headers: cors });
-      if (d.refresh_token) await env.LINE_MONITOR_KV.put('linemate:refreshToken', d.refresh_token);
-      const token = d.id_token;
+      const token = await getLmAccessToken(env);
+      if (!token) return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
       const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
+        'Authorization': `Bearer ${token}`,
         'Origin': 'https://linemate.io',
         'Referer': 'https://linemate.io/',
         'linemate-client-country': 'US',
@@ -1706,6 +1698,62 @@ if (url.pathname.startsWith('/moneypuck/')) {
       if (!propsRes.ok) return new Response(JSON.stringify({ ok: false, error: `Linemate ${propsRes.status}` }), { headers: cors });
       const props = await propsRes.json();
       return new Response(JSON.stringify({ ok: true, data: props }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── NORMALIZED PROPS ENDPOINTS (for props pages) ──
+  // GET /props/nba, /props/nhl, /props/mlb
+  // Returns: { ok, props: [{player, market, line, overOdds, underOdds, game, gameTime}] }
+  const propsMatch = url.pathname.match(/^\/props\/(nba|nhl|mlb|wnba|nfl)$/);
+  if (propsMatch && request.method === 'GET') {
+    try {
+      const sport = propsMatch[1];
+      const token = await getLmAccessToken(env);
+      if (!token) return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
+      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200`;
+      const propsRes = await fetchWithTimeout(lmUrl, { headers: {
+        'Authorization': `Bearer ${token}`,
+        'Origin': 'https://linemate.io',
+        'Referer': 'https://linemate.io/',
+        'linemate-client-country': 'US',
+        'linemate-client-locale': 'en',
+        'linemate-client-platform': 'web',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0',
+      } }, 10000);
+      if (!propsRes.ok) return new Response(JSON.stringify({ ok: false, error: `Linemate ${propsRes.status}` }), { headers: cors });
+      const raw = await propsRes.json();
+      const items = Array.isArray(raw) ? raw : (raw.data || raw.trends || raw.items || []);
+      const props = [];
+      for (const item of items) {
+        const player = item.player?.fullName || item.playerName || '';
+        const market = item.market?.name || item.marketName || '';
+        const gameInfo = item.game || item.event || {};
+        const game = gameInfo.awayTeam && gameInfo.homeTeam
+          ? `${gameInfo.awayTeam} @ ${gameInfo.homeTeam}`
+          : (gameInfo.name || gameInfo.description || '');
+        const gameTime = gameInfo.startTime || gameInfo.gameTime || '';
+        const books = item.market?.books || item.books || {};
+        // Pick best available book for line/odds
+        let line = null, overOdds = null, underOdds = null;
+        const bookKeys = Object.keys(books);
+        if (bookKeys.length) {
+          const bk = books[bookKeys[0]];
+          line = bk?.over?.current?.value ?? bk?.line ?? null;
+          overOdds = bk?.over?.current?.odds ?? bk?.overOdds ?? null;
+          underOdds = bk?.under?.current?.odds ?? bk?.underOdds ?? null;
+        }
+        // Also check consensus/average line
+        if (line === null && item.market?.consensus) {
+          line = item.market.consensus.over?.value ?? item.market.consensus.line ?? null;
+          overOdds = item.market.consensus.over?.odds ?? null;
+          underOdds = item.market.consensus.under?.odds ?? null;
+        }
+        if (!player || !market || line === null) continue;
+        props.push({ player, market, line, overOdds, underOdds, game, gameTime });
+      }
+      return new Response(JSON.stringify({ ok: true, sport: sport.toUpperCase(), count: props.length, props }), { headers: cors });
     } catch(e) {
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
     }

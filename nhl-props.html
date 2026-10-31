@@ -101,9 +101,9 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 </header>
 <div class="api-banner">
   <div class="api-row" style="opacity:.4;pointer-events:none"><span style="white-space:nowrap;font-size:11px">🔑 Linemate:</span><input type="password" id="lmToken" placeholder="(deprecated — not used)" disabled><span class="api-status missing" id="lmStatus" style="display:none">NOT SET</span></div>
-  <div class="api-row"><span style="white-space:nowrap;font-size:11px">📡 Odds API:</span><input type="password" id="oddsApiKey" placeholder="the-odds-api.com key…" oninput="saveKey('oddsApiKey',this.value)"><span class="api-status missing" id="oddsStatus">NOT SET</span></div>
+  <div class="api-row" style="opacity:.5;pointer-events:none"><span style="white-space:nowrap;font-size:11px">📡 Lines:</span><input placeholder="Linemate (auto via worker)" disabled><span class="api-status connected" id="oddsStatus">AUTO</span></div>
 </div>
-<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;flex-shrink:0"></span>SELF-CALC MODE — hit rates from NHL.com game logs · lines + odds from The Odds API</div>
+<div class="data-banner"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;flex-shrink:0"></span>SELF-CALC MODE — hit rates from NHL.com game logs · lines from Linemate (20+ books)</div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('all')">🏒 ALL</button>
   <button class="tab" onclick="switchTab('goals')">🥅 GOALS</button>
@@ -426,77 +426,35 @@ async function runScan(){
   setStatus('running','📡 Fetching NHL props…');setLoadingRow();
   await fetchMoneyPuck();
 
-  const apiKey = getStored('oddsApiKey');
-  if (!apiKey) {
-    hideProgress();
-    showError('Add your Odds API key above — get a free key at the-odds-api.com');
-    setStatus('error','❌ No Odds API key — add it above');
-    btn.disabled=false; btn.textContent='⚡ RUN SCAN';
-    return;
-  }
-
   try {
-    setProgress(10, 'Fetching today\'s NHL games from Odds API…');
-    const eventsUrl = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events?apiKey=${apiKey}&dateFormat=iso`;
-    const evRes = await fetch(eventsUrl);
-    if (!evRes.ok) throw new Error('Odds API NHL events error: ' + evRes.status);
-    const events = await evRes.json();
+    setProgress(10, 'Fetching today\'s NHL props from Linemate…');
+    const lmRes = await fetch('https://line-monitor.dion-miller11.workers.dev/props/nhl');
+    if (!lmRes.ok) throw new Error('Props worker error: ' + lmRes.status);
+    const lmData = await lmRes.json();
+    if (!lmData.ok) throw new Error(lmData.error || 'NHL props fetch failed');
+    const lmProps = lmData.props || [];
 
-    const todayStr2 = new Date().toISOString().split('T')[0];
-    const todayEvents = events.filter(ev => (ev.commence_time || '').startsWith(todayStr2));
-    const useEvents = todayEvents.length ? todayEvents : events.slice(0, 6);
-
-    if (!useEvents.length) {
-      hideProgress();
-      setStatus('done','⚠️ No NHL games found today');
-      btn.disabled=false; btn.textContent='⚡ RUN SCAN'; return;
-    }
-
-    setProgress(20, `Fetching prop lines for ${useEvents.length} NHL games…`);
-    const eventProps = {};
-    const BATCH = 3;
-    for (let i = 0; i < useEvents.length; i += BATCH) {
-      const batch = useEvents.slice(i, i + BATCH);
-      await Promise.all(batch.map(async ev => {
-        try {
-          const url = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events/${ev.id}/odds?apiKey=${apiKey}&regions=us&markets=${NHL_ODDS_MARKETS}&oddsFormat=american&dateFormat=iso`;
-          const res = await fetch(url);
-          if (!res.ok) return;
-          eventProps[ev.id] = {event: ev, odds: await res.json()};
-        } catch(e) {}
-      }));
-      if (i + BATCH < useEvents.length) await new Promise(r => setTimeout(r, 300));
-    }
-
-    setProgress(40, 'Parsing NHL prop lines…');
+    setProgress(30, 'Parsing NHL prop lines…');
+    const LM_TO_NHL = {
+      'Goals': 'goals', 'Shots on Goal': 'shotsOnGoal', 'Shots On Goal': 'shotsOnGoal',
+      'Blocked Shots': 'blockedShots', 'Hits': 'hits', 'Saves': 'saves',
+    };
     const propMap = {};
-    for (const evId of Object.keys(eventProps)) {
-      const {event: ev, odds: evOdds} = eventProps[evId];
-      if (!evOdds?.bookmakers) continue;
-      const gameTime = ev.commence_time ? new Date(ev.commence_time).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
-      const homeTeam = ev.home_team || '', awayTeam = ev.away_team || '';
-      for (const bk of (evOdds.bookmakers || [])) {
-        for (const market of (bk.markets || [])) {
-          const propKey = NHL_MARKET_MAP[market.key];
-          if (!propKey) continue;
-          for (const outcome of (market.outcomes || [])) {
-            const playerName = outcome.description || outcome.name;
-            if (!playerName) continue;
-            const side = (outcome.name || '').toLowerCase();
-            const line = parseFloat(outcome.point) || 0;
-            if (!line) continue;
-            const odds = parseInt(outcome.price) || -110;
-            const mapKey = playerName + '|' + propKey;
-            if (!propMap[mapKey]) {
-              propMap[mapKey] = {player: playerName, propKey, line, overOdds: null, underOdds: null,
-                overBookCount: 0, underBookCount: 0, team: awayTeam, opposingTeam: homeTeam, gameTime};
-            }
-            const pm = propMap[mapKey];
-            if (side === 'over') { pm.overBookCount++; if (pm.overOdds===null||Math.abs(odds)<Math.abs(pm.overOdds)) pm.overOdds=odds; }
-            else { pm.underBookCount++; if (pm.underOdds===null||Math.abs(odds)<Math.abs(pm.underOdds)) pm.underOdds=odds; }
-            pm.line = line;
-          }
-        }
+    for (const p of lmProps) {
+      const propKey = LM_TO_NHL[p.market];
+      if (!propKey) continue;
+      const gameParts = (p.game || '').split('@');
+      const awayTeam = gameParts[0]?.trim() || '';
+      const homeTeam = gameParts[1]?.trim() || '';
+      const gameTime = p.gameTime ? new Date(p.gameTime).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+      const mapKey = p.player + '|' + propKey;
+      if (!propMap[mapKey]) {
+        propMap[mapKey] = {
+          player: p.player, propKey, line: p.line,
+          overOdds: p.overOdds ?? -110, underOdds: p.underOdds ?? -110,
+          overBookCount: 1, underBookCount: 1,
+          team: awayTeam, opposingTeam: homeTeam, gameTime,
+        };
       }
     }
 
