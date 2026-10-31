@@ -1226,10 +1226,12 @@ function renderSimWithData(preds){
       p.spread > 0 ? `${p.away} -${p.spread}` : `${p.home} ${p.spread}`
     ):`ML`;
     const typeColor = p.betType==='total'?'var(--accent)':p.betType==='spread'?'var(--gold)':'var(--purple)';
+    const scoreInline = p.homeScore!=null ? `<div style="font-size:10px;color:var(--accent2);font-family:var(--font);margin-top:2px">${esc(p.away)} ${p.awayScore}–${p.homeScore} ${esc(p.home)}</div>` : '';
     return`<tr>
       <td style="min-width:110px;max-width:140px">
         <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.away)} @ ${esc(p.home)}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:2px"><span style="color:${typeColor};font-weight:700">${esc(p.betType.toUpperCase())}</span> · ${esc(p.sport)}</div>
+        ${scoreInline}
       </td>
       <td style="white-space:nowrap">
         <div style="font-size:11px;color:var(--muted)">${esc(lineStr)}</div>
@@ -1563,10 +1565,12 @@ async function renderSim(){
           : `${p.home} ${p.spread}`    // home is fav (spread already negative)
       ):`ML`;
       const typeColor = p.betType==='total'?'var(--accent)':p.betType==='spread'?'var(--gold)':'var(--purple)';
+      const scoreInline2 = p.homeScore!=null ? `<div style="font-size:10px;color:var(--accent2);font-family:var(--font);margin-top:2px">${esc(p.away)} ${p.awayScore}–${p.homeScore} ${esc(p.home)}</div>` : '';
       return`<tr>
         <td style="min-width:110px;max-width:140px">
           <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.away)} @ ${esc(p.home)}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px"><span style="color:${typeColor};font-weight:700">${esc(p.betType.toUpperCase())}</span> · ${esc(p.sport)}</div>
+          ${scoreInline2}
         </td>
         <td style="white-space:nowrap">
           <div style="font-size:11px;color:var(--muted)">${esc(lineStr)}</div>
