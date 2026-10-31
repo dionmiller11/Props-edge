@@ -589,6 +589,14 @@ const SPORT_PROP_CONFIG = {
       pitcher_strikeouts:'strikeOuts', pitcher_outs:'outs', pitcher_hits_allowed:'hits',
     },
   },
+  NCAAFB: {
+    oddsKey: 'americanfootball_ncaaf',
+    markets: 'player_pass_yds,player_rush_yds,player_reception_yds,player_receptions,player_pass_tds,player_rush_reception_yds',
+    marketMap: {
+      player_pass_yds:'passYds', player_rush_yds:'rushYds', player_reception_yds:'recYds',
+      player_receptions:'receptions', player_pass_tds:'passTds', player_rush_reception_yds:'rushRecYds',
+    },
+  },
 };
 
 // Legacy NBA-only references kept for compat
@@ -598,81 +606,79 @@ const PROP_STAT_COL = {
   blocks: 'BLK', steals: 'STL',
 };
 
-// ── NBA via cdn.nba.com box scores (public CDN, no auth, no bot block) ──
-// Strategy: fetch recent game IDs from schedule, then box score per game, extract player stats
+// ── NBA via balldontlie (player ID lookup, free) + pbpstats (game log, free+no auth) ──
+// balldontlie /players?search=<name> → NBA player ID (same ID system as pbpstats)
+// pbpstats get-game-logs/nba?EntityId=<id> → per-game box score stats
+// Player ID cached in KV per player name.
 
-async function fetchNBARecentGameIds(nGames = 20) {
+const _nbaStatCache = {}; // name → games[], within one invocation
+const _nbaIdCache = {};   // name → playerId, within one invocation
+
+async function fetchNBAPlayerId(playerName, env) {
+  const key = playerName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  if (_nbaIdCache[key]) return _nbaIdCache[key];
+
+  // Check KV cache (30-day TTL — player IDs don't change)
+  const kvKey = `cache:nba_pid:${key.replace(/ /g, '_')}`;
   try {
-    // NBA CDN schedule for current season
-    const url = 'https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json';
-    const res = await fetchWithTimeout(url, {}, 12000);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const gameDates = data?.leagueSchedule?.gameDates || [];
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '/');
-    const pastGames = [];
-    for (const gd of gameDates) {
-      if (gd.gameDate > today) continue;
-      for (const g of gd.games || []) {
-        if (g.gameStatus >= 3) pastGames.push(g.gameId); // status 3 = final
-      }
-    }
-    return pastGames.slice(-nGames);
-  } catch(e) { return []; }
-}
+    const cached = await env.LINE_MONITOR_KV.get(kvKey);
+    if (cached) { _nbaIdCache[key] = cached; return cached; }
+  } catch(e) {}
 
-// Cache: player name → array of game stat objects
-const _nbaStatCache = {};
+  // Fetch from balldontlie (free tier supports /players search)
+  const bdlKey = await env.LINE_MONITOR_KV.get('config:bdl_key');
+  if (!bdlKey) return null;
+  try {
+    const lastName = key.split(' ').pop();
+    const url = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(lastName)}&per_page=10`;
+    const res = await fetchWithTimeout(url, { headers: { Authorization: bdlKey } }, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const players = data?.data || [];
+    // Find best name match
+    let match = players.find(p => {
+      const full = `${p.first_name} ${p.last_name}`.toLowerCase().replace(/[^a-z ]/g, '').trim();
+      return full === key;
+    });
+    if (!match) match = players.find(p => p.last_name?.toLowerCase() === lastName);
+    if (!match && players.length === 1) match = players[0];
+    if (!match) return null;
+    const id = String(match.id);
+    _nbaIdCache[key] = id;
+    await env.LINE_MONITOR_KV.put(kvKey, id, { expirationTtl: 86400 * 30 });
+    return id;
+  } catch(e) { return null; }
+}
 
 async function fetchNBAPlayerGameLog(playerName, env) {
   const key = playerName.toLowerCase().replace(/[^a-z ]/g, '').trim();
   if (_nbaStatCache[key]) return _nbaStatCache[key];
+
+  const playerId = await fetchNBAPlayerId(playerName, env);
+  if (!playerId) return null;
+
   try {
-    const gameIds = await fetchNBARecentGameIds(20);
-    if (!gameIds.length) return null;
-    const games = [];
-    // Fetch box scores in parallel batches of 5
-    for (let i = 0; i < gameIds.length && games.length < 20; i += 5) {
-      const batch = gameIds.slice(i, i + 5);
-      const results = await Promise.all(batch.map(async gid => {
-        try {
-          const url = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gid}.json`;
-          const r = await fetchWithTimeout(url, {}, 6000);
-          if (!r.ok) return null;
-          return await r.json();
-        } catch(e) { return null; }
-      }));
-      for (const bs of results) {
-        if (!bs) continue;
-        const allPlayers = [
-          ...(bs?.game?.homeTeam?.players || []),
-          ...(bs?.game?.awayTeam?.players || []),
-        ];
-        const parts = key.split(' ');
-        const last = parts[parts.length - 1];
-        for (const p of allPlayers) {
-          const pName = `${p.firstName} ${p.familyName}`.toLowerCase().replace(/[^a-z ]/g, '').trim();
-          if (pName === key || pName.endsWith(' ' + last)) {
-            const s = p.statistics || {};
-            games.push({
-              pts: s.points || 0,
-              reb: s.reboundsTotal || 0,
-              ast: s.assists || 0,
-              fg3m: s.threePointersMade || 0,
-              blk: s.blocks || 0,
-              stl: s.steals || 0,
-            });
-            break;
-          }
-        }
-      }
-    }
+    const season = '2026-27';
+    const url = `https://api.pbpstats.com/get-game-logs/nba?Season=${encodeURIComponent(season)}&SeasonType=Regular%20Season&EntityId=${playerId}&EntityType=Player`;
+    const res = await fetchWithTimeout(url, {}, 10000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rows = data?.multi_row_table_data || [];
+    if (!rows.length) return null;
+    const games = rows.map(r => ({
+      pts: r.Pts || r.pts || 0,
+      reb: r.Reb || r.reb || 0,
+      ast: r.Ast || r.ast || 0,
+      fg3m: r.Fg3m || r.ThreePm || r.fg3m || 0,
+      blk: r.Blk || r.blk || 0,
+      stl: r.Stl || r.stl || 0,
+    }));
     if (games.length) _nbaStatCache[key] = games;
     return games.length ? games : null;
   } catch(e) { return null; }
 }
 
-async function fetchNBARosterMap(env) { return {}; } // not needed with CDN approach
+async function fetchNBARosterMap(env) { return {}; }
 function lookupNBAPlayerId(rosterMap, playerName) { return playerName; }
 
 function getNBAStatVals(games, propKey) {
@@ -779,85 +785,291 @@ function getMLBStatVals(splits, propKey) {
   return splits.map(fn);
 }
 
+// ── NCAAFB stat fetcher via collegefootballdata.com ──
+// /games/players?year=2026&week=<w>&seasonType=regular&category=<cat> → box scores by week
+// We fetch the last 8 weeks of games for the player's team, collect their lines.
+const _cfbdStatCache = {}; // name → games[], within one invocation
+
+async function fetchCFBDPlayerGameLog(playerName, env) {
+  const key = playerName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  if (_cfbdStatCache[key]) return _cfbdStatCache[key];
+
+  const cfbdKey = await env.LINE_MONITOR_KV.get('config:cfbd_key');
+  if (!cfbdKey) return null;
+
+  const headers = { Authorization: `Bearer ${cfbdKey}` };
+  const year = 2026;
+
+  try {
+    // Fetch season stats to find team + confirm player exists
+    const searchUrl = `https://api.collegefootballdata.com/stats/player/season?year=${year}&seasonType=regular`;
+    const searchRes = await fetchWithTimeout(searchUrl, { headers }, 10000);
+    if (!searchRes.ok) return null;
+    const allStats = await searchRes.json();
+
+    // Find this player (case-insensitive)
+    const playerStats = allStats.filter(s => s.player && s.player.toLowerCase() === key);
+    if (!playerStats.length) return null;
+    const team = playerStats[0].team;
+
+    // Fetch per-game stats for all categories for this team
+    const categories = ['passing', 'rushing', 'receiving'];
+    const gamesByWeek = {};
+
+    for (const cat of categories) {
+      // Fetch weeks 1-15
+      for (let week = 1; week <= 15; week++) {
+        const url = `https://api.collegefootballdata.com/games/players?year=${year}&week=${week}&seasonType=regular&team=${encodeURIComponent(team)}&category=${cat}`;
+        try {
+          const res = await fetchWithTimeout(url, { headers }, 8000);
+          if (!res.ok) continue;
+          const games = await res.json();
+          for (const game of games) {
+            const wk = game.week || week;
+            if (!gamesByWeek[wk]) gamesByWeek[wk] = {};
+            for (const teamData of (game.teams || [])) {
+              for (const p of (teamData.categories || [])) {
+                for (const type of (p.types || [])) {
+                  for (const athlete of (type.athletes || [])) {
+                    if (athlete.name && athlete.name.toLowerCase() === key) {
+                      if (!gamesByWeek[wk][type.name]) gamesByWeek[wk][type.name] = {};
+                      gamesByWeek[wk][type.name] = parseFloat(athlete.stat) || 0;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch(e) { continue; }
+        await new Promise(r => setTimeout(r, 80));
+      }
+    }
+
+    const games = Object.values(gamesByWeek).map(g => ({
+      passYds: g['YDS'] || g['passYds'] || 0,   // passing yards
+      rushYds: g['YDS'] || g['rushYds'] || 0,    // rushing yards (same col, different category)
+      recYds:  g['YDS'] || g['recYds'] || 0,     // receiving yards
+      receptions: g['REC'] || g['receptions'] || 0,
+      passTds: g['TD'] || g['passTds'] || 0,
+      rushRecYds: (g['rushYds'] || 0) + (g['recYds'] || 0),
+    }));
+
+    if (games.length) _cfbdStatCache[key] = games;
+    return games.length ? games : null;
+  } catch(e) { return null; }
+}
+
+async function fetchCFBDPlayerGameLogV2(playerName, env) {
+  // Better approach: use /games/players filtered by team, parse athlete stats directly
+  const key = playerName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  if (_cfbdStatCache[key]) return _cfbdStatCache[key];
+
+  const cfbdKey = await env.LINE_MONITOR_KV.get('config:cfbd_key');
+  if (!cfbdKey) return null;
+
+  const headers = { Authorization: `Bearer ${cfbdKey}` };
+  const year = 2026;
+
+  try {
+    // Use player search to find team
+    const pUrl = `https://api.collegefootballdata.com/player/search?searchTerm=${encodeURIComponent(playerName)}&year=${year}`;
+    const pRes = await fetchWithTimeout(pUrl, { headers }, 8000);
+    if (!pRes.ok) return null;
+    const players = await pRes.json();
+    if (!players.length) return null;
+
+    const nameLower = key;
+    const match = players.find(p => p.name && p.name.toLowerCase() === nameLower) || players[0];
+    const team = match.team;
+    const playerId = match.id;
+
+    // Fetch per-game stats by category
+    const statsByWeek = {};
+    const categories = ['passing', 'rushing', 'receiving'];
+
+    for (const cat of categories) {
+      for (let week = 1; week <= 15; week++) {
+        try {
+          const url = `https://api.collegefootballdata.com/games/players?year=${year}&week=${week}&seasonType=regular&team=${encodeURIComponent(team)}&category=${cat}`;
+          const res = await fetchWithTimeout(url, { headers }, 8000);
+          if (!res.ok) continue;
+          const data = await res.json();
+
+          for (const game of data) {
+            const wk = String(game.week || week);
+            if (!statsByWeek[wk]) statsByWeek[wk] = { week: wk };
+            for (const teamData of (game.teams || [])) {
+              for (const catData of (teamData.categories || [])) {
+                for (const typeData of (catData.types || [])) {
+                  for (const athlete of (typeData.athletes || [])) {
+                    if (athlete.name && athlete.name.toLowerCase() === nameLower) {
+                      const statName = `${cat}_${typeData.name}`;
+                      statsByWeek[wk][statName] = parseFloat(athlete.stat) || 0;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch(e) { continue; }
+        await new Promise(r => setTimeout(r, 60));
+      }
+    }
+
+    const games = Object.values(statsByWeek).map(g => ({
+      passYds:    g['passing_YDS'] || 0,
+      rushYds:    g['rushing_YDS'] || 0,
+      recYds:     g['receiving_YDS'] || 0,
+      receptions: g['receiving_REC'] || 0,
+      passTds:    g['passing_TD'] || 0,
+      rushRecYds: (g['rushing_YDS'] || 0) + (g['receiving_YDS'] || 0),
+    }));
+
+    if (games.length) _cfbdStatCache[key] = games;
+    return games.length ? games : null;
+  } catch(e) { return null; }
+}
+
+function getCFBDStatVals(games, propKey) {
+  const colMap = {
+    passYds:    g => g.passYds || 0,
+    rushYds:    g => g.rushYds || 0,
+    recYds:     g => g.recYds || 0,
+    receptions: g => g.receptions || 0,
+    passTds:    g => g.passTds || 0,
+    rushRecYds: g => g.rushRecYds || 0,
+  };
+  const fn = colMap[propKey];
+  if (!fn) return null;
+  return games.map(fn);
+}
+
+// ── GET LINEMATE ACCESS TOKEN (auto-refresh via Firebase) ──
+async function getLmAccessToken(env) {
+  const refreshToken = await env.LINE_MONITOR_KV.get('linemate:refreshToken');
+  if (!refreshToken) return null;
+  try {
+    const r = await fetchWithTimeout(
+      'https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPvlAWRSI71W7GlE5KzKmCpNoSnV-c',
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}` },
+      8000
+    );
+    const d = await r.json();
+    if (!d.id_token) return null;
+    // Store rotated refresh token
+    if (d.refresh_token) await env.LINE_MONITOR_KV.put('linemate:refreshToken', d.refresh_token);
+    return d.id_token;
+  } catch(e) { return null; }
+}
+
+// Linemate market name → propKey mapping (matches stat fetch functions)
+const LM_MARKET_MAP = {
+  // NBA
+  'Points':                    { sport: 'NBA',    propKey: 'points' },
+  'Rebounds':                  { sport: 'NBA',    propKey: 'rebounds' },
+  'Assists':                   { sport: 'NBA',    propKey: 'assists' },
+  'Threes':                    { sport: 'NBA',    propKey: 'threes' },
+  '3-Pointers Made':           { sport: 'NBA',    propKey: 'threes' },
+  'Blocks':                    { sport: 'NBA',    propKey: 'blocks' },
+  'Steals':                    { sport: 'NBA',    propKey: 'steals' },
+  'Pts+Reb+Ast':               { sport: 'NBA',    propKey: 'pra' },
+  'Pts+Reb':                   { sport: 'NBA',    propKey: 'pr' },
+  'Pts+Ast':                   { sport: 'NBA',    propKey: 'pa' },
+  // NHL
+  'Points':                    { sport: 'NHL',    propKey: 'points' },
+  'Goals':                     { sport: 'NHL',    propKey: 'goals' },
+  'Assists':                   { sport: 'NHL',    propKey: 'assists' },
+  'Shots on Goal':             { sport: 'NHL',    propKey: 'shotsOnGoal' },
+  'Shots On Goal':             { sport: 'NHL',    propKey: 'shotsOnGoal' },
+  'Blocked Shots':             { sport: 'NHL',    propKey: 'blockedShots' },
+  // MLB
+  'Hits':                      { sport: 'MLB',    propKey: 'hits' },
+  'Total Bases':               { sport: 'MLB',    propKey: 'totalBases' },
+  'Home Runs':                 { sport: 'MLB',    propKey: 'homeRuns' },
+  'RBIs':                      { sport: 'MLB',    propKey: 'rbi' },
+  'Runs Scored':               { sport: 'MLB',    propKey: 'runs' },
+  'Strikeouts':                { sport: 'MLB',    propKey: 'strikeOuts' },
+};
+
 async function runAutoProps(env) {
-  const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
-  if (!oddsApiKey) return { skipped: true, reason: 'no odds api key' };
-
-  const workerUrl = 'https://line-monitor.dion-miller11.workers.dev';
-
   const etOffset = -4;
   const etNow = new Date(Date.now() + etOffset * 3600000);
   const todayET = etNow.toISOString().split('T')[0];
 
-  const MIN_RATE = 55;
-  const MIN_EDGE = 0.5;
-  const MIN_GAMES = 5;
+  const MIN_RATE = 65;
+  const MIN_EDGE = 1.5;
+  const MIN_GAMES = 8;
   const edgePlays = [];
 
-  // ── Scan each sport ──
-  for (const [sport, cfg] of Object.entries(SPORT_PROP_CONFIG)) {
-    // Fetch events
-    let events = [];
+  // Get Linemate access token
+  const lmToken = await getLmAccessToken(env);
+  if (!lmToken) return { skipped: true, reason: 'no linemate token — store refresh token first' };
+
+  // ── Scan each Linemate sport ──
+  for (const sport of PROP_SPORTS) {
+    const sportLabel = sport.label; // 'NBA', 'NHL', 'MLB', 'WNBA'
+
+    // Fetch prop lines from Linemate
+    let items = [];
     try {
-      const res = await fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+      const res = await fetchWithTimeout(sport.lmUrl, {
+        headers: {
+          'Authorization': `Bearer ${lmToken}`,
+          'Origin': 'https://linemate.io',
+          'Referer': 'https://linemate.io/',
+          'linemate-client-country': 'US',
+          'linemate-client-locale': 'en',
+          'linemate-client-platform': 'web',
+        }
+      }, 10000);
+      if (res.status === 401) {
+        await sendAlert({ title: '🔑 Linemate Token Expired', body: 'Refresh token may have expired. Check /linemate/token endpoint.', tags: 'key,warning', priority: 'high' });
+        return { skipped: true, reason: 'linemate 401' };
+      }
       if (!res.ok) continue;
-      events = await res.json();
+      items = await res.json();
     } catch(e) { continue; }
 
-    const todayEvents = events.filter(ev => {
-      if (!ev.commence_time) return false;
-      const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
-      return evET.toISOString().split('T')[0] === todayET;
-    });
-    if (!todayEvents.length) continue;
+    if (!items.length) continue;
 
-    // Fetch prop lines for each event
+    // Build propMap from Linemate items
     const propMap = {};
-    for (const ev of todayEvents) {
-      try {
-        const res = await fetchWithTimeout(
-          `https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${cfg.markets}&oddsFormat=american&dateFormat=iso`,
-          {}, 8000
-        );
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const bk of (data.bookmakers || [])) {
-          for (const market of (bk.markets || [])) {
-            const propKey = cfg.marketMap[market.key];
-            if (!propKey) continue;
-            for (const outcome of (market.outcomes || [])) {
-              const playerName = outcome.description || outcome.name;
-              if (!playerName) continue;
-              const side = (outcome.name || '').toLowerCase();
-              const line = parseFloat(outcome.point);
-              if (!line) continue;
-              const mapKey = playerName + '|' + propKey;
-              if (!propMap[mapKey]) propMap[mapKey] = {
-                player: playerName, propKey, line, sport,
-                overOdds: null, underOdds: null,
-                team: ev.away_team, opp: ev.home_team, gameTime: ev.commence_time,
-              };
-              const pm = propMap[mapKey];
-              if (side === 'over') { if (pm.overOdds === null) pm.overOdds = parseInt(outcome.price); }
-              else { if (pm.underOdds === null) pm.underOdds = parseInt(outcome.price); }
-            }
-          }
-        }
-      } catch(e) { continue; }
-      await new Promise(r => setTimeout(r, 150));
+    for (const item of items) {
+      const playerName = item.player?.fullName;
+      if (!playerName) continue;
+      const marketName = item.market?.name || '';
+      const books = item.market?.books || {};
+      let line = null;
+      for (const bk of Object.keys(books)) {
+        const v = books[bk]?.over?.current?.value;
+        if (v != null) { line = parseFloat(v); break; }
+      }
+      if (!line) continue;
+
+      // Map market name to propKey — check sport-specific first
+      let propKey = null;
+      // Try exact match for this sport
+      for (const [mName, mapping] of Object.entries(LM_MARKET_MAP)) {
+        if (mName === marketName && mapping.sport === sportLabel) { propKey = mapping.propKey; break; }
+      }
+      // Fallback: any match by name
+      if (!propKey && LM_MARKET_MAP[marketName]) propKey = LM_MARKET_MAP[marketName].propKey;
+      if (!propKey) continue;
+
+      const mapKey = playerName + '|' + propKey;
+      if (!propMap[mapKey]) propMap[mapKey] = {
+        player: playerName, propKey, line,
+        sport: sportLabel,
+        team: item.team?.code || '',
+      };
     }
 
     const propEntries = Object.values(propMap);
     if (!propEntries.length) continue;
 
     // Fetch game logs and compute hit rates
-    const BATCH = sport === 'NBA' ? 5 : 3;
-
-    // For NBA: fetch full roster once, then do fast local lookups
-    let nbaRosterMap = {};
-    if (sport === 'NBA') {
-      nbaRosterMap = await fetchNBARosterMap();
-    }
+    const BATCH = sportLabel === 'NBA' ? 5 : 3;
 
     for (let i = 0; i < propEntries.length; i += BATCH) {
       const batch = propEntries.slice(i, i + BATCH);
@@ -865,20 +1077,18 @@ async function runAutoProps(env) {
         try {
           let vals = null;
 
-          if (sport === 'NBA') {
-            const playerId = lookupNBAPlayerId(nbaRosterMap, pm.player);
-            if (!playerId) return;
-            const games = await fetchNBAPlayerGameLog(playerId);
+          if (pm.sport === 'NBA') {
+            const games = await fetchNBAPlayerGameLog(pm.player, env);
             if (!games || games.length === 0) return;
             vals = getNBAStatVals(games, pm.propKey);
             if (!vals) return;
 
-          } else if (sport === 'NHL') {
+          } else if (pm.sport === 'NHL') {
             const logData = await fetchNHLPlayerLog(pm.player);
             if (!logData) return;
             vals = getNHLStatVals(logData.rows, pm.propKey);
 
-          } else if (sport === 'MLB') {
+          } else if (pm.sport === 'MLB') {
             const logData = await fetchMLBPlayerLog(pm.player);
             if (!logData) return;
             vals = getMLBStatVals(logData.splits, pm.propKey);
@@ -889,16 +1099,14 @@ async function runAutoProps(env) {
           for (const direction of ['OVER', 'UNDER']) {
             const stats = calcHitRate(vals, pm.line, direction, 20);
             if (!stats || stats.rate < MIN_RATE || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
-            const odds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
             edgePlays.push({
-              player: pm.player, sport,
+              player: pm.player, sport: pm.sport,
               prop: `${pm.propKey} ${direction === 'OVER' ? 'O' : 'U'}${pm.line}`,
               direction, line: pm.line, rate: stats.rate,
               avg: stats.avg, edge: stats.edge,
               games: stats.games, streak: stats.streak,
-              odds: odds || -110,
-              team: pm.team, opp: pm.opp,
-              gameTime: pm.gameTime,
+              odds: -110,
+              team: pm.team,
             });
           }
         } catch(e) { /* skip */ }
@@ -913,7 +1121,7 @@ async function runAutoProps(env) {
   edgePlays.sort((a, b) => b.rate - a.rate || b.edge - a.edge);
 
   // Send ntfy — group by sport
-  const SPORT_EMOJI = { NBA: '🏀', NHL: '🏒', MLB: '⚾' };
+  const SPORT_EMOJI = { NBA: '🏀', NHL: '🏒', MLB: '⚾', NCAAFB: '🏈' };
   const byGroup = {};
   for (const p of edgePlays) {
     if (!byGroup[p.sport]) byGroup[p.sport] = [];
@@ -934,7 +1142,7 @@ async function runAutoProps(env) {
   }
 
   await sendAlert({
-    title: `🎯 ${edgePlays.length} Prop Edges (NBA/NHL/MLB) — ${todayET}`,
+    title: `🎯 ${edgePlays.length} Prop Edges (NBA/NHL/NCAAFB) — ${todayET}`,
     body: msgLines.join('\n'),
     tags: 'sports,fire',
     priority: edgePlays.length >= 5 ? 'high' : 'default',
@@ -1515,17 +1723,79 @@ if (url.pathname.startsWith('/moneypuck/')) {
 
   // ── PROPS DEBUG: test NBA stats proxy pipeline step by step ──
   if (url.pathname === '/props/debug' && request.method === 'POST') {
-    const result = { steps: {}, source: 'cdn.nba.com' };
+    const result = { steps: {}, source: 'balldontlie+pbpstats' };
     try {
-      // Step 1: fetch recent game IDs
-      const gameIds = await fetchNBARecentGameIds(10);
-      result.steps.gameIdCount = gameIds.length;
-      result.steps.sampleGameIds = gameIds.slice(0, 3);
-      // Step 2: fetch Harden game log
-      const games = await fetchNBAPlayerGameLog('James Harden');
+      // Step 1: look up player ID via balldontlie
+      const testPlayer = 'Jayson Tatum';
+      const playerId = await fetchNBAPlayerId(testPlayer, env);
+      result.steps.tatumId = playerId || 'not found';
+      // Step 2: fetch game log from pbpstats using that ID
+      const games = await fetchNBAPlayerGameLog(testPlayer, env);
       result.steps.logRows = games?.length || 0;
       if (games?.length) result.steps.sampleGame = games[0];
-      else result.steps.logNote = 'no games found — season may have too few games or CDN format changed';
+      else result.steps.logNote = 'no games found — season too new (pbpstats) or ID mismatch';
+    } catch(e) {
+      result.error = e.message;
+    }
+    return new Response(JSON.stringify(result), { headers: cors });
+  }
+
+  // ── NHL DEBUG: see raw NHL prop scan results ──
+  if (url.pathname === '/props/nhl-debug' && request.method === 'POST') {
+    const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
+    const result = { oddsKeyFound: !!oddsApiKey, steps: {} };
+    try {
+      // Fetch NHL events from odds API
+      const evRes = await fetchWithTimeout(
+        `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+      result.steps.eventsStatus = evRes.status;
+      const events = evRes.ok ? await evRes.json() : [];
+      result.steps.totalEvents = events.length;
+      // Filter to today ET
+      const etOffset = -4;
+      const etNow = new Date(Date.now() + etOffset * 3600000);
+      const todayET = etNow.toISOString().split('T')[0];
+      const todayEvents = events.filter(ev => {
+        if (!ev.commence_time) return false;
+        const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
+        return evET.toISOString().split('T')[0] === todayET;
+      });
+      result.steps.todayEvents = todayEvents.length;
+      result.steps.sampleEvent = todayEvents[0] ? { id: todayEvents[0].id, home: todayEvents[0].home_team, away: todayEvents[0].away_team } : null;
+
+      // Fetch props for first event
+      if (todayEvents.length > 0) {
+        const ev = todayEvents[0];
+        const cfg = SPORT_PROP_CONFIG.NHL;
+        const propRes = await fetchWithTimeout(
+          `https://api.the-odds-api.com/v4/sports/icehockey_nhl/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${cfg.markets}&oddsFormat=american&dateFormat=iso`,
+          {}, 8000);
+        result.steps.propsStatus = propRes.status;
+        if (propRes.ok) {
+          const propData = await propRes.json();
+          const bookmakers = propData.bookmakers || [];
+          result.steps.bookmakers = bookmakers.length;
+          // Count unique player props
+          const players = new Set();
+          for (const bk of bookmakers) {
+            for (const mkt of bk.markets || []) {
+              for (const o of mkt.outcomes || []) {
+                if (o.description) players.add(o.description);
+              }
+            }
+          }
+          result.steps.uniquePlayers = players.size;
+          result.steps.samplePlayers = [...players].slice(0, 5);
+          // Test one player's game log
+          const testPlayer = [...players][0];
+          if (testPlayer) {
+            const logData = await fetchNHLPlayerLog(testPlayer);
+            result.steps.testPlayer = testPlayer;
+            result.steps.testLogRows = logData?.rows?.length || 0;
+            if (logData?.rows?.length) result.steps.sampleLog = logData.rows[0];
+          }
+        }
+      }
     } catch(e) {
       result.error = e.message;
     }
