@@ -951,7 +951,7 @@ async function getLmAccessToken(env) {
   try {
     const r = await fetchWithTimeout(
       'https://securetoken.googleapis.com/v1/token?key=AIzaSyB2FTPvlAWRSI71W7GlE5KzKmCpNoSnV-c',
-      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'https://linemate.io/' },
         body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}` },
       8000
     );
