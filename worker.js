@@ -1,11 +1,13 @@
 // ── LINE MONITOR WORKER v4 ──
-// Game lines via ESPN (free) + Sharp money detection via ActionNetwork (free)
-// Prop lines via Linemate
+// Game lines via Odds API (multi-book consensus) + ESPN fallback
+// Prop lines via Linemate + Odds API player props
+// Sharp money detection via ActionNetwork (free)
 // Alerts via ntfy.sh
 
-const NTFY_CHANNEL = 'dion-sharp-x9m4';
-const NTFY_URL     = `https://ntfy.sh/${NTFY_CHANNEL}`;
-const PROXY        = 'https://sports-proxy.dion-miller11.workers.dev';
+const PUSHOVER_TOKEN = 'azd2cgww8646hw6kwxz2msqm4stjgv';
+const PUSHOVER_USER  = 'uotfgztq2p4kpdeafi6pon442cziqc';
+const PUSHOVER_URL   = 'https://api.pushover.net/1/messages.json';
+const PROXY          = 'https://sports-proxy.dion-miller11.workers.dev';
 
 const DEFAULT_THRESHOLDS = {
   spread:     1.5,
@@ -46,6 +48,7 @@ const GAME_SPORTS = [
   { key: 'nfl',   label: 'NFL',    espn: 'football/nfl',             an: 'nfl'   },
   { key: 'ncaaf', label: 'NCAAFB', espn: 'football/college-football', an: 'ncaaf' },
   { key: 'nba',   label: 'NBA',    espn: 'basketball/nba',            an: 'nba'   },
+  { key: 'ncaab', label: 'NCAAB',  espn: 'basketball/mens-college-basketball', an: null },
   { key: 'wnba',  label: 'WNBA',   espn: 'basketball/wnba',           an: null    },
   { key: 'mlb',   label: 'MLB',    espn: 'baseball/mlb',              an: 'mlb'   },
   { key: 'nhl',   label: 'NHL',    espn: 'hockey/nhl',                an: 'nhl'   },
@@ -62,6 +65,7 @@ const PROP_SPORTS = [
   { key: 'wnba', label: 'WNBA', lmUrl: 'https://api.linemate.io/api/wnba/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200' },
   { key: 'mlb',  label: 'MLB',  lmUrl: 'https://api.linemate.io/api/mlb/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200'  },
   { key: 'nhl',  label: 'NHL',  lmUrl: 'https://api.linemate.io/api/nhl/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200'  },
+  { key: 'ncaab', label: 'NCAAB', lmUrl: 'https://api.linemate.io/api/ncaab/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200' },
 ];
 
 // ── FETCH WITH TIMEOUT ──
@@ -78,15 +82,32 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 5000) {
   }
 }
 
-// ── SEND NTFY ──
+// ── SEND NTFY (with email fallback via Resend) ──
 async function sendAlert(alert) {
+  const message = typeof alert.body === 'string' && alert.body.length > 1024
+    ? alert.body.slice(0, 1024) + '\n…(truncated)'
+    : alert.body;
+
+  // Map priority: 'high' → 1, default → 0
+  const priority = alert.priority === 'high' ? 1 : 0;
+
   try {
-    await fetchWithTimeout(NTFY_URL, {
+    const res = await fetchWithTimeout(PUSHOVER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Title': alert.title, 'Tags': alert.tags || 'bell', 'Priority': alert.priority || 'default' },
-      body: alert.body,
-    }, 4000);
-  } catch(e) { console.error('ntfy failed:', e.message); }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token:   PUSHOVER_TOKEN,
+        user:    PUSHOVER_USER,
+        title:   alert.title,
+        message,
+        priority,
+      }),
+    }, 15000);
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('Pushover error:', res.status, txt);
+    }
+  } catch(e) { console.error('Pushover failed:', e.message); }
 }
 
 // ── FETCH ESPN SCOREBOARD ──
@@ -120,6 +141,90 @@ async function fetchESPNGames(sport) {
     }
     return games;
   } catch(e) { console.error(`ESPN error ${sport.key}:`, e.message); return []; }
+}
+
+// ── ODDS API — MULTI-BOOK CONSENSUS LINES ──
+// Maps our internal sport keys to The Odds API sport keys
+const ODDS_API_SPORT_KEYS = {
+  nfl:   'americanfootball_nfl',
+  ncaaf: 'americanfootball_ncaaf',
+  nba:   'basketball_nba',
+  ncaab: 'basketball_ncaab',
+  nhl:   'icehockey_nhl',
+  mlb:   'baseball_mlb',
+  wnba:  'basketball_wnba',
+};
+
+// Sharp books to average for consensus line (Pinnacle + DraftKings + FanDuel + BetMGM)
+const SHARP_BOOKS = ['pinnacle', 'draftkings', 'fanduel', 'betmgm', 'caesars', 'pointsbet'];
+
+async function fetchOddsAPILines(sportKey, apiKey) {
+  try {
+    const oddsKey = ODDS_API_SPORT_KEYS[sportKey];
+    if (!oddsKey || !apiKey) return {};
+    const url = `https://api.the-odds-api.com/v4/sports/${oddsKey}/odds?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`;
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) {
+      console.error(`OddsAPI ${sportKey} ${res.status}`);
+      return {};
+    }
+    const games = await res.json();
+    const lineMap = {}; // keyed by "AWAY@HOME" normalized
+
+    for (const game of (games || [])) {
+      // Build team abbreviation key — use last word of team name as fallback
+      const homeAbbr = (game.home_team || '').split(' ').pop().toUpperCase().slice(0, 4);
+      const awayAbbr = (game.away_team || '').split(' ').pop().toUpperCase().slice(0, 4);
+      const matchKey = `${awayAbbr}@${homeAbbr}`;
+
+      // Collect spreads, totals, ML across all books (prefer sharp books)
+      const spreads = [], totals = [], mlHome = [], mlAway = [];
+
+      for (const book of (game.bookmakers || [])) {
+        const bookKey = book.key || '';
+        const weight = SHARP_BOOKS.includes(bookKey) ? 2 : 1; // weight sharp books 2x
+        for (const market of (book.markets || [])) {
+          if (market.key === 'spreads') {
+            const homeOut = market.outcomes?.find(o => o.name === game.home_team);
+            const awayOut = market.outcomes?.find(o => o.name === game.away_team);
+            if (homeOut?.point != null) for (let i = 0; i < weight; i++) spreads.push(homeOut.point);
+          }
+          if (market.key === 'totals') {
+            const overOut = market.outcomes?.find(o => o.name === 'Over');
+            if (overOut?.point != null) for (let i = 0; i < weight; i++) totals.push(overOut.point);
+          }
+          if (market.key === 'h2h') {
+            const homeOut = market.outcomes?.find(o => o.name === game.home_team);
+            const awayOut = market.outcomes?.find(o => o.name === game.away_team);
+            if (homeOut?.price != null) for (let i = 0; i < weight; i++) mlHome.push(homeOut.price);
+            if (awayOut?.price != null) for (let i = 0; i < weight; i++) mlAway.push(awayOut.price);
+          }
+        }
+      }
+
+      const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+      const consensusSpread = avg(spreads); // home spread (negative = home fav)
+      const consensusTotal  = avg(totals);
+      const consensusMLHome = avg(mlHome);
+      const consensusMLAway = avg(mlAway);
+
+      lineMap[matchKey] = {
+        spread:   consensusSpread != null ? parseFloat(consensusSpread.toFixed(1)) : null,
+        total:    consensusTotal  != null ? parseFloat(consensusTotal.toFixed(1))  : null,
+        ml_home:  consensusMLHome != null ? Math.round(consensusMLHome)            : null,
+        ml_away:  consensusMLAway != null ? Math.round(consensusMLAway)            : null,
+        bookCount: game.bookmakers?.length || 0,
+        commence: game.commence_time,
+        homeTeam: game.home_team,
+        awayTeam: game.away_team,
+      };
+    }
+    console.log(`OddsAPI ${sportKey}: ${Object.keys(lineMap).length} games`);
+    return lineMap;
+  } catch(e) {
+    console.error(`OddsAPI fetch error ${sportKey}:`, e.message);
+    return {};
+  }
 }
 
 // ── FETCH ACTION NETWORK PUBLIC BETTING % ──
@@ -435,13 +540,22 @@ async function runAutoSim(env) {
     { key: 'mlb',   label: 'MLB',    espnPath: 'baseball/mlb' },
   ];
 
+  // Fetch Odds API key from KV — if present, use multi-book consensus lines
+  const oddsApiKey = await env.LINE_MONITOR_KV.get('odds_api_key');
+
   const allPredictions = [];
   const log = [];
 
   for (const sport of activeSports) {
-    // Fetch today's games
+    // Fetch today's games from ESPN (schedule + team IDs)
     const games = await fetchESPNGames({ key: sport.key, label: sport.label, espn: sport.espnPath.replace('/', '/'), an: null });
     if (!games.length) continue;
+
+    // Overlay Odds API consensus lines if key available (replaces ESPN single-book lines)
+    let oddsLines = {};
+    if (oddsApiKey) {
+      oddsLines = await fetchOddsAPILines(sport.key, oddsApiKey);
+    }
 
     const sportLabel = sport.label;
     const statNames = SCORE_STATS[sportLabel];
@@ -451,6 +565,22 @@ async function runAutoSim(env) {
       try {
         const sportDefault = sportLabel === 'NHL' ? 3.0 : sportLabel === 'MLB' ? 4.5 : sportLabel === 'NBA' ? 112 : 22;
         const defaultTotal = sportLabel === 'NHL' ? 5.5 : sportLabel === 'MLB' ? 8.5 : 44;
+
+        // Try to match game to Odds API consensus lines
+        // Build match key from ESPN team abbrs (same format as lineMap key)
+        const matchKey = `${g.away}@${g.home}`;
+        const oddsGame = oddsLines[matchKey] || null;
+
+        // Use Odds API lines if available, fall back to ESPN
+        if (oddsGame) {
+          if (oddsGame.spread  != null) g.spread  = oddsGame.spread;
+          if (oddsGame.total   != null) g.total   = oddsGame.total;
+          if (oddsGame.ml_home != null) g.ml_home = oddsGame.ml_home;
+          if (oddsGame.ml_away != null) g.ml_away = oddsGame.ml_away;
+          g.lineSource = `OddsAPI(${oddsGame.bookCount}books)`;
+        } else {
+          g.lineSource = 'ESPN';
+        }
 
         // Get team stats via ESPN
         const ids = await fetchTeamIds(sport.espnPath, g.id);
@@ -487,6 +617,7 @@ async function runAutoSim(env) {
             simAwayPct: sim.awaySpreadPct, simHomePct: sim.homeSpreadPct,
             confidence: conf,
             commence: g.commence,
+            lineSource: g.lineSource || 'ESPN',
           });
         }
         // Total prediction
@@ -499,6 +630,7 @@ async function runAutoSim(env) {
             simOverPct: sim.overPct, simUnderPct: sim.underPct,
             confidence: conf,
             commence: g.commence,
+            lineSource: g.lineSource || 'ESPN',
           });
         }
         log.push(`${g.away}@${g.home}: spread=${sim.awaySpreadPct}% away, total O${sim.overPct}%`);
@@ -530,27 +662,45 @@ async function runAutoSim(env) {
   const picks70plus = allPredictions.filter(p => p.confidence >= 70);
 
   if (picks6069.length || picks70plus.length) {
+    const SPORT_EMOJI = { NFL: '🏈', NBA: '🏀', NHL: '🏒', NCAAFB: '🏈', WNBA: '🏀', MLB: '⚾' };
+    const formatPick = p => {
+      const side = p.betType === 'spread'
+        ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+        : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
+      return `  ${p.away}@${p.home} → ${side} ${p.confidence}%`;
+    };
+
     const lines = [`📅 ${today} — Auto-Sim Picks`];
+
     if (picks6069.length) {
       lines.push(`\n🎯 60-69% CONF (${picks6069.length}):`);
-      for (const p of picks6069.slice(0, 8)) {
-        const side = p.betType === 'spread'
-          ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
-          : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
-        lines.push(`  ${p.away}@${p.home} [${p.sport}] → ${side} ${p.confidence}%`);
+      // Group by sport, no cap per sport
+      const by6069 = {};
+      for (const p of picks6069) {
+        if (!by6069[p.sport]) by6069[p.sport] = [];
+        by6069[p.sport].push(p);
+      }
+      for (const [sport, plays] of Object.entries(by6069)) {
+        lines.push(`${SPORT_EMOJI[sport] || '🎯'} ${sport} (${plays.length})`);
+        for (const p of plays) lines.push(formatPick(p));
       }
     }
+
     if (picks70plus.length) {
       lines.push(`\n🔥 70%+ CONF (${picks70plus.length}):`);
-      for (const p of picks70plus.slice(0, 8)) {
-        const side = p.betType === 'spread'
-          ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
-          : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
-        lines.push(`  ${p.away}@${p.home} [${p.sport}] → ${side} ${p.confidence}%`);
+      const by70 = {};
+      for (const p of picks70plus) {
+        if (!by70[p.sport]) by70[p.sport] = [];
+        by70[p.sport].push(p);
+      }
+      for (const [sport, plays] of Object.entries(by70)) {
+        lines.push(`${SPORT_EMOJI[sport] || '🎯'} ${sport} (${plays.length})`);
+        for (const p of plays) lines.push(formatPick(p));
       }
     }
+
     await sendAlert({
-      title: `🎲 Today's Sim Picks — ${picks6069.length} edge plays`,
+      title: `🎲 Today's Sim Picks — ${picks6069.length + picks70plus.length} plays`,
       body: lines.join('\n'),
       tags: 'dice,chart_with_upwards_trend',
       priority: 'default',
@@ -992,13 +1142,104 @@ const LM_MARKET_MAP = {
   'Strikeouts':                { sport: 'MLB',    propKey: 'strikeOuts' },
 };
 
+// ── MYSPARIEDGE +EV OPTIMIZER ──
+async function fetchMSEPlays(env) {
+  try {
+    const cookie = await env.LINE_MONITOR_KV.get('mse_cookie');
+    if (!cookie) return [];
+
+    // Full market list — TD props excluded (ATD/first TD/rush-rec TDs removed)
+    const markets = [
+      'player_field_goals',
+      'player_pass_interceptions','player_passing_points','player_pass_longest_completion',
+      'player_pass_reception','player_pass_rush_yds','player_pass_attempts',
+      'player_completions','player_pass_tds','player_pass_yds',
+      'player_reception_yds','player_rush_reception_yds','player_receptions',
+      'player_rush_attempts','player_rush_yds',
+      'player_points','player_assists','player_rebounds','player_threes',
+      'player_blocks','player_steals','player_pts_rebs_asts',
+      'player_shots_on_goal','player_goals','player_power_play_points',
+    ].join(',');
+
+    const bookmakers = 'draftkings,fanduel,pinnacle,betmgm,novig,fliff,courtside,rebet,prophetx,underdog,prizepicks,pick6,espnbet,betonlineag,betrivers,caesars';
+
+    const url = `https://api.myspariedge.com/api/v1/odds/positive-ev?bookmakers=${bookmakers}&markets=${markets}&limit=50`;
+
+    const res = await fetchWithTimeout(url, {
+      headers: {
+        'Cookie': cookie,
+        'Origin': 'https://www.myspariedge.com',
+        'Referer': 'https://www.myspariedge.com/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      }
+    }, 10000);
+
+    if (!res.ok) {
+      console.error(`MSE API ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    const plays = [];
+
+    for (const play of (data.plays || [])) {
+      const playerName = play.player?.name || play.display?.name || 'Unknown';
+      const marketName = play.market?.name || play.market?.key || '';
+      const label = play.label || '';
+      const sportKey = play.event?.sport_key || '';
+      const eventTitle = play.event?.sport_title || '';
+
+      // Best book = primary_odd
+      const bestBook = play.primary_odd?.bookmaker_name || '';
+      const bestPriceDecimal = play.primary_odd?.price_decimal || null;
+      const bestPriceAmerican = bestPriceDecimal
+        ? (bestPriceDecimal >= 2
+            ? Math.round((bestPriceDecimal - 1) * 100)
+            : Math.round(-100 / (bestPriceDecimal - 1)))
+        : null;
+
+      // Fair odds
+      const fairProb = play.fair_odds?.fair_probability || null;
+      const fairAmerican = play.fair_odds?.fair_odds_american || null;
+
+      // EV% = best price EV vs fair — find it from bookmaker_odds for best book
+      const bestBookOdds = (play.bookmaker_odds || []).find(b => b.bookmaker_key === play.primary_odd?.bookmaker_key);
+      const evPct = bestBookOdds?.ev_percentage != null
+        ? Math.round(bestBookOdds.ev_percentage * 100)
+        : (fairProb && bestPriceDecimal ? Math.round((bestPriceDecimal * fairProb - 1) * 100) : null);
+
+      if (evPct == null || evPct < 5) continue; // only 5%+ EV plays
+
+      plays.push({
+        player: playerName,
+        market: marketName,
+        label,
+        sport: eventTitle || sportKey,
+        bestBook,
+        bestOdds: bestPriceAmerican,
+        fairOdds: fairAmerican != null ? Math.round(fairAmerican) : null,
+        fairProb: fairProb != null ? Math.round(fairProb * 100) : null,
+        evPct,
+      });
+    }
+
+    // Sort by EV% descending
+    plays.sort((a, b) => b.evPct - a.evPct);
+    console.log(`MSE: ${plays.length} +EV plays found`);
+    return plays;
+  } catch(e) {
+    console.error('MSE fetch error:', e.message);
+    return [];
+  }
+}
+
 async function runAutoProps(env) {
   const etOffset = -4;
   const etNow = new Date(Date.now() + etOffset * 3600000);
   const todayET = etNow.toISOString().split('T')[0];
 
-  const MIN_RATE = 65;
-  const MIN_EDGE = 1.5;
+  const MIN_RATE = 60;
+  const MIN_EDGE = 1.0;
   const MIN_GAMES = 8;
   const edgePlays = [];
 
@@ -1115,40 +1356,103 @@ async function runAutoProps(env) {
     }
   } // end sport loop
 
-  if (!edgePlays.length) return { plays: 0, reason: `no plays cleared ${MIN_RATE}%+ rate + ${MIN_EDGE}+ edge` };
+  // Fetch MSE plays early so we can send alert even if edgePlays is empty
+  const msePlaysRaw = await fetchMSEPlays(env);
+  // Filter out longshot TD props — keep plays with reasonable odds and fair probability
+  const msePlays = msePlaysRaw.filter(p =>
+    (p.bestOdds == null || p.bestOdds <= 500) &&
+    (p.fairProb == null || p.fairProb >= 10)
+  );
+  const DFS_BOOKS = ['underdog', 'prizepicks', 'betr', 'pick6'];
+  const dfsPlays = msePlays.filter(p => DFS_BOOKS.includes((p.bestBook || '').toLowerCase()));
+
+  if (!edgePlays.length && !msePlays.length) return { plays: 0, reason: `no plays cleared ${MIN_RATE}%+ rate + ${MIN_EDGE}+ edge` };
 
   // Sort by rate desc, then edge desc
   edgePlays.sort((a, b) => b.rate - a.rate || b.edge - a.edge);
 
-  // Send ntfy — group by sport
-  const SPORT_EMOJI = { NBA: '🏀', NHL: '🏒', MLB: '⚾', NCAAFB: '🏈' };
-  const byGroup = {};
-  for (const p of edgePlays) {
-    if (!byGroup[p.sport]) byGroup[p.sport] = [];
-    byGroup[p.sport].push(p);
-  }
+  const SPORT_EMOJI = { NBA: '🏀', NHL: '🏒', MLB: '⚾', NCAAFB: '🏈', NFL: '🏈' };
+  const highPriority = (edgePlays.length + msePlays.length) >= 5 ? 'high' : 'default';
 
-  const msgLines = [`🎯 Props Edge — ${todayET}`, `${edgePlays.length} plays cleared ${MIN_RATE}%+ / ${MIN_EDGE}+ edge\n`];
-  for (const [sport, plays] of Object.entries(byGroup)) {
-    const emoji = SPORT_EMOJI[sport] || '🎯';
-    msgLines.push(`${emoji} ${sport} (${plays.length})`);
-    for (const p of plays.slice(0, 6)) {
-      const t = p.gameTime ? new Date(p.gameTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
-      const streakNote = p.streak >= 3 ? ` 🔥${p.streak}` : '';
-      msgLines.push(`${p.player} — ${p.prop}`);
-      msgLines.push(`  ${p.rate}% (avg ${p.avg}, +${p.edge} edge)${streakNote} ${t}`);
+  // ── Alert 1: Linemate edges ──
+  if (edgePlays.length) {
+    const byGroup = {};
+    for (const p of edgePlays) {
+      if (!byGroup[p.sport]) byGroup[p.sport] = [];
+      byGroup[p.sport].push(p);
     }
-    msgLines.push('');
+    const msgLines = [`${edgePlays.length} plays cleared ${MIN_RATE}%+ / ${MIN_EDGE}+ edge`];
+    for (const [sport, plays] of Object.entries(byGroup)) {
+      const emoji = SPORT_EMOJI[sport] || '🎯';
+      msgLines.push(`${emoji} ${sport} (${plays.length})`);
+      for (const p of plays) {
+        const t = p.gameTime ? new Date(p.gameTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+        const streakNote = p.streak >= 3 ? ` 🔥${p.streak}` : '';
+        msgLines.push(`${p.player} — ${p.prop}`);
+        msgLines.push(`  ${p.rate}% (avg ${p.avg}, +${p.edge} edge)${streakNote} ${t}`);
+      }
+    }
+    await sendAlert({
+      title: `🎯 Linemate Edges (${edgePlays.length}) — ${todayET}`,
+      body: msgLines.join('\n'),
+      priority: highPriority,
+    });
   }
 
-  await sendAlert({
-    title: `🎯 ${edgePlays.length} Prop Edges (NBA/NHL/NCAAFB) — ${todayET}`,
-    body: msgLines.join('\n'),
-    tags: 'sports,fire',
-    priority: edgePlays.length >= 5 ? 'high' : 'default',
-  });
+  // ── Alert 2: MSE +EV plays ──
+  if (msePlays.length) {
+    const mseByGroup = {};
+    for (const p of msePlays) {
+      const s = p.sport || 'Other';
+      if (!mseByGroup[s]) mseByGroup[s] = [];
+      mseByGroup[s].push(p);
+    }
+    const msgLines = [];
+    for (const [sport, plays] of Object.entries(mseByGroup)) {
+      const emoji = SPORT_EMOJI[sport] || '🎯';
+      msgLines.push(`${emoji} ${sport}`);
+      for (const p of plays) {
+        const oddsStr = p.bestOdds != null ? (p.bestOdds > 0 ? `+${p.bestOdds}` : `${p.bestOdds}`) : '';
+        const fairStr = p.fairOdds != null ? (p.fairOdds > 0 ? `+${p.fairOdds}` : `${p.fairOdds}`) : '';
+        const chanceStr = p.fairProb != null ? ` ${p.fairProb}%` : '';
+        msgLines.push(`${p.player} — ${p.market} ${p.label}`);
+        msgLines.push(`  ${p.evPct}% EV · ${p.bestBook} ${oddsStr} · Fair ${fairStr}${chanceStr}`);
+      }
+    }
+    await sendAlert({
+      title: `💹 MSE +EV (${msePlays.length}) — ${todayET}`,
+      body: msgLines.join('\n'),
+      priority: highPriority,
+    });
+  }
 
-  return { plays: edgePlays.length, topPlay: edgePlays[0]?.player };
+  // ── Alert 3: DFS picks ──
+  if (dfsPlays.length) {
+    const dfsByBook = {};
+    for (const p of dfsPlays) {
+      const book = p.bestBook || 'Other';
+      if (!dfsByBook[book]) dfsByBook[book] = [];
+      dfsByBook[book].push(p);
+    }
+    const msgLines = [];
+    for (const [book, plays] of Object.entries(dfsByBook)) {
+      const bookEmoji = { prizepicks: '🟣', underdog: '🐶', betr: '🔵', pick6: '6️⃣' }[book.toLowerCase()] || '🎯';
+      msgLines.push(`${bookEmoji} ${book}`);
+      for (const p of plays) {
+        const oddsStr = p.bestOdds != null ? (p.bestOdds > 0 ? `+${p.bestOdds}` : `${p.bestOdds}`) : '';
+        const chanceStr = p.fairProb != null ? ` ${p.fairProb}%` : '';
+        msgLines.push(`${p.player} — ${p.market} ${p.label}${chanceStr}`);
+        msgLines.push(`  ${p.evPct}% EV · ${oddsStr}`);
+      }
+    }
+    await sendAlert({
+      title: `🏆 DFS Picks (${dfsPlays.length}) — ${todayET}`,
+      body: msgLines.join('\n'),
+      priority: highPriority,
+    });
+  }
+
+  return { plays: edgePlays.length, msePlays: msePlays.length, dfsPlays: dfsPlays.length, topPlay: edgePlays[0]?.player };
 }
 
 // ── AUTO GRADE: grade yesterday's predictions and send ntfy results digest ──
@@ -1167,7 +1471,7 @@ async function runAutoGrade(env) {
 
     let graded = 0;
     const updated = await Promise.all(data.predictions.map(async p => {
-      if (p.result !== null) return p;
+      if (p.result !== null && p.result !== undefined) return p;
       try {
         const sportPath = { nfl:'football/nfl', ncaafb:'football/college-football', ncaaf:'football/college-football', nba:'basketball/nba', wnba:'basketball/wnba', mlb:'baseball/mlb', nhl:'hockey/nhl' }[(p.sport||'').toLowerCase()] || 'football/nfl';
         const res = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/summary?event=${p.gameId}`, {}, 5000);
@@ -1218,47 +1522,53 @@ async function runAutoGrade(env) {
     results.push({ date: dateStr, graded, predictions: updated });
   }
 
-  // Build results digest — focus on 60-69% bucket for yesterday
+  // Build results digest for yesterday — all buckets
   const yesterdayData = results.find(r => r.date === yesterday);
   if (!yesterdayData) return { graded: 0 };
 
-  const all = yesterdayData.predictions.filter(p => p.result !== null);
-  const bucket6069 = all.filter(p => p.confidence >= 60 && p.confidence <= 69);
-  const wins = bucket6069.filter(p => p.result === 'W').length;
-  const losses = bucket6069.filter(p => p.result === 'L').length;
-  const pushes = bucket6069.filter(p => p.result === 'P').length;
-  const total = wins + losses + pushes;
-  const pct = total > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+  const all = yesterdayData.predictions.filter(p => p.result !== null && p.result !== undefined);
+  const scoreStr = p => (p.awayScore != null && p.homeScore != null) ? ` (${p.awayScore}-${p.homeScore})` : '';
+  const sideStr = p => p.betType === 'spread'
+    ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
+    : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
 
-  if (total > 0) {
+  const buckets = [
+    { label: '70%+',   preds: all.filter(p => p.confidence >= 70) },
+    { label: '60-69%', preds: all.filter(p => p.confidence >= 60 && p.confidence <= 69) },
+  ];
+
+  let totalW = 0, totalL = 0;
+  const bucketResults = [];
+  for (const { label, preds } of buckets) {
+    if (!preds.length) continue;
+    const w = preds.filter(p => p.result === 'W').length;
+    const l = preds.filter(p => p.result === 'L').length;
+    const push = preds.filter(p => p.result === 'P').length;
+    const pct = (w + l) > 0 ? Math.round(w / (w + l) * 100) : 0;
     const emoji = pct >= 60 ? '✅' : pct >= 50 ? '⚠️' : '❌';
-    const lines = [
-      `${emoji} ${yesterday} Results (60-69% bucket)`,
-      `Record: ${wins}-${losses}${pushes ? `-${pushes}` : ''} (${pct}%)`,
-      ``,
-    ];
-    for (const p of bucket6069.filter(p => p.result === 'W').slice(0, 5)) {
-      const side = p.betType === 'spread'
-        ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
-        : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
-      lines.push(`  ✅ ${p.away}@${p.home} → ${side}`);
-    }
-    for (const p of bucket6069.filter(p => p.result === 'L').slice(0, 5)) {
-      const side = p.betType === 'spread'
-        ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
-        : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
-      lines.push(`  ❌ ${p.away}@${p.home} → ${side}`);
-    }
-
-    await sendAlert({
-      title: `📊 Sim Results ${yesterday} — ${wins}-${losses} (${pct}%)`,
-      body: lines.join('\n'),
-      tags: pct >= 60 ? 'white_check_mark' : pct >= 50 ? 'warning' : 'x',
-      priority: pct >= 60 ? 'high' : 'default',
-    });
+    totalW += w; totalL += l;
+    const lines = [];
+    lines.push(`${emoji} ${label}: ${w}-${l}${push ? `-${push}` : ''} (${pct}%)`);
+    for (const p of preds.filter(p => p.result === 'W'))
+      lines.push(`✅ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
+    for (const p of preds.filter(p => p.result === 'L'))
+      lines.push(`❌ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
+    bucketResults.push({ label, w, l, pct, lines });
   }
 
-  return { graded: results.reduce((a, r) => a + r.graded, 0), yesterday: { total, wins, losses, pct } };
+  if (bucketResults.length) {
+    const overallPct = (totalW + totalL) > 0 ? Math.round(totalW / (totalW + totalL) * 100) : 0;
+    // Send one alert per bucket to stay under Pushover 1024-char limit
+    for (const { label, w, l, pct, lines } of bucketResults) {
+      await sendAlert({
+        title: `📊 ${yesterday} ${label} — ${w}-${l} (${pct}%) [${totalW}-${totalL} overall]`,
+        body: lines.join('\n'),
+        priority: overallPct >= 60 ? 'high' : 'default',
+      });
+    }
+  }
+
+  return { graded: results.reduce((a, r) => a + r.graded, 0), yesterday: { total: all.length, wins: totalW, losses: totalL } };
 }
 
 // ── MAIN MONITOR ──
@@ -1416,6 +1726,16 @@ async function handleRequest(request, env) {
     }
     lines.sort((a, b) => new Date(a.commence) - new Date(b.commence));
     return new Response(JSON.stringify({ lines, ts: Date.now() }), { headers: cors });
+  }
+
+  // ── ODDS API KEY CONFIG ──
+  if (url.pathname === '/config/odds-api-key' && request.method === 'POST') {
+    try {
+      const body = await request.json();
+      if (!body.key) return new Response(JSON.stringify({ ok: false, error: 'missing key' }), { headers: cors });
+      await env.LINE_MONITOR_KV.put('odds_api_key', body.key);
+      return new Response(JSON.stringify({ ok: true, message: 'Odds API key saved' }), { headers: cors });
+    } catch(e) { return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors }); }
   }
 
   // ── SIM PREDICTIONS ──
@@ -1706,7 +2026,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
   // ── NORMALIZED PROPS ENDPOINTS (for props pages) ──
   // GET /props/nba, /props/nhl, /props/mlb
   // Returns: { ok, props: [{player, market, line, overOdds, underOdds, game, gameTime}] }
-  const propsMatch = url.pathname.match(/^\/props\/(nba|nhl|mlb|wnba|nfl)$/);
+  const propsMatch = url.pathname.match(/^\/props\/(nba|nhl|mlb|wnba|nfl|ncaab|ncaaf)$/);
   if (propsMatch && request.method === 'GET') {
     try {
       const sport = propsMatch[1];
@@ -1754,6 +2074,27 @@ if (url.pathname.startsWith('/moneypuck/')) {
         props.push({ player, market, line, overOdds, underOdds, game, gameTime });
       }
       return new Response(JSON.stringify({ ok: true, sport: sport.toUpperCase(), count: props.length, props }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
+  // ── NTFY DEBUG: test ntfy send directly ──
+  if (url.pathname === '/debug/ntfy' && request.method === 'POST') {
+    try {
+      const res = await fetchWithTimeout(PUSHOVER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token:   PUSHOVER_TOKEN,
+          user:    PUSHOVER_USER,
+          title:   'Test Alert',
+          message: 'test alert from worker',
+          priority: 0,
+        }),
+      }, 25000);
+      const text = await res.text();
+      return new Response(JSON.stringify({ ok: res.ok, status: res.status, body: text }), { headers: cors });
     } catch(e) {
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
     }
@@ -1904,10 +2245,11 @@ export default {
     const cron = event.cron || '';
     // 0 14 * * *  = 9am ET (UTC-5 in winter, UTC-4 in summer — use 13-14)
     // 0 5  * * *  = midnight ET
-    if (cron === '0 14 * * *' || cron === '0 13 * * *') {
-      // Run sim + props in parallel every morning
+    if (cron === '0 14 * * *' || cron === '0 13 * * *' || cron === '0 17 * * *' || cron === '0 17 * * 2-6' || cron === '0 15 * * 1' || cron === '0 23 * * *') {
+      // Run sim + props in parallel — 10 AM ET + 1 PM ET Mon-Sat + 11 AM ET Sunday + 6 PM ET daily
       ctx.waitUntil(Promise.all([runAutoSim(env), runAutoProps(env)]));
-    } else if (cron === '0 5 * * *') {
+    } else if (cron === '0 5 * * *' || cron === '0 7 * * *') {
+      // Grade at midnight ET (0 5) AND 2 AM ET (0 7) to catch late NFL/NBA finishes
       ctx.waitUntil(runAutoGrade(env));
     } else {
       // Default: line monitor
