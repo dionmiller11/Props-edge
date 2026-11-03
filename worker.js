@@ -1608,7 +1608,42 @@ async function runMonitor(env) {
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
-  if (request.method === 'OPTIONS') return new Response(null, { headers: { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
+  if (request.method === 'OPTIONS') return new Response(null, { headers: { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-MSE-Cookie' } });
+
+  // ── MSE PROXY: forwards props-board request with user's session cookie ──
+  const mseMatch = url.pathname.match(/^\/mse\/(nfl|nba|mlb|nhl|ncaab)\/props$/);
+  if (mseMatch) {
+    const sport = mseMatch[1];
+    const cookie = request.headers.get('X-MSE-Cookie') || '';
+    if (!cookie) {
+      return new Response(JSON.stringify({ ok: false, error: 'Missing X-MSE-Cookie header' }), { status: 400, headers: cors });
+    }
+    // Extract csrftoken from cookie string
+    const csrfMatch = cookie.match(/csrftoken=([^;]+)/);
+    const csrf = csrfMatch ? csrfMatch[1] : '';
+    try {
+      const mseRes = await fetchWithTimeout(
+        `https://api.myspariedge.com/${sport}/props-board`,
+        {
+          headers: {
+            'Cookie': cookie,
+            'X-CSRFToken': csrf,
+            'Referer': `https://www.myspariedge.com/${sport}/props`,
+            'Origin': 'https://www.myspariedge.com',
+            'Accept': 'application/json',
+          }
+        },
+        10000
+      );
+      if (!mseRes.ok) {
+        return new Response(JSON.stringify({ ok: false, error: `MSE returned ${mseRes.status}` }), { status: mseRes.status, headers: cors });
+      }
+      const data = await mseRes.json();
+      return new Response(JSON.stringify({ ok: true, data }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: cors });
+    }
+  }
 
   if (url.pathname === '/monitor/status') {
     const meta  = await env.LINE_MONITOR_KV.get('meta:last_run');

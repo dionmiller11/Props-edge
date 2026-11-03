@@ -234,6 +234,12 @@
     <input type="password" id="oddsApiKey" placeholder="Paste key from the-odds-api.com…" oninput="saveKey('oddsApiKey',this.value)">
     <span class="api-status missing" id="oddsStatus">NOT SET</span>
   </div>
+  <div class="api-row" style="grid-column:1/-1">
+    <span style="white-space:nowrap;font-size:11px">🔮 MSE Cookie:</span>
+    <input type="password" id="mseCookie" placeholder="Paste cookie string from myspariedge.com DevTools (Network tab → any XHR → Request Headers → Cookie)…" oninput="saveKey('mseCookie',this.value)">
+    <span class="api-status missing" id="mseStatus">NOT SET</span>
+    <button class="btn btn-ghost" style="font-size:10px;padding:4px 8px;white-space:nowrap" onclick="runMSEEnrich()">🔮 Load MSE</button>
+  </div>
 </div>
 
 <div class="data-banner">
@@ -384,7 +390,9 @@
         <thead><tr>
           <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
           <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 5</th>
-          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
+          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th>
+          <th class="hide-mobile-sm mse-col" title="MySharpsEdge Projection">🔮 MSE</th>
+          <th>+</th><th>📋</th>
         </tr></thead>
         <tbody id="tableBody"><tr class="loading-row"><td colspan="10">
           <div class="empty"><div class="empty-icon">🏈</div><p>Paste your Linemate token above then hit ⚡ RUN SCAN.</p></div>
@@ -467,12 +475,13 @@ const _urlParams = new URLSearchParams(window.location.search);
 const _urlToken = _urlParams.get('token')||_urlParams.get('lmToken');
 if(_urlToken){ try{localStorage.setItem('lmToken',_urlToken);}catch(e){} }
 
-['lmToken','oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
+['lmToken','oddsApiKey','mseCookie'].forEach(k=>{const v=getStored(k);if(v){const el=document.getElementById(k);if(el)el.value=v;updateStatus(k,true);}});
 
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
 function updateStatus(k,ok){
   if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
   if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
+  if(k==='mseCookie'){const el=document.getElementById('mseStatus');if(el){el.textContent=ok?'READY':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}}
 }
 function switchTab(tab){
   activeTab=tab;
@@ -763,7 +772,7 @@ function renderTable(){
     return(b.rate||0)-(a.rate||0);
   });
 
-  if(!data.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><p>No props found at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the minimum rate or changing filters.'}</p></div></td></tr>`;return;}
+  if(!data.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><p>No props found at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the minimum rate or changing filters.'}</p></div></td></tr>`;return;}
 
   tbody.innerHTML=data.map(p=>{
     const sigData=getSignalForPlay(p,activeSignal)||(p.allSignals?(p.allSignals.find(s=>s.type==='RECENT_FORM')||p.allSignals[0]):null);
@@ -793,6 +802,7 @@ function renderTable(){
       <td class="hide-mobile-sm"><span class="edge-badge ok" style="font-size:9px">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td>
       <td class="hide-mobile-sm">${st}</td>
       <td class="hide-mobile-sm">${(()=>{const edgeVal=calcEdgePct(rate,p.bestOdds);const edgeStr=edgeVal!=null?(edgeVal>0?'+':'')+edgeVal+'%':'';const edgeColor=edgeVal!=null?(edgeVal>=10?'var(--gold)':edgeVal>=5?'var(--accent2)':edgeVal>=0?'var(--accent)':'var(--miss)'):'var(--muted)';const edgeLine=edgeVal!=null?`<div style="font-size:10px;font-weight:700;color:${edgeColor};font-family:var(--font)">${edgeStr} EDGE</div>`:'';if(isConsensus(p)){const cs=consensusStrength(p);return (cs==='sharp'?'<span class="edge-badge consensus" style="background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)">🔥 SHARP</span>':'<span class="edge-badge consensus">⚡ CONSENSUS</span>')+edgeLine;}return '<span class="edge-badge '+ec+'">'+el+'</span>'+edgeLine;})()}</td>
+      <td class="hide-mobile-sm mse-col">${renderMSECell(p)}</td>
       <td style="white-space:nowrap">
         <button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})'>+</button>
         <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,propType:p.propType||"",line:p.line,direction:dir,rate:p.rate,sport:"NFL"})})' title="Add to SGP Builder">🎰</button>
@@ -802,6 +812,85 @@ function renderTable(){
 }
 
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-streak').textContent=q.filter(p=>(p.streak||0)>=2).length;}
+
+// ── MSE INTEGRATION ──
+// mseMap: "PLAYERNAMELOWER|propkey" → { proj, diff, direction, grade, pick }
+let mseMap = {};
+const MSE_MARKET_MAP = {
+  'passing_yards':'passingYards','passing_tds':'passingTouchdowns','interceptions':'interceptions',
+  'rushing_yards':'rushingYards','rushing_tds':'rushingTouchdowns',
+  'receiving_yards':'receivingYards','receptions':'receptions','receiving_tds':'receivingTouchdowns',
+  'kicking_points':'kickingPoints','field_goals_made':'fieldGoalsMade',
+  'pass_attempts':'passAttempts','pass_completions':'passCompletions',
+  'carries':'carries','targets':'targets','fantasy_points':'fantasyPoints',
+};
+function mseMarketToLm(market){return MSE_MARKET_MAP[market]||market.replace(/_([a-z])/g,(_,c)=>c.toUpperCase());}
+
+async function runMSEEnrich(){
+  const cookie = getStored('mseCookie');
+  if(!cookie){showToast('Paste your MSE cookie first');return;}
+  setStatus('running','🔮 Fetching MSE NFL projections…');
+  try {
+    const res = await fetch('https://line-monitor.dion-miller11.workers.dev/mse/nfl/props',{
+      headers:{'X-MSE-Cookie':cookie}
+    });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error||'MSE fetch failed');
+    const model = json.data?.model || json.data || {};
+    const rows = model.rows || json.data?.rows || [];
+    const games = model.games || json.data?.games || {};
+    // Build name map from games (for display) — player names come from playerKey matching
+    // We index by gameKey → teams for context, but match rows to allData by propKey+line
+    mseMap = {};
+    for(const row of rows){
+      const lmKey = mseMarketToLm(row.market||'');
+      // We'll match by line value + propKey — store multiple by propKey+line
+      const mapKey = lmKey+'|'+row.line;
+      if(!mseMap[mapKey]) mseMap[mapKey] = [];
+      mseMap[mapKey].push({
+        proj: row.displayProjection, diff: row.diff,
+        direction: row.direction, pick: row.pick, grade: row.grade,
+        playerKey: row.playerKey, gameKey: row.gameKey
+      });
+    }
+    // Now try to match to allData by propKey + line (closest match)
+    let matched=0;
+    for(const p of allData){
+      const lmKey = p.propKey||'';
+      const lineVal = parseFloat(p.line);
+      const candidates = mseMap[lmKey+'|'+lineVal] || mseMap[lmKey+'|'+(lineVal+0.5)] || mseMap[lmKey+'|'+(lineVal-0.5)] || [];
+      // If only one candidate for this prop+line combo, attach it
+      if(candidates.length===1){
+        p.mseProj=candidates[0].proj;p.mseDiff=candidates[0].diff;
+        p.mseGrade=candidates[0].grade;p.msePick=candidates[0].pick;p.mseDir=candidates[0].direction;
+        matched++;
+      }
+    }
+    document.getElementById('mseStatus').textContent='LOADED';document.getElementById('mseStatus').className='api-status connected';
+    setStatus('done',`✅ MSE loaded — ${rows.length} projections, ${matched} matched to current props`);
+    renderTable();
+  } catch(e){
+    setStatus('error','❌ MSE: '+e.message);
+    showToast('MSE failed: '+e.message);
+  }
+}
+
+function renderMSECell(p){
+  if(p.mseProj==null) return '<span style="color:var(--muted);font-size:10px">—</span>';
+  const grade=p.mseGrade||'';
+  const proj=p.mseProj;
+  const diff=p.mseDiff!=null?(p.mseDiff>0?'+':'')+p.mseDiff.toFixed(1):'';
+  const dir=p.mseDir||p.msePick||'';
+  // Grade color
+  const gc=grade.startsWith('A')?'var(--gold)':grade.startsWith('B')?'var(--accent2)':grade.startsWith('C')?'var(--accent)':'var(--muted)';
+  const dirColor=dir==='over'?'var(--accent2)':'var(--miss)';
+  return `<div style="line-height:1.4">
+    <span style="font-size:12px;font-weight:700;color:var(--text)">${proj}</span>
+    <span style="font-size:10px;color:${dirColor};margin-left:3px">${diff}</span><br>
+    <span style="font-size:10px;font-weight:700;color:${gc};padding:1px 5px;border-radius:3px;background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.15)">${grade}</span>
+    <span style="font-size:9px;color:${dirColor};margin-left:3px;font-weight:700">${dir.toUpperCase()}</span>
+  </div>`;
+}
 
 function toggleParlay(){const p=document.getElementById('parlayPanel');p.classList.toggle('open');document.getElementById('parlayBtn').textContent=p.classList.contains('open')?'🎰 Hide':'🎰 Parlay';}
 function addToParlay(play){if(parlayLegs.find(l=>l.player===play.player&&l.prop===play.prop)){showToast('Already in parlay');return;}if(parlayLegs.length>=10){showToast('Max 10 legs');return;}parlayLegs.push(play);const b=document.getElementById('pb-'+esc(play.player+play.prop));if(b){b.textContent='✓';b.classList.add('added');b.disabled=true;}renderParlay();if(!document.getElementById('parlayPanel').classList.contains('open'))toggleParlay();}
