@@ -35,6 +35,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .sport-chip.mlb.active{background:#00ff88;color:#000;border-color:#00ff88;}
 .sport-chip.ncaafb.active{background:#ffd700;color:#000;border-color:#ffd700;}
 .sport-chip.nhl.active{background:#00e5ff;color:#000;border-color:#00e5ff;}
+.sport-chip.ncaab.active{background:#ff9800;color:#000;border-color:#ff9800;}
 main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .status-bar{font-family:var(--font);font-size:12px;color:var(--muted);margin-bottom:14px;min-height:18px;}
 .status-bar.running{color:var(--accent);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
@@ -50,7 +51,7 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .game-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .game-time{font-family:var(--font);font-size:10px;color:var(--muted);}
 .sport-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.sport-dot.NFL{background:#ff6b35;} .sport-dot.NBA{background:#00d4ff;} .sport-dot.MLB{background:#00ff88;} .sport-dot.NCAAFB{background:#ffd700;} .sport-dot.NHL{background:#00e5ff;}
+.sport-dot.NFL{background:#ff6b35;} .sport-dot.NBA{background:#00d4ff;} .sport-dot.MLB{background:#00ff88;} .sport-dot.NCAAFB{background:#ffd700;} .sport-dot.NHL{background:#00e5ff;} .sport-dot.NCAAB{background:#ff9800;}
 .game-body{padding:12px 14px;}
 .lines-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
 .line-box{background:var(--surface2);border-radius:6px;padding:8px 10px;text-align:center;}
@@ -168,6 +169,7 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
   <button class="sport-chip nba" onclick="toggleSport('NBA',this)">🏀 NBA</button>
   <button class="sport-chip mlb" onclick="toggleSport('MLB',this)">⚾ MLB</button>
   <button class="sport-chip nhl" onclick="toggleSport('NHL',this)">🏒 NHL</button>
+  <button class="sport-chip ncaab" onclick="toggleSport('NCAAB',this)">🏀 NCAAB</button>
 </div>
 <main>
   <div class="status-bar" id="statusBar">Click ⚡ LOAD LINES to fetch today's games</div>
@@ -291,11 +293,12 @@ async function fetchWeatherForGame(homeAbbr, venueName){
   }catch(e){ return null; }
 }
 const ESPN_SPORTS = {
-  NFL:    {path:'football/nfl',           an:'nfl',   color:'#ff6b35'},
-  NCAAFB: {path:'football/college-football', an:'ncaaf', color:'#ffd700'},
-  NBA:    {path:'basketball/nba',         an:'nba',   color:'#00d4ff'},
-  MLB:    {path:'baseball/mlb',           an:'mlb',   color:'#00ff88'},
-  NHL:    {path:'hockey/nhl',             an:'nhl',   color:'#00e5ff'},
+  NFL:    {path:'football/nfl',                          an:'nfl',   color:'#ff6b35'},
+  NCAAFB: {path:'football/college-football',             an:'ncaaf', color:'#ffd700'},
+  NBA:    {path:'basketball/nba',                        an:'nba',   color:'#00d4ff'},
+  NCAAB:  {path:'basketball/mens-college-basketball',    an:null,    color:'#ff9800'},
+  MLB:    {path:'baseball/mlb',                          an:'mlb',   color:'#00ff88'},
+  NHL:    {path:'hockey/nhl',                            an:'nhl',   color:'#00e5ff'},
 };
 
 let allGames = [], activeSports = new Set(['NFL']), activePage = 'lines', parlayLegs = [];
