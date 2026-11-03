@@ -677,44 +677,43 @@ async function runAutoSim(env) {
       const side = p.betType === 'spread'
         ? (p.simAwayPct > 50 ? `${p.away} ATS` : `${p.home} ATS`)
         : (p.simOverPct > 50 ? `OVER ${p.line}` : `UNDER ${p.line}`);
-      return `  ${p.away}@${p.home} → ${side} ${p.confidence}%`;
+      return `${p.away}@${p.home} → ${side} ${p.confidence}%`;
     };
 
-    const lines = [`📅 ${today} — Auto-Sim Picks`];
+    const totalPlays = picks6069.length + picks70plus.length;
 
-    if (picks6069.length) {
-      lines.push(`\n🎯 60-69% CONF (${picks6069.length}):`);
-      // Group by sport, no cap per sport
-      const by6069 = {};
-      for (const p of picks6069) {
-        if (!by6069[p.sport]) by6069[p.sport] = [];
-        by6069[p.sport].push(p);
+    // Send one alert per bucket per sport to stay under 1024-char Pushover limit
+    const sendBucket = async (preds, bucketLabel, bucketEmoji) => {
+      if (!preds.length) return;
+      const bySport = {};
+      for (const p of preds) {
+        if (!bySport[p.sport]) bySport[p.sport] = [];
+        bySport[p.sport].push(p);
       }
-      for (const [sport, plays] of Object.entries(by6069)) {
-        lines.push(`${SPORT_EMOJI[sport] || '🎯'} ${sport} (${plays.length})`);
-        for (const p of plays) lines.push(formatPick(p));
+      for (const [sport, plays] of Object.entries(bySport)) {
+        const em = SPORT_EMOJI[sport] || '🎯';
+        const lines = plays.map(formatPick);
+        await sendAlert({
+          title: `${bucketEmoji} ${today} ${sport} ${bucketLabel} (${plays.length})`,
+          body: lines.join('\n'),
+          priority: 'default',
+        });
       }
-    }
+    };
 
-    if (picks70plus.length) {
-      lines.push(`\n🔥 70%+ CONF (${picks70plus.length}):`);
-      const by70 = {};
-      for (const p of picks70plus) {
-        if (!by70[p.sport]) by70[p.sport] = [];
-        by70[p.sport].push(p);
-      }
-      for (const [sport, plays] of Object.entries(by70)) {
-        lines.push(`${SPORT_EMOJI[sport] || '🎯'} ${sport} (${plays.length})`);
-        for (const p of plays) lines.push(formatPick(p));
-      }
-    }
-
+    // Send summary header first
     await sendAlert({
-      title: `🎲 Today's Sim Picks — ${picks6069.length + picks70plus.length} plays`,
-      body: lines.join('\n'),
-      tags: 'dice,chart_with_upwards_trend',
+      title: `🎲 Today's Sim Picks — ${totalPlays} plays`,
+      body: [
+        picks70plus.length ? `🔥 70%+ CONF: ${picks70plus.length} plays` : '',
+        picks6069.length  ? `🎯 60-69% CONF: ${picks6069.length} plays` : '',
+      ].filter(Boolean).join('\n'),
       priority: 'default',
     });
+
+    // Then one message per sport per bucket
+    await sendBucket(picks70plus, '70%+ CONF', '🔥');
+    await sendBucket(picks6069,  '60-69% CONF', '🎯');
   }
 
   return { saved: added, total: existing.predictions.length, log };
@@ -1563,18 +1562,43 @@ async function runAutoGrade(env) {
       lines.push(`✅ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
     for (const p of preds.filter(p => p.result === 'L'))
       lines.push(`❌ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
-    bucketResults.push({ label, w, l, pct, lines });
+    bucketResults.push({ label, w, l, pct, preds });
   }
 
   if (bucketResults.length) {
     const overallPct = (totalW + totalL) > 0 ? Math.round(totalW / (totalW + totalL) * 100) : 0;
-    // Send one alert per bucket to stay under Pushover 1024-char limit
-    for (const { label, w, l, pct, lines } of bucketResults) {
+    // Send one alert per bucket per sport to stay under Pushover 1024-char limit
+    for (const { label, w, l, pct, preds } of bucketResults) {
+      const bySport = {};
+      for (const p of preds) {
+        if (!bySport[p.sport]) bySport[p.sport] = [];
+        bySport[p.sport].push(p);
+      }
+      // Header message for this bucket
       await sendAlert({
         title: `📊 ${yesterday} ${label} — ${w}-${l} (${pct}%) [${totalW}-${totalL} overall]`,
-        body: lines.join('\n'),
+        body: Object.entries(bySport).map(([s, ps]) => {
+          const sw = ps.filter(p => p.result === 'W').length;
+          const sl = ps.filter(p => p.result === 'L').length;
+          return `${s}: ${sw}-${sl}`;
+        }).join('\n'),
         priority: overallPct >= 60 ? 'high' : 'default',
       });
+      // Detail message per sport
+      for (const [sport, ps] of Object.entries(bySport)) {
+        const lines = [];
+        for (const p of ps.filter(p => p.result === 'W'))
+          lines.push(`✅ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
+        for (const p of ps.filter(p => p.result === 'L'))
+          lines.push(`❌ ${p.away}@${p.home}${scoreStr(p)} → ${sideStr(p)}`);
+        if (lines.length) {
+          await sendAlert({
+            title: `📊 ${yesterday} ${sport} ${label}`,
+            body: lines.join('\n'),
+            priority: overallPct >= 60 ? 'high' : 'default',
+          });
+        }
+      }
     }
   }
 
