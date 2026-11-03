@@ -368,6 +368,15 @@ async function monitorGameLines(env) {
         await env.LINE_MONITOR_KV.put(`opener:${curr.id}`, JSON.stringify({ spread: curr.spread, total: curr.total, ml_home: curr.ml_home, ts: Date.now() }), { expirationTtl: 604800 });
       }
 
+      // CLV closing line snapshot: save when game is 60-90 min away (overwrite each cycle until kickoff)
+      if (curr.spread != null) {
+        const gt = new Date(curr.commence);
+        const minsUntil = (gt - new Date()) / 60000;
+        if (minsUntil >= 0 && minsUntil <= 90) {
+          await env.LINE_MONITOR_KV.put(`clclose:${curr.id}`, JSON.stringify({ spread: curr.spread, total: curr.total, ml_home: curr.ml_home, ts: Date.now() }), { expirationTtl: 86400 });
+        }
+      }
+
       if (prevRaw) {
         const prev = JSON.parse(prevRaw);
         const gameAlerts = detectGameMovement(prev, curr, sport.label, splits);
@@ -1744,15 +1753,18 @@ async function handleRequest(request, env) {
       try {
         const curr = await env.LINE_MONITOR_KV.get(key.name);
         const opener = await env.LINE_MONITOR_KV.get(key.name.replace('game:', 'opener:'));
+        const close = await env.LINE_MONITOR_KV.get(key.name.replace('game:', 'clclose:'));
         if (!curr) continue;
         const c = JSON.parse(curr);
         const o = opener ? JSON.parse(opener) : null;
+        const cl = close ? JSON.parse(close) : null;
         lines.push({
           id: c.id, sport: c.sport,
           away: c.away, home: c.home,
           commence: c.commence,
           current: { spread: c.spread, total: c.total, ml_home: c.ml_home, ml_away: c.ml_away },
           opener: o ? { spread: o.spread, total: o.total, ml_home: o.ml_home } : null,
+          close: cl ? { spread: cl.spread, total: cl.total, ml_home: cl.ml_home, ts: cl.ts } : null,
           spreadMove: o && c.spread != null && o.spread != null ? +(c.spread - o.spread).toFixed(1) : null,
           totalMove: o && c.total != null && o.total != null ? +(c.total - o.total).toFixed(1) : null,
           mlMove: o && c.ml_home != null && o.ml_home != null ? c.ml_home - o.ml_home : null,

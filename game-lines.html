@@ -79,6 +79,14 @@ main{max-width:1140px;margin:0 auto;padding:18px 16px;}
 .pick-btn{font-size:10px;padding:3px 9px;border-radius:4px;cursor:pointer;font-family:var(--font);font-weight:700;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;}
 .pick-btn:hover{border-color:var(--accent);color:var(--accent);}
 .pick-btn.selected{background:var(--accent);color:#000;border-color:var(--accent);}
+/* CLV row */
+.clv-row{display:flex;gap:8px;margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);}
+.clv-item{flex:1;text-align:center;}
+.clv-label{font-size:9px;color:var(--muted);font-family:var(--font);letter-spacing:.08em;margin-bottom:2px;}
+.clv-val{font-size:12px;font-weight:700;font-family:var(--font);}
+.clv-val.beat{color:var(--accent2);}
+.clv-val.lost{color:var(--miss);}
+.clv-val.push{color:var(--muted);}
 /* Weather strip on game cards */
 .wx-strip{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--surface2);border-radius:6px;margin-bottom:8px;font-family:var(--font);font-size:11px;}
 .wx-icon{font-size:18px;flex-shrink:0;}
@@ -824,9 +832,9 @@ async function loadAll(){
         });
       }
     }
-    if(linesRes.ok){ const d=await linesRes.json(); 
-      (d.lines||[]).forEach(l=>{ 
-        openerData[l.id]={opener:l.opener,spreadMove:l.spreadMove,totalMove:l.totalMove};
+    if(linesRes.ok){ const d=await linesRes.json();
+      (d.lines||[]).forEach(l=>{
+        openerData[l.id]={opener:l.opener,close:l.close,spreadMove:l.spreadMove,totalMove:l.totalMove};
         // Use public % from lines endpoint if available
         if(l.publicPct) publicPctData[`${l.away}@${l.home}`.toLowerCase()] = l.publicPct;
       });
@@ -1040,6 +1048,22 @@ function renderLines(){
             <div class="line-val" style="font-size:11px">${mlA}<br>${mlH}</div>
           </div>
         </div>
+        ${(()=>{
+          const cl=od?.close, op=od?.opener;
+          if(!cl||!op) return '';
+          const clvSpread = op.spread!=null&&cl.spread!=null ? +(op.spread-cl.spread).toFixed(1) : null;
+          const clvTotal  = op.total!=null&&cl.total!=null   ? +(op.total-cl.total).toFixed(1)   : null;
+          if(clvSpread==null&&clvTotal==null) return '';
+          const fmt=(v,label)=>{
+            if(v==null) return '';
+            const cls=v>0?'beat':v<0?'lost':'push';
+            const sign=v>0?'+':'';
+            return `<div class="clv-item"><div class="clv-label">${label} CLV</div><div class="clv-val ${cls}">${sign}${v}</div></div>`;
+          };
+          const clvAge = cl.ts ? Math.round((Date.now()-cl.ts)/60000) : null;
+          const snap = clvAge!=null&&clvAge<180 ? `<div style="font-size:9px;color:var(--muted);font-family:var(--font);text-align:center;margin-top:3px">📸 close snap ${clvAge}m ago</div>` : '';
+          return `<div class="clv-row">${fmt(clvSpread,'SPREAD')}${fmt(clvTotal,'TOTAL')}</div>${snap}`;
+        })()}
         ${publicHtml}
         ${(g.mpAway||g.mpHome)?`<div class="mp-team-row">
           <span class="mp-team-label">📊 MP xG/60</span>
