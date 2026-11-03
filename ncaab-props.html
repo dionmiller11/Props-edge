@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NCAAB Props Edge Finder</title>
+<style>
+:root{--bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;--accent:#ff9800;--accent2:#00ff88;--warn:#ff6b35;--gold:#ffd700;--text:#e8edf5;--muted:#6b7a96;--hit:#00ff88;--miss:#ff4d6d;--purple:#b06eff;--font:'DM Mono','Fira Code','Courier New',monospace;--sans:'DM Sans','Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0);z-index:100;gap:10px;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;} .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;flex-shrink:0;} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} .logo h1{font-size:13px;font-weight:600;letter-spacing:.08em;} .logo span{color:var(--accent);}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.date-badge{font-family:var(--font);font-size:11px;color:var(--muted);padding:4px 9px;border:1px solid var(--border);border-radius:4px;}
+.btn{border:none;padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#000;} .btn-primary:hover{opacity:.85;transform:translateY(-1px);} .btn-primary:disabled{background:var(--muted);cursor:not-allowed;transform:none;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-green{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.3);}
+.btn-purple{background:rgba(176,110,255,.15);color:var(--purple);border:1px solid rgba(176,110,255,.35);}
+.btn-obsidian{background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.35);}
+.api-banner{background:rgba(255,152,0,.04);border-bottom:1px solid rgba(255,152,0,.12);padding:9px 20px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.data-banner{background:rgba(255,152,0,.04);border-bottom:1px solid rgba(255,152,0,.1);padding:7px 20px;font-size:11px;font-family:var(--font);color:var(--muted);display:flex;align-items:center;gap:8px;}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;}
+.tab{padding:11px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);letter-spacing:.04em;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);white-space:nowrap;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+main{max-width:1140px;margin:0 auto;padding:18px 16px;}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+.filter-label{font-size:10px;color:var(--muted);font-family:var(--font);letter-spacing:.1em;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;width:62px;}
+select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:var(--font);outline:none;}
+.chip{padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--font);cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.chip.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+.status-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--font);font-size:12px;color:var(--muted);min-height:20px;}
+.status-bar.running{color:var(--accent);} .status-bar.done{color:var(--accent2);} .status-bar.error{color:var(--miss);}
+.progress-wrap{margin-bottom:14px;display:none;} .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;} .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%;} .progress-label{font-size:10px;color:var(--muted);font-family:var(--font);margin-top:4px;}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;} @keyframes spin{to{transform:rotate(360deg);}}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+.stat-card .val{font-size:24px;font-weight:700;font-family:var(--font);color:var(--accent);line-height:1;margin-bottom:3px;} .stat-card .val.green{color:var(--accent2);} .stat-card .val.gold{color:var(--gold);} .stat-card .val.purple{color:var(--purple);} .stat-card .lbl{font-size:10px;color:var(--muted);letter-spacing:.05em;}
+.parlay-panel{background:var(--surface);border:1px solid rgba(255,152,0,.3);border-radius:10px;padding:16px 18px;margin-bottom:16px;display:none;} .parlay-panel.open{display:block;}
+.parlay-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;} .parlay-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em;}
+.parlay-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;} .parlay-odds{font-family:var(--font);font-size:18px;font-weight:700;color:var(--gold);} .parlay-count{font-family:var(--font);font-size:11px;color:var(--muted);}
+.parlay-legs{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.parlay-leg{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);}
+.parlay-leg-info{flex:1;} .parlay-leg-player{font-family:var(--sans);font-weight:600;color:var(--text);font-size:12px;} .parlay-leg-prop{color:var(--muted);font-size:10px;font-family:var(--font);margin-top:1px;}
+.parlay-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;} .parlay-remove:hover{color:var(--miss);}
+.parlay-empty{text-align:center;padding:16px;color:var(--muted);font-size:12px;} .parlay-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.add-parlay-btn{font-size:10px;padding:2px 8px;border-radius:3px;background:rgba(255,152,0,.1);color:var(--accent);border:1px solid rgba(255,152,0,.2);cursor:pointer;font-family:var(--font);transition:all .15s;} .add-parlay-btn:hover{background:rgba(255,152,0,.2);} .add-parlay-btn.added{background:rgba(255,152,0,.3);color:#000;}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
+.table-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;} .table-title{font-size:12px;font-weight:600;letter-spacing:.05em;}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:540px;}
+thead th{text-align:left;padding:8px 10px;font-family:var(--font);font-size:10px;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+tbody tr{border-bottom:1px solid rgba(30,45,69,.5);transition:background .1s;} tbody tr:hover{background:var(--surface2);} tbody tr:last-child{border-bottom:none;}
+td{padding:9px 10px;white-space:nowrap;font-family:var(--font);vertical-align:middle;}
+.player-name{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--text);} .sub-text{font-size:10px;color:var(--muted);margin-top:1px;}
+.lm-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,152,0,.1);color:var(--accent);border:1px solid rgba(255,152,0,.2);margin-left:4px;font-family:var(--font);}
+.prop-type{color:var(--accent);font-size:11px;}
+.hit-rate{font-size:13px;font-weight:700;} .hit-rate.elite{color:var(--gold);} .hit-rate.strong{color:var(--accent2);} .hit-rate.solid{color:var(--accent);}
+.sparkline{display:flex;gap:3px;align-items:center;} .spark-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;} .spark-dot.hit{background:var(--hit);} .spark-dot.miss{background:rgba(255,77,109,.4);}
+.streak-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;} .streak-badge.hot{background:rgba(0,255,136,.12);color:var(--accent2);border:1px solid rgba(0,255,136,.25);} .streak-badge.cold{background:rgba(255,77,109,.08);color:var(--miss);border:1px solid rgba(255,77,109,.18);}
+.edge-badge{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;} .edge-badge.fire{background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);} .edge-badge.strong{background:rgba(0,255,136,.1);color:var(--accent2);border:1px solid rgba(0,255,136,.2);} .edge-badge.ok{background:rgba(255,152,0,.1);color:var(--accent);border:1px solid rgba(255,152,0,.25);}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);} .empty-icon{font-size:32px;margin-bottom:8px;opacity:.4;} .empty p{font-size:13px;line-height:1.6;}
+.loading-row td{padding:32px;text-align:center;color:var(--muted);font-size:13px;}
+.error-box{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);border-radius:8px;padding:12px 16px;color:var(--miss);font-size:13px;margin-bottom:14px;}
+footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-family:var(--font);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;} .toast.show{transform:translateY(0);opacity:1;}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+.search-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;}
+.search-input:focus{border-color:var(--accent);}
+.search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;display:none;}
+@media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr);}.filters{flex-direction:column;align-items:flex-start;}header,main{padding-left:12px;padding-right:12px;}td,th{padding:7px 6px;font-size:11px;}.hide-mobile{display:none;}.hide-mobile-sm{display:none;}.api-banner{flex-direction:column;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <a href="https://dionmiller11.github.io/Props-edge/dashboard.html" style="color:var(--muted);font-size:11px;font-family:var(--font);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;margin-right:8px;letter-spacing:.04em;">⌂ HOME</a>
+    <div class="logo-dot"></div>
+    <h1>NCAAB <span>PROPS</span> EDGE FINDER</h1>
+  </div>
+  <div class="header-right">
+    <div class="date-badge" id="dateBadge">—</div>
+    <button class="btn btn-green" id="exportBtn" onclick="exportCSV()" style="display:none">📊 CSV</button>
+    <button class="btn btn-purple" id="parlayBtn" onclick="toggleParlay()" style="display:none">🎰 Parlay</button>
+    <button class="btn btn-obsidian" id="obsidianBtn" onclick="exportObsidian()" style="display:none">🟣 Obsidian</button>
+    <button class="btn btn-primary" id="runBtn" onclick="runScan()">⚡ RUN SCAN</button>
+  </div>
+</header>
+<div class="api-banner">
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
+  <span style="font-family:var(--font);font-size:11px">Data via Cloudflare Worker proxy → Linemate (20+ books) · Hit rates from Linemate trend history</span>
+</div>
+<div class="data-banner">
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--accent2);display:inline-block;flex-shrink:0"></span>
+  LINEMATE MODE — hit rates from Linemate trend data · lines from 20+ sportsbooks
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('all')">🏀 ALL</button>
+  <button class="tab" onclick="switchTab('points')">🏀 POINTS</button>
+  <button class="tab" onclick="switchTab('rebounds')">💪 REBOUNDS</button>
+  <button class="tab" onclick="switchTab('assists')">🎯 ASSISTS</button>
+  <button class="tab" onclick="switchTab('threes')">3️⃣ 3-POINTERS</button>
+  <button class="tab" onclick="switchTab('steals')">🤲 STEALS</button>
+  <button class="tab" onclick="switchTab('blocks')">🚫 BLOCKS</button>
+</div>
+<main>
+  <div class="filters">
+    <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="50" max="100" step="5" oninput="renderTable()"> %</div>
+    <div class="filter-group"><span class="filter-label">SORT</span><select id="sortBy" onchange="renderTable()"><option value="rate">Hit Rate</option><option value="streak">Streak</option><option value="edge">Edge</option></select></div>
+    <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
+    <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="playerSearch" type="text" placeholder="Search player or team…" oninput="onSearch(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
+    <div class="filter-group" style="margin-left:auto">
+      <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
+      <button class="chip" onclick="resetFilters()" style="margin-left:4px">↺ RESET</button>
+    </div>
+  </div>
+  <div class="status-bar" id="statusBar">Ready — click ⚡ RUN SCAN to load today's NCAAB props</div>
+  <div class="progress-wrap" id="progressWrap"><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div><div class="progress-label" id="progressLabel">Starting…</div></div>
+  <div class="summary" id="summary" style="display:none">
+    <div class="stat-card"><div class="val green" id="s-total">0</div><div class="lbl">TOTAL EDGES</div></div>
+    <div class="stat-card"><div class="val gold" id="s-fire">0</div><div class="lbl">🔥 ELITE 90%+</div></div>
+    <div class="stat-card"><div class="val" id="s-strong">0</div><div class="lbl">STRONG 80–89%</div></div>
+    <div class="stat-card"><div class="val purple" id="s-pts">0</div><div class="lbl">🏀 POINTS EDGES</div></div>
+  </div>
+  <div id="errorBox" style="display:none" class="error-box"></div>
+  <div class="parlay-panel" id="parlayPanel">
+    <div class="parlay-header">
+      <span class="parlay-title">🎰 PARLAY BUILDER</span>
+      <div class="parlay-meta">
+        <span class="parlay-count" id="parlayCount">0 legs</span>
+        <span class="parlay-odds" id="parlayOdds">—</span>
+        <div class="parlay-actions">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearParlay()">Clear</button>
+          <button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="logParlay()">📋 Log All</button>
+          <button class="btn btn-green" style="padding:4px 10px;font-size:11px" onclick="copyParlay()">📋 Copy</button>
+          <button class="btn btn-obsidian" style="padding:4px 10px;font-size:11px" onclick="exportObsidian()">🟣 Obsidian</button>
+        </div>
+      </div>
+    </div>
+    <div class="parlay-legs" id="parlayLegsEl"><div class="parlay-empty">Add plays using + on each row</div></div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <span class="table-title" id="tableTitle">🏀 ALL NCAAB PROPS — TODAY</span>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--font)" id="dataTs"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>PLAYER</th><th class="hide-mobile">TEAM</th><th>PROP</th>
+          <th>LINE / ODDS</th><th>RATE ↓</th><th>LAST 10</th>
+          <th class="hide-mobile-sm">MATCHUP</th><th class="hide-mobile-sm">STREAK</th><th class="hide-mobile-sm">EDGE</th><th>+</th><th>📋</th>
+        </tr></thead>
+        <tbody id="tableBody">
+          <tr class="loading-row"><td colspan="11"><div class="empty"><div class="empty-icon">🏀</div><p>Click ⚡ RUN SCAN to load today's NCAAB props.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<footer>
+  <span id="lastRun">Never run</span>
+  <span style="color:var(--accent)">● LINEMATE · 20+ BOOKS · NCAAB</span>
+</footer>
+<div class="toast" id="toast"></div>
+<script>
+// ── TAB CONFIG ──
+const TAB_PROPS = {
+  all: null,
+  points: ['Points'],
+  rebounds: ['Rebounds'],
+  assists: ['Assists'],
+  threes: ['Threes','3-Pointers Made'],
+  steals: ['Steals'],
+  blocks: ['Blocks'],
+};
+const TAB_TITLES = {
+  all:'🏀 ALL NCAAB PROPS',
+  points:'🏀 POINTS',
+  rebounds:'💪 REBOUNDS',
+  assists:'🎯 ASSISTS',
+  threes:'3️⃣ 3-POINTERS',
+  steals:'🤲 STEALS',
+  blocks:'🚫 BLOCKS',
+};
+
+const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+let allData = [], activeTab = 'all', edgeOnly = false, parlayLegs = [];
+let searchQuery = '';
+
+document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+
+// ── FETCH LINEMATE PROPS VIA WORKER ──
+async function fetchLinemateProps() {
+  const res = await fetch('https://line-monitor.dion-miller11.workers.dev/props/ncaab');
+  if (!res.ok) throw new Error('Worker error: ' + res.status + ' — check Linemate token in worker');
+  const d = await res.json();
+  if (!d.ok) throw new Error(d.error || 'Props fetch failed');
+  return d.props || [];
+}
+
+// ── MAIN SCAN ──
+async function runScan() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Scanning...';
+  document.getElementById('summary').style.display = 'none';
+  document.getElementById('errorBox').style.display = 'none';
+  ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'none');
+  setStatus('running', '📡 Fetching today\'s NCAAB props from Linemate…');
+  setLoadingRow();
+
+  try {
+    setProgress(20, 'Connecting to Linemate (NCAAB)…');
+    const lmProps = await fetchLinemateProps();
+
+    if (!lmProps.length) {
+      setStatus('done', '⚠️ No NCAAB props found — markets may not be posted yet');
+      btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
+      hideProgress(); return;
+    }
+    console.log('Linemate NCAAB props:', lmProps.length);
+
+    setProgress(60, 'Processing ' + lmProps.length + ' prop lines…');
+
+    // Linemate returns hitRate directly — no game log lookup needed
+    const results = [];
+    const minRate = parseInt(document.getElementById('minRate').value) || 70;
+
+    for (const p of lmProps) {
+      // p fields: player, market, line, overOdds, underOdds, hitRate, game, gameTime, streak, last10
+      const market = p.market || '';
+      const hitRate = p.hitRate || 0;
+      const direction = p.direction || 'OVER'; // Linemate includes direction
+      if (hitRate < minRate) continue;
+
+      const gameParts = (p.game || '').split('@');
+      const awayTeam = gameParts[0]?.trim() || '';
+      const homeTeam = gameParts[1]?.trim() || '';
+      const gameTime = p.gameTime ? new Date(p.gameTime).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+      const odds = direction === 'OVER' ? (p.overOdds ?? -110) : (p.underOdds ?? -110);
+
+      const rate = Math.round(hitRate);
+      const rc = rate >= 90 ? 'elite' : rate >= 80 ? 'strong' : 'solid';
+      const last10 = p.last10 || [];
+      const streak = p.streak || 0;
+
+      results.push({
+        player: p.player || '',
+        team: p.isHome ? homeTeam : awayTeam,
+        opposingTeam: p.isHome ? awayTeam : homeTeam,
+        market,
+        prop: market + ' ' + (direction === 'OVER' ? 'O' : 'U') + p.line,
+        line: String(p.line),
+        direction,
+        rate,
+        last10,
+        streak,
+        hotStreak: streak >= 3,
+        gameTime,
+        bestOdds: odds,
+        sport: 'NCAAB',
+        category: market,
+      });
+    }
+
+    setProgress(90, 'Sorting results…');
+    allData = results.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+
+    hideProgress();
+    populateTeamFilter();
+    renderTable();
+    updateSummary();
+    document.getElementById('summary').style.display = 'grid';
+    ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
+    document.getElementById('dataTs').textContent = 'Linemate · ' + new Date().toLocaleTimeString();
+    setStatus('done', '✅ ' + allData.length + ' NCAAB prop edges — ' + new Date().toLocaleTimeString());
+    document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
+  } catch(err) {
+    hideProgress();
+    showError(err.message);
+    setStatus('error', '❌ ' + err.message);
+    console.error('runScan error:', err);
+  }
+  btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
+}
+
+// ── RENDER TABLE ──
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const minRate = parseInt(document.getElementById('minRate').value) || 70;
+  const sortBy = document.getElementById('sortBy')?.value || 'rate';
+  const dirFilter = document.getElementById('dirFilter')?.value || 'all';
+  const teamFilter = document.getElementById('teamFilter')?.value || 'all';
+  const allowedProps = TAB_PROPS[activeTab];
+
+  let data = allData.filter(p => {
+    if (allowedProps && !allowedProps.includes(p.market)) return false;
+    if ((p.rate || 0) < minRate) return false;
+    if (edgeOnly && (p.streak || 0) < 3) return false;
+    if (dirFilter !== 'all' && p.direction !== dirFilter) return false;
+    if (teamFilter !== 'all' && p.team !== teamFilter) return false;
+    if (searchQuery && !p.player.toLowerCase().includes(searchQuery) && !(p.team||'').toLowerCase().includes(searchQuery)) return false;
+    return true;
+  });
+
+  data = [...data].sort((a, b) => {
+    if (sortBy === 'streak') return (b.streak || 0) - (a.streak || 0);
+    if (sortBy === 'edge') return (b.rate >= 90 ? 3 : b.rate >= 80 ? 2 : 1) - (a.rate >= 90 ? 3 : a.rate >= 80 ? 2 : 1);
+    return (b.rate || 0) - (a.rate || 0);
+  });
+
+  document.getElementById('tableTitle').textContent = (TAB_TITLES[activeTab] || '🏀 ALL NCAAB PROPS') + ' — TODAY';
+
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length === 0 ? 'Run the scan first.' : 'Try lowering the rate or changing filters.'}</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(p => {
+    const rate = p.rate || 0;
+    const rc = rate >= 90 ? 'elite' : rate >= 80 ? 'strong' : 'solid';
+    const ec = rate >= 90 ? 'fire' : rate >= 80 ? 'strong' : 'ok';
+    const el = rate >= 90 ? '🔥 ELITE' : rate >= 80 ? '✅ STRONG' : '📈 SOLID';
+    const spark = `<div class="sparkline">${(p.last10 || []).map(v => `<div class="spark-dot ${v ? 'hit' : 'miss'}"></div>`).join('')}</div>`;
+    const st = (p.streak || 0) >= 3
+      ? `<span class="streak-badge hot">🔥${p.streak}G</span>`
+      : (p.streak > 0 ? `<span class="streak-badge hot">${p.streak}G</span>` : '<span class="streak-badge cold">—</span>');
+    const dir = p.direction || 'OVER';
+    const dc = dir === 'OVER' ? 'var(--accent2)' : 'var(--miss)';
+    const op = p.bestOdds;
+    const lineHtml = `<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir === 'OVER' ? '▲ OVER' : '▼ UNDER'} ${p.line}</span><br>${op ? `<span style="font-size:10px;color:${dc}">${op > 0 ? '+' : ''}${op}</span>` : '<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
+    const timeStr = p.gameTime ? ` · ${esc(p.gameTime)}` : '';
+    const playJson = JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:'NCAAB'});
+    return `<tr>
+      <td><div class="player-name">${esc(p.player)}<span class="lm-badge">NCAAB</span></div><div class="sub-text">${esc(p.team||'—')} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+      <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team||'—')}</span></td>
+      <td><span class="prop-type">${esc(p.prop)}</span></td>
+      <td>${lineHtml}</td>
+      <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir === 'OVER' ? '▲' : '▼'}</span></td>
+      <td>${spark}</td>
+      <td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">vs ${esc(p.opposingTeam||'—')}</span></td>
+      <td class="hide-mobile-sm">${st}</td>
+      <td class="hide-mobile-sm"><span class="edge-badge ${ec}">${el}</span></td>
+      <td><button class="add-parlay-btn" onclick='addToParlay(${playJson})'>+</button></td>
+      <td><button class="add-parlay-btn" style="background:rgba(0,255,136,.08);color:var(--accent2);border-color:rgba(0,255,136,.2)" onclick="logBet(${playJson.replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateSummary() {
+  const m = parseInt(document.getElementById('minRate').value) || 70;
+  const q = allData.filter(p => (p.rate || 0) >= m);
+  document.getElementById('s-total').textContent = q.length;
+  document.getElementById('s-fire').textContent = q.filter(p => (p.rate || 0) >= 90).length;
+  document.getElementById('s-strong').textContent = q.filter(p => (p.rate || 0) >= 80 && (p.rate || 0) < 90).length;
+  document.getElementById('s-pts').textContent = q.filter(p => p.market === 'Points').length;
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => {
+    const oc = t.getAttribute('onclick') || '';
+    t.classList.toggle('active', oc.includes("'" + tab + "'"));
+  });
+  renderTable();
+}
+
+function toggleEdge(el) { edgeOnly = !edgeOnly; el.classList.toggle('active', edgeOnly); renderTable(); }
+
+function resetFilters() {
+  ['sortBy','dirFilter','teamFilter'].forEach(id => document.getElementById(id).value = 'all');
+  document.getElementById('sortBy').value = 'rate';
+  document.getElementById('minRate').value = 70;
+  edgeOnly = false;
+  document.getElementById('edgeChip').classList.remove('active');
+  searchQuery = '';
+  if (document.getElementById('playerSearch')) document.getElementById('playerSearch').value = '';
+  if (document.getElementById('searchClear')) document.getElementById('searchClear').style.display = 'none';
+  renderTable();
+}
+
+function populateTeamFilter() {
+  const sel = document.getElementById('teamFilter');
+  const cur = sel.value;
+  const teams = [...new Set(allData.map(p => p.team).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="all">All</option>' + teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  if (teams.includes(cur)) sel.value = cur;
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
+}
+function hideProgress() { document.getElementById('progressWrap').style.display = 'none'; }
+function setStatus(cls, msg) { const b = document.getElementById('statusBar'); b.className = 'status-bar ' + cls; b.innerHTML = cls === 'running' ? `<span class="spinner"></span>${msg}` : msg; }
+function setLoadingRow() { document.getElementById('tableBody').innerHTML = `<tr class="loading-row"><td colspan="11"><span class="spinner"></span> Fetching NCAAB props from Linemate…</td></tr>`; }
+function showError(msg) { const b = document.getElementById('errorBox'); b.textContent = msg; b.style.display = 'block'; }
+function showToast(msg, dur=3000) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), dur); }
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── PARLAY BUILDER ──
+function toggleParlay() {
+  const p = document.getElementById('parlayPanel');
+  p.classList.toggle('open');
+  document.getElementById('parlayBtn').textContent = p.classList.contains('open') ? '🎰 Hide' : '🎰 Parlay';
+}
+function addToParlay(play) {
+  if (parlayLegs.find(l => l.player === play.player && l.prop === play.prop)) { showToast('Already in parlay'); return; }
+  if (parlayLegs.length >= 10) { showToast('Max 10 legs'); return; }
+  parlayLegs.push(play);
+  renderParlay();
+  if (!document.getElementById('parlayPanel').classList.contains('open')) toggleParlay();
+}
+function removeFromParlay(i) { parlayLegs.splice(i, 1); renderParlay(); }
+function clearParlay() { parlayLegs = []; renderParlay(); }
+function calcParlayOdds(legs) {
+  let d = 1;
+  legs.forEach(() => { d *= (110/210 + 1); });
+  const a = d >= 2 ? Math.round((d-1)*100) : Math.round(-100/(d-1));
+  return (a > 0 ? '+' : '') + a;
+}
+function renderParlay() {
+  document.getElementById('parlayCount').textContent = parlayLegs.length + (parlayLegs.length === 1 ? ' leg' : ' legs');
+  document.getElementById('parlayOdds').textContent = parlayLegs.length >= 2 ? calcParlayOdds(parlayLegs) : '—';
+  const c = document.getElementById('parlayLegsEl');
+  if (!parlayLegs.length) { c.innerHTML = '<div class="parlay-empty">Add plays using + on each row</div>'; return; }
+  c.innerHTML = parlayLegs.map((l, i) => `<div class="parlay-leg">
+    <div class="parlay-leg-info">
+      <div class="parlay-leg-player">${esc(l.player)} <span style="color:var(--muted);font-size:10px">${esc(l.team||'')}</span></div>
+      <div class="parlay-leg-prop">${esc(l.prop)} <span style="color:${l.direction==='UNDER'?'var(--miss)':'var(--accent2)'}">${l.direction==='UNDER'?'▼':'▲'} ${l.direction}</span> ${l.rate}%</div>
+    </div>
+    <button class="parlay-remove" onclick="removeFromParlay(${i})">✕</button>
+  </div>`).join('');
+}
+function copyParlay() {
+  if (!parlayLegs.length) { showToast('No legs'); return; }
+  const t = parlayLegs.map((l, i) => `${i+1}. ${l.player} (${l.team||'NCAAB'}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');
+  navigator.clipboard.writeText(`🎰 NCAAB PARLAY — ${today.toLocaleDateString()}\n${calcParlayOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${t}`)
+    .then(() => showToast('📋 Copied!'))
+    .catch(() => showToast('Copy failed'));
+}
+function logParlay() {
+  if (!parlayLegs.length) { showToast('No legs in parlay'); return; }
+  const params = new URLSearchParams({_parlay:'1'});
+  parlayLegs.forEach((l, i) => {
+    params.set('p'+i+'_player', l.player||'');
+    params.set('p'+i+'_prop', l.prop||'');
+    params.set('p'+i+'_sport', 'NCAAB');
+    params.set('p'+i+'_odds', l.bestOdds||'-110');
+    params.set('p'+i+'_rate', l.rate||'');
+    params.set('p'+i+'_dir', l.direction||'OVER');
+    params.set('p'+i+'_team', l.team||'');
+  });
+  params.set('count', parlayLegs.length);
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?' + params.toString(), '_blank');
+}
+
+// ── EXPORTS ──
+function exportCSV() {
+  const csv = ['Player,Team,Market,Direction,Line,Rate%,Opp,GameTime,Streak',
+    ...allData.map(p => [`"${p.player}"`, p.team||'', `"${p.market}"`, p.direction, p.line, p.rate, p.opposingTeam||'', p.gameTime||'', p.streak||0].join(','))
+  ].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `ncaab-props-${todayStr}.csv`; a.click();
+  URL.revokeObjectURL(url); showToast('📊 Exported');
+}
+function exportObsidian() {
+  const rows = allData.filter(p => (p.rate||0) >= 70);
+  const ps = parlayLegs.length ? `\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i) => `${i+1}. **${l.player}** (${l.team||'NCAAB'}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n` : '';
+  const ts = `\n## 🏀 Player Props\n\n| Player | Team | Prop | Dir | Rate | Opp | Time | Streak |\n|--------|------|------|-----|------|-----|------|--------|\n${rows.map(p => `| ${p.player} | ${p.team||'—'} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}G |`).join('\n')}\n`;
+  const md = `---\ntags: [props, ncaab, betting]\ndate: ${todayStr}\nsport: NCAAB\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏀 NCAAB Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Lines from 20+ books · Props Edge Finder*`;
+  const blob = new Blob([md], {type:'text/markdown'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `NCAAB Props ${todayStr}.md`; a.click();
+  URL.revokeObjectURL(url); showToast('🟣 Obsidian downloaded!');
+}
+
+// ── BET TRACKER ──
+function logBet(p) {
+  const params = new URLSearchParams({
+    player: p.player||'', prop: p.prop||'', propType: p.market||'',
+    sport: 'NCAAB', odds: p.bestOdds||p.odds||'-110',
+    rate: p.rate||'', direction: p.direction||'OVER',
+  });
+  window.open('https://dionmiller11.github.io/Props-edge/bet-tracker.html?' + params.toString(), '_blank');
+}
+
+// ── SEARCH ──
+function onSearch(val) {
+  searchQuery = val.toLowerCase().trim();
+  document.getElementById('searchClear').style.display = val ? 'block' : 'none';
+  renderTable();
+}
+function clearSearch() {
+  searchQuery = '';
+  document.getElementById('playerSearch').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  renderTable();
+}
+
+// ── AUTO-RUN ON OPEN ──
+(function() {
+  function autoRun() {
+    setTimeout(function() {
+      if (document.getElementById('runBtn') && !document.getElementById('runBtn').disabled) {
+        runScan();
+      }
+    }, 800);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoRun);
+  } else {
+    autoRun();
+  }
+})();
+</script>
+</body>
+</html>

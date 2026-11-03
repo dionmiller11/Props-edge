@@ -166,18 +166,19 @@
   <iframe id="sim-frame" src="" style="display:none;width:0;height:0;border:none;" title="sim-runner"></iframe>
 
   <div class="sport-grid">
-    <a class="sport-card mlb" href="https://dionmiller11.github.io/Props-edge/mlb-props.html">
+    <!-- MLB hidden off-season (Apr-Oct) -->
+    <a class="sport-card mlb" href="https://dionmiller11.github.io/Props-edge/mlb-props.html" style="display:none;">
       <div class="sport-icon">⚾</div>
       <div class="sport-name mlb">MLB</div>
       <div class="sport-desc">Hits · Total Bases · RBI · Runs · H+R+RBI · Pitcher Ks · Outs · Hits Allowed · BB · ER · Linemate lines</div>
-      <div class="sport-status status-live">● IN SEASON</div>
+      <div class="sport-status status-off">● OFF SEASON · RETURNS APR 2027</div>
       <div class="arrow">→</div>
     </a>
     <a class="sport-card" style="border-top:3px solid var(--gold);grid-column:1/-1;" href="https://dionmiller11.github.io/Props-edge/quick-picks.html">
       <div class="sport-icon">⚡</div>
       <div class="sport-name" style="color:var(--gold);">QUICK PICKS</div>
       <div class="sport-desc">All today's top plays across every sport in one view · 80%+ hit rate · SHARP/CONSENSUS badges · Parlay builder · Log to tracker</div>
-      <div class="sport-status" style="color:var(--gold);background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);border-radius:4px;padding:3px 8px;font-size:11px;display:inline-block;margin-top:4px;">● NFL · NBA · MLB · WNBA · NCAAFB</div>
+      <div class="sport-status" style="color:var(--gold);background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);border-radius:4px;padding:3px 8px;font-size:11px;display:inline-block;margin-top:4px;">● NFL · NBA · NHL · NCAAB · NCAAFB</div>
       <div class="arrow">→</div>
     </a>
     <a class="sport-card nfl" href="https://dionmiller11.github.io/Props-edge/nfl-props.html">
@@ -208,11 +209,19 @@
       <div class="sport-status" style="color:#00e5ff;background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);border-radius:4px;padding:3px 8px;font-size:11px;display:inline-block;margin-top:4px;">● IN SEASON · LINEMATE</div>
       <div class="arrow">→</div>
     </a>
-    <a class="sport-card" style="border-top:3px solid #ff69b4;" href="https://dionmiller11.github.io/Props-edge/wnba-props.html">
+    <!-- WNBA hidden off-season (May-Sep) -->
+    <a class="sport-card" style="border-top:3px solid #ff69b4;display:none;" href="https://dionmiller11.github.io/Props-edge/wnba-props.html">
       <div class="sport-icon">🏀</div>
       <div class="sport-name" style="color:#ff69b4;">WNBA</div>
       <div class="sport-desc">Points · Rebounds · Assists · 3-Pointers · Steals · Blocks · PRA · PA · PR · RA</div>
-      <div class="sport-status status-live" style="color:#ff69b4;background:rgba(255,105,180,.1);border-color:rgba(255,105,180,.3);">● IN SEASON · LINEMATE</div>
+      <div class="sport-status" style="color:#ff69b4;background:rgba(255,105,180,.1);border:1px solid rgba(255,105,180,.3);border-radius:4px;padding:3px 8px;font-size:11px;display:inline-block;margin-top:4px;">● OFF SEASON · RETURNS MAY 2027</div>
+      <div class="arrow">→</div>
+    </a>
+    <a class="sport-card" style="border-top:3px solid #ff9800;" href="https://dionmiller11.github.io/Props-edge/ncaab-props.html">
+      <div class="sport-icon">🏀</div>
+      <div class="sport-name" style="color:#ff9800;">NCAAB</div>
+      <div class="sport-desc">Points · Rebounds · Assists · 3-Pointers · Steals · Blocks · Linemate lines</div>
+      <div class="sport-status" style="color:#ff9800;background:rgba(255,152,0,.08);border:1px solid rgba(255,152,0,.2);border-radius:4px;padding:3px 8px;font-size:11px;display:inline-block;margin-top:4px;">● IN SEASON · LINEMATE</div>
       <div class="arrow">→</div>
     </a>
     <a class="sport-card" style="border-top:3px solid var(--accent2);" href="https://dionmiller11.github.io/Props-edge/game-lines.html">
@@ -336,7 +345,7 @@
 
   <div class="section-title">THIS WEEK'S SCHEDULE</div>
   <div class="schedule">
-    <div class="schedule-row"><span class="schedule-sport mlb">MLB</span><span class="schedule-desc">Regular season — daily games</span><span class="schedule-time">Every day</span></div>
+    <div class="schedule-row"><span class="schedule-sport" style="background:rgba(255,152,0,.1);color:#ff9800;">NCAAB</span><span class="schedule-desc">College basketball — daily games</span><span class="schedule-time">Nov–Mar</span></div>
     <div class="schedule-row"><span class="schedule-sport nfl">NFL</span><span class="schedule-desc">Week 5 games</span><span class="schedule-time">Thu · Sun · Mon</span></div>
     <div class="schedule-row"><span class="schedule-sport ncaafb">NCAAFB</span><span class="schedule-desc">College football — full slate</span><span class="schedule-time">Sat (+ Fri)</span></div>
     <div class="schedule-row"><span class="schedule-sport nba">NBA</span><span class="schedule-desc">Preseason / Tip-off</span><span class="schedule-time">Oct 2026</span></div>
@@ -425,8 +434,8 @@ document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-
 const hr = today.getHours();
 document.getElementById('greeting').textContent = (hr<12?'Good morning':hr<17?'Good afternoon':'Good evening')+' ⚡';
 const day = today.toLocaleDateString('en-US',{weekday:'long'});
-const subs = {'Monday':'MLB games today + MNF tonight','Thursday':'MLB games today + TNF tonight','Friday':'MLB games today + NCAAFB tonight','Saturday':'Big NCAAFB slate today + MLB games','Sunday':'Full NFL slate today + MLB games'};
-document.getElementById('greetingSub').textContent = subs[day]||"MLB games today — run the scan for today's edges";
+const subs = {'Monday':'NBA + NHL games today + MNF tonight','Thursday':'NBA + NHL games today + TNF tonight','Friday':'NBA + NHL + NCAAB games today + NCAAFB tonight','Saturday':'Big NCAAFB slate today + NCAAB games','Sunday':'Full NFL slate today + NBA + NHL games'};
+document.getElementById('greetingSub').textContent = subs[day]||"NBA · NHL · NCAAB games today — run the scan for today's edges";
 const _dp = new URLSearchParams(window.location.search);
 const _dt = _dp.get('token')||_dp.get('lmToken');
 if(_dt){document.querySelectorAll('a[href*="github.io"]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('token',_dt);a.href=u.toString();});}
