@@ -908,8 +908,10 @@ async function loadAll(){
 // ── RENDER LINES TAB ──
 function renderLines(){
   const grid = document.getElementById('gamesGrid');
-  // Only show games that have a real spread or total — no line = not useful
-  const games = allGames.filter(g=>activeSports.has(g.sport)&&(g.spread!=null||g.total!=null));
+  // Show all games for sports with thin ESPN odds coverage (NCAAB opening week etc.)
+  // For other sports, require at least a spread or total — no line = not useful
+  const noLineFilter = new Set(['NCAAB']);
+  const games = allGames.filter(g=>activeSports.has(g.sport)&&(noLineFilter.has(g.sport)||g.spread!=null||g.total!=null));
   if(!games.length){grid.innerHTML='<div class="empty"><div class="empty-icon">📊</div><p>No games found. Click ⚡ LOAD LINES or enable more sports above.</p></div>';return;}
 
   grid.innerHTML = games.map(g=>{

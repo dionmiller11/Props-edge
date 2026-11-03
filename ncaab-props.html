@@ -95,7 +95,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 </div>
 <div class="data-banner">
   <span style="width:6px;height:6px;border-radius:50%;background:var(--accent2);display:inline-block;flex-shrink:0"></span>
-  LINEMATE MODE — hit rates from Linemate trend data · lines from 20+ sportsbooks
+  LINEMATE + ESPN — Linemate trend hit rates · ESPN game log self-calc (secondary) · lines from 20+ sportsbooks
 </div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('all')">🏀 ALL</button>
@@ -199,6 +199,121 @@ let searchQuery = '';
 
 document.getElementById('dateBadge').textContent = today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 
+// ── ESPN NCAAB GAME LOG SELF-CALCULATION ──
+// Maps Linemate market names → ESPN stat column names in gamelog response
+const ESPN_STAT_MAP = {
+  'Points':   'PTS',
+  'Rebounds': 'REB',
+  'Assists':  'AST',
+  'Threes':   '3PM',
+  'Steals':   'STL',
+  'Blocks':   'BLK',
+};
+
+// Cache: playerName → { id, statCache: { PTS:[...], REB:[...], ... } }
+const _espnAthleteCache = {};
+
+async function espnSearchAthlete(name) {
+  if (_espnAthleteCache[name]) return _espnAthleteCache[name].id;
+  try {
+    const q = encodeURIComponent(name);
+    const res = await fetch(
+      `https://site.api.espn.com/apis/common/v3/search?query=${q}&limit=5&type=athlete&sport=basketball&league=mens-college-basketball`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const athletes = data.items?.filter(i => i.type === 'athlete') || [];
+    if (!athletes.length) return null;
+    const id = athletes[0].id || athletes[0].athleteId || null;
+    if (id) _espnAthleteCache[name] = { id, statCache: {} };
+    return id;
+  } catch { return null; }
+}
+
+async function espnFetchGameLog(athleteId, playerName) {
+  const cached = _espnAthleteCache[playerName];
+  if (cached?.statCache && Object.keys(cached.statCache).length > 0) return cached.statCache;
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/athletes/${athleteId}/gamelog`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    // ESPN gamelog: data.seasonTypes[*].categories[*].events (stat columns + rows)
+    // Parse all regular season game rows into per-stat arrays (newest first)
+    const stats = {};
+    const seasonTypes = data.seasonTypes || [];
+    for (const st of seasonTypes) {
+      // Only regular season (type 2) or preseason (1)
+      if (st.type !== 2 && st.type !== 1) continue;
+      for (const cat of (st.categories || [])) {
+        const names = cat.names || [];
+        const events = cat.events || [];
+        for (const evt of events) {
+          const vals = evt.stats || [];
+          names.forEach((nm, i) => {
+            if (!stats[nm]) stats[nm] = [];
+            const v = parseFloat(vals[i]);
+            if (!isNaN(v)) stats[nm].push(v);
+          });
+        }
+      }
+    }
+    if (_espnAthleteCache[playerName]) _espnAthleteCache[playerName].statCache = stats;
+    return stats;
+  } catch { return null; }
+}
+
+// Compute self-calculated hit rate from last N games for a given prop
+// Returns { rate: 0-100, last10: bool[], games: N } or null if no data
+function calcHitRate(statValues, line, direction, n = 10) {
+  if (!statValues || statValues.length === 0) return null;
+  const recent = statValues.slice(0, n); // newest first
+  const last10 = recent.map(v => direction === 'OVER' ? v > line : v < line);
+  const hits = last10.filter(Boolean).length;
+  return {
+    rate: Math.round((hits / last10.length) * 100),
+    last10,
+    games: last10.length,
+  };
+}
+
+// Enrich a batch of props with ESPN self-calc hit rates (runs concurrently, max 5 at a time)
+async function enrichWithESPN(props, onProgress) {
+  const MARKET_STAT = ESPN_STAT_MAP;
+  const toFetch = props.filter(p => MARKET_STAT[p.market]);
+  let done = 0;
+
+  async function processOne(p) {
+    try {
+      let id = await espnSearchAthlete(p.player);
+      if (!id) return;
+      const statCache = await espnFetchGameLog(id, p.player);
+      if (!statCache) return;
+      const statKey = MARKET_STAT[p.market];
+      const vals = statCache[statKey];
+      if (!vals || vals.length < 3) return;
+      const calc = calcHitRate(vals, parseFloat(p.line), p.direction);
+      if (calc) {
+        p.espnRate = calc.rate;
+        p.espnLast10 = calc.last10;
+        p.espnGames = calc.games;
+      }
+    } catch { /* silent */ } finally {
+      done++;
+      if (onProgress) onProgress(done, toFetch.length);
+    }
+  }
+
+  // Run in batches of 5 concurrent
+  const BATCH = 5;
+  for (let i = 0; i < toFetch.length; i += BATCH) {
+    await Promise.all(toFetch.slice(i, i + BATCH).map(processOne));
+  }
+}
+
 // ── FETCH LINEMATE PROPS VIA WORKER ──
 async function fetchLinemateProps() {
   const res = await fetch('https://line-monitor.dion-miller11.workers.dev/props/ncaab');
@@ -276,9 +391,10 @@ async function runScan() {
       });
     }
 
-    setProgress(90, 'Sorting results…');
+    setProgress(80, 'Sorting results…');
     allData = results.sort((a, b) => (b.rate || 0) - (a.rate || 0));
 
+    // First render with Linemate data so the user sees results immediately
     hideProgress();
     populateTeamFilter();
     renderTable();
@@ -286,7 +402,23 @@ async function runScan() {
     document.getElementById('summary').style.display = 'grid';
     ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
     document.getElementById('dataTs').textContent = 'Linemate · ' + new Date().toLocaleTimeString();
-    setStatus('done', '✅ ' + allData.length + ' NCAAB prop edges — ' + new Date().toLocaleTimeString());
+    setStatus('done', '✅ ' + allData.length + ' NCAAB prop edges — enriching with ESPN game logs…');
+
+    // Now fetch ESPN game logs in background (non-blocking second pass)
+    const espnStart = Date.now();
+    try {
+      await enrichWithESPN(allData, (done, total) => {
+        setStatus('running', `📡 ESPN game logs ${done}/${total} players…`);
+      });
+      const withESPN = allData.filter(p => p.espnRate != null).length;
+      renderTable(); // re-render with ESPN rates shown
+      const elapsed = ((Date.now() - espnStart) / 1000).toFixed(1);
+      document.getElementById('dataTs').textContent = 'Linemate + ESPN · ' + new Date().toLocaleTimeString();
+      setStatus('done', `✅ ${allData.length} NCAAB edges · ESPN self-calc on ${withESPN} players (${elapsed}s)`);
+    } catch(e) {
+      // ESPN enrichment failure is non-fatal — Linemate data still shows
+      setStatus('done', '✅ ' + allData.length + ' NCAAB prop edges — ' + new Date().toLocaleTimeString());
+    }
     document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
   } catch(err) {
     hideProgress();
@@ -344,13 +476,20 @@ function renderTable() {
     const lineHtml = `<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir === 'OVER' ? '▲ OVER' : '▼ UNDER'} ${p.line}</span><br>${op ? `<span style="font-size:10px;color:${dc}">${op > 0 ? '+' : ''}${op}</span>` : '<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr = p.gameTime ? ` · ${esc(p.gameTime)}` : '';
     const playJson = JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:'NCAAB'});
+    // ESPN self-calc hit rate (secondary source)
+    const espnHtml = p.espnRate != null
+      ? `<span title="ESPN self-calc last ${p.espnGames||10}g" style="font-size:10px;color:var(--muted);font-family:var(--font)"> / <span style="color:${p.espnRate>=70?'var(--accent2)':'var(--muted)'}">ESPN:${p.espnRate}%</span></span>`
+      : '';
+    const espnSparkHtml = p.espnLast10
+      ? `<div class="sparkline" style="margin-top:3px" title="ESPN game log">${p.espnLast10.map(v => `<div class="spark-dot ${v ? 'hit' : 'miss'}" style="opacity:.6"></div>`).join('')}</div>`
+      : '';
     return `<tr>
       <td><div class="player-name">${esc(p.player)}<span class="lm-badge">NCAAB</span></div><div class="sub-text">${esc(p.team||'—')} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team||'—')}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
-      <td><span class="hit-rate ${rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir === 'OVER' ? '▲' : '▼'}</span></td>
-      <td>${spark}</td>
+      <td><span class="hit-rate ${rc}">${rate}%</span>${espnHtml} <span style="font-size:10px;font-weight:700;color:${dc}">${dir === 'OVER' ? '▲' : '▼'}</span></td>
+      <td>${spark}${espnSparkHtml}</td>
       <td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">vs ${esc(p.opposingTeam||'—')}</span></td>
       <td class="hide-mobile-sm">${st}</td>
       <td class="hide-mobile-sm"><span class="edge-badge ${ec}">${el}</span></td>
