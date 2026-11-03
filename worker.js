@@ -1194,7 +1194,12 @@ async function fetchMSEPlays(env) {
     for (const play of (data.plays || [])) {
       const playerName = play.player?.name || play.display?.name || 'Unknown';
       const marketName = play.market?.name || play.market?.key || '';
-      const label = play.label || '';
+      const rawLabel = play.label || '';
+      // label may be "Over 3.5" or just "Over"; point may be separate
+      const point = play.point ?? play.line ?? play.handicap ?? play.value ?? null;
+      // Build label: if point not already in label string, append it
+      const label = (point != null && !String(rawLabel).includes(String(point)))
+        ? `${rawLabel} ${point}` : rawLabel;
       const sportKey = play.event?.sport_key || '';
       const eventTitle = play.event?.sport_title || '';
 
