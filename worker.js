@@ -1413,7 +1413,7 @@ async function runAutoProps(env) {
     });
   }
 
-  // ── Alert 2: MSE +EV plays ──
+  // ── Alert 2: MSE +EV plays — one message per sport ──
   if (msePlays.length) {
     const mseByGroup = {};
     for (const p of msePlays) {
@@ -1421,10 +1421,16 @@ async function runAutoProps(env) {
       if (!mseByGroup[s]) mseByGroup[s] = [];
       mseByGroup[s].push(p);
     }
-    const msgLines = [];
+    // Summary header
+    await sendAlert({
+      title: `💹 MSE +EV (${msePlays.length}) — ${todayET}`,
+      body: Object.entries(mseByGroup).map(([s, ps]) => `${SPORT_EMOJI[s] || '🎯'} ${s}: ${ps.length}`).join('\n'),
+      priority: highPriority,
+    });
+    // One message per sport
     for (const [sport, plays] of Object.entries(mseByGroup)) {
       const emoji = SPORT_EMOJI[sport] || '🎯';
-      msgLines.push(`${emoji} ${sport}`);
+      const msgLines = [];
       for (const p of plays) {
         const oddsStr = p.bestOdds != null ? (p.bestOdds > 0 ? `+${p.bestOdds}` : `${p.bestOdds}`) : '';
         const fairStr = p.fairOdds != null ? (p.fairOdds > 0 ? `+${p.fairOdds}` : `${p.fairOdds}`) : '';
@@ -1432,12 +1438,12 @@ async function runAutoProps(env) {
         msgLines.push(`${p.player} — ${p.market} ${p.label}`);
         msgLines.push(`  ${p.evPct}% EV · ${p.bestBook} ${oddsStr} · Fair ${fairStr}${chanceStr}`);
       }
+      await sendAlert({
+        title: `💹 MSE +EV ${emoji} ${sport} (${plays.length}) — ${todayET}`,
+        body: msgLines.join('\n'),
+        priority: highPriority,
+      });
     }
-    await sendAlert({
-      title: `💹 MSE +EV (${msePlays.length}) — ${todayET}`,
-      body: msgLines.join('\n'),
-      priority: highPriority,
-    });
   }
 
   // ── Alert 3: DFS picks ──
