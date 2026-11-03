@@ -431,7 +431,11 @@ async function runScan(){
     const lmRes = await fetch('https://line-monitor.dion-miller11.workers.dev/props/nhl');
     if (!lmRes.ok) throw new Error('Props worker error: ' + lmRes.status);
     const lmData = await lmRes.json();
-    if (!lmData.ok) throw new Error(lmData.error || 'NHL props fetch failed');
+    if (!lmData.ok) {
+      const err = lmData.error || 'NHL props fetch failed';
+      if (err.includes('500')) throw new Error('Linemate has no NHL props yet — markets typically post a few hours before tip-off. Check back later today.');
+      throw new Error(err);
+    }
     const lmProps = lmData.props || [];
 
     setProgress(30, 'Parsing NHL prop lines…');

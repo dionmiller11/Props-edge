@@ -436,7 +436,11 @@ async function fetchLinemateProps() {
   const res = await fetch('https://line-monitor.dion-miller11.workers.dev/props/nba');
   if (!res.ok) throw new Error('Props worker error: ' + res.status);
   const d = await res.json();
-  if (!d.ok) throw new Error(d.error || 'Props fetch failed');
+  if (!d.ok) {
+    const err = d.error || 'Props fetch failed';
+    if (err.includes('500')) throw new Error('Linemate has no props yet — markets typically post a few hours before tip-off. Check back later today.');
+    throw new Error(err);
+  }
   return d.props || [];
 }
 
