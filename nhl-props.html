@@ -318,8 +318,8 @@ async function fetchMoneyPuck(){
   }
   try{
     const [skatersCSV,goaliesCSV]=await Promise.all([mpFetch('skaters.csv'),mpFetch('goalies.csv')]);
-    if(skatersCSV){mpSkaters=parseMP(skatersCSV);window.mpSkaters=mpSkaters;}
-    if(goaliesCSV){mpGoalies=parseGoaliesMP(goaliesCSV);}
+    if(skatersCSV){try{mpSkaters=parseMP(skatersCSV);window.mpSkaters=mpSkaters;}catch(e){console.warn('MoneyPuck skaters parse failed:',e.message);}}
+    if(goaliesCSV){try{mpGoalies=parseGoaliesMP(goaliesCSV);}catch(e){console.warn('MoneyPuck goalies parse failed:',e.message);}}
     const sk=Object.keys(mpSkaters).length,gl=Object.keys(mpGoalies).length;
     if(sk>0||gl>0)setStatus('running','📡 MoneyPuck: '+sk+' skaters, '+gl+' goalies loaded. Processing props…');
   }catch(e){console.warn('MoneyPuck fetch failed:',e);}
