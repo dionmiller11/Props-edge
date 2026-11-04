@@ -349,6 +349,7 @@ function mpBadgeHtml(mp,isGoalie){
 var _nhlPlayerCache = {}; // name → {id, pos}
 
 async function loadNHLRoster() {
+  if (!_nhlPlayerCache) _nhlPlayerCache = {};
   if (Object.keys(_nhlPlayerCache).length > 10) return; // already loaded
   try {
     // Fetch all current players via NHL stats API (proxied through worker for CORS)
@@ -478,6 +479,7 @@ async function runScan(){
     }
 
     const propEntries = Object.values(propMap);
+    console.log('NHL propEntries:', propEntries.length, 'from propMap:', Object.keys(propMap).length);
     if (!propEntries.length) {
       hideProgress();
       showError('No NHL prop lines found — markets may not be posted yet');
@@ -487,7 +489,8 @@ async function runScan(){
 
     setProgress(50, 'Loading NHL player roster…');
     await Promise.all([loadNHLRoster(), loadNHLGoalieRoster()]);
-    const rosterLoaded = Object.keys(_nhlPlayerCache).length > 0;
+    const rosterLoaded = Object.keys(_nhlPlayerCache||{}).length > 0;
+    console.log('NHL roster loaded:', rosterLoaded, 'players:', Object.keys(_nhlPlayerCache||{}).length);
 
     const results = [];
     let processed = 0;
