@@ -178,6 +178,10 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <footer><span id="lastRun">Never run</span><span style="color:var(--teal)">● LINEMATE · REAL HIT RATES</span></footer>
 <div class="toast" id="toast"></div>
 <script>
+// ── GLOBALS (must be first to avoid Firefox TDZ) ──
+var SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+var activeSignal='RECENT_FORM';
+
 // ── ODDS API (NHL) ──
 var NHL_ODDS_MARKETS = 'player_points,player_goals,player_assists,player_shots_on_goal,player_blocked_shots,player_power_play_points';
 var NHL_MARKET_MAP = {
@@ -596,9 +600,6 @@ function oddsToImplied(odds){if(!odds)return null;const o=parseInt(odds);if(isNa
 function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)return null;return parseFloat((rate-imp).toFixed(1));}
 
 // ── SIGNAL EXTRACTION (shared across all sport pages) ──
-// Maps Linemate signal types to display labels
-var SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
-var activeSignal='RECENT_FORM'; // v9: all top-level vars
 
 function extractAllSignals(signals){
   const out=[];
