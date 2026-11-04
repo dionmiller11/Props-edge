@@ -352,7 +352,7 @@ async function loadNHLRoster() {
   if (Object.keys(_nhlPlayerCache).length > 10) return; // already loaded
   try {
     // Fetch all current players via NHL stats API
-    const url = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20242025%20and%20gameTypeId%3D2';
+    const url = 'https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22points%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=1000&cayenneExp=seasonId%3D20262027%20and%20gameTypeId%3D2';
     const res = await fetch(url);
     if (!res.ok) return;
     const data = await res.json();
@@ -366,7 +366,7 @@ async function loadNHLRoster() {
 
 async function loadNHLGoalieRoster() {
   try {
-    const url = 'https://api.nhle.com/stats/rest/en/goalie/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22wins%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=200&cayenneExp=seasonId%3D20242025%20and%20gameTypeId%3D2';
+    const url = 'https://api.nhle.com/stats/rest/en/goalie/summary?isAggregate=false&isGame=false&sort=%5B%7B%22property%22%3A%22wins%22%2C%22direction%22%3A%22DESC%22%7D%5D&start=0&limit=200&cayenneExp=seasonId%3D20262027%20and%20gameTypeId%3D2';
     const res = await fetch(url);
     if (!res.ok) return;
     const data = await res.json();
@@ -379,7 +379,7 @@ async function loadNHLGoalieRoster() {
 
 async function fetchNHLGameLog(playerId, isGoalie) {
   try {
-    const season = '20242025';
+    const season = '20262027';
     const url = isGoalie
       ? `https://api-web.nhle.com/v1/player/${playerId}/game-log/${season}/2`
       : `https://api-web.nhle.com/v1/player/${playerId}/game-log/${season}/2`;
