@@ -436,7 +436,9 @@ function detectPropMovement(prev, curr, sportLabel) {
 async function monitorProps(env) {
   const alerts = [];
   const propsMeta = {};
-  const token = await env.LINE_MONITOR_KV.get('config:lm_token');
+  // Use auto-refresh Firebase token; fall back to manually stored token
+  let token = await getLmAccessToken(env);
+  if (!token) token = await env.LINE_MONITOR_KV.get('config:lm_token');
   if (!token) return { alerts, propsMeta, tokenMissing: true };
 
   for (const sport of PROP_SPORTS) {
