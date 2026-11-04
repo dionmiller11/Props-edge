@@ -434,18 +434,6 @@ async function getNBAPlayerId(playerName) {
   } catch(e) { return null; }
 }
 
-// Fetch today's NBA player props from The Odds API
-async function fetchLinemateProps() {
-  const res = await fetch('https://line-monitor.dion-miller11.workers.dev/props/nba');
-  if (!res.ok) throw new Error('Props worker error: ' + res.status);
-  const d = await res.json();
-  if (!d.ok) {
-    const err = d.error || 'Props fetch failed';
-    if (err.includes('500')) throw new Error('Linemate has no props yet — markets typically post a few hours before tip-off. Check back later today.');
-    throw new Error(err);
-  }
-  return d.props || [];
-}
 
 async function runScan(){
   const btn=document.getElementById('runBtn');const minRate=parseInt(document.getElementById('minRate').value)||70;
@@ -458,24 +446,43 @@ async function runScan(){
 
   try {
     setProgress(10, 'Fetching today\'s NBA props from Linemate…');
-    const lmProps = await fetchLinemateProps();
-    if (!lmProps.length) {
-      setStatus('done','⚠️ No NBA props found today');
-      btn.disabled=false; btn.textContent='⚡ RUN SCAN';
-      hideProgress();
-      return;
+    var lmProps = [], dataSource = 'Linemate';
+    var lmRes = await fetch('https://line-monitor.dion-miller11.workers.dev/props/nba');
+    if (!lmRes.ok) throw new Error('Props worker error: ' + lmRes.status);
+    var lmData = await lmRes.json();
+    if (!lmData.ok || !(lmData.props||[]).length) {
+      // Linemate failed or empty — fall back to Odds API
+      setProgress(15, 'Linemate unavailable — trying Odds API fallback…');
+      var oddsRes = await fetch('https://line-monitor.dion-miller11.workers.dev/odds/props/nba');
+      if (oddsRes.ok) {
+        var oddsData = await oddsRes.json();
+        if (oddsData.ok && (oddsData.props||[]).length) {
+          lmProps = oddsData.props;
+          dataSource = 'Odds API';
+        }
+      }
+      if (!lmProps.length) throw new Error('No NBA prop lines available from Linemate or Odds API — markets may not be posted yet.');
+    } else {
+      lmProps = lmData.props || [];
     }
-    console.log('Linemate props:', lmProps.length);
+    setProgress(20, 'Got ' + lmProps.length + ' props from ' + dataSource + '…');
+    console.log('Props:', lmProps.length, 'source:', dataSource);
 
-    // Build propMap from Linemate data
+    // Build propMap from Linemate/Odds API data
     setProgress(30, 'Parsing prop lines…');
-    const propMap = {};
-    const LM_TO_PROP = {
+    var propMap = {};
+    var LM_TO_PROP = {
       'Points': 'points', 'Rebounds': 'rebounds', 'Assists': 'assists',
       'Threes': 'threes', '3-Pointers Made': 'threes',
       'Blocks': 'blocks', 'Steals': 'steals',
       'Pts+Reb+Ast': 'pointsReboundsAssists', 'Pts+Reb': 'pointsRebounds',
       'Pts+Ast': 'pointsAssists', 'Reb+Ast': 'reboundsAssists',
+      // Odds API market keys (worker normalizes these)
+      'points': 'points', 'rebounds': 'rebounds', 'assists': 'assists',
+      'threePointersMade': 'threes', 'blocks': 'blocks', 'steals': 'steals',
+      'pointsReboundsAssists': 'pointsReboundsAssists', 'pointsRebounds': 'pointsRebounds',
+      'pointsAssists': 'pointsAssists', 'reboundsAssists': 'reboundsAssists',
+      'turnovers': 'turnovers',
     };
     for (const p of lmProps) {
       const propKey = LM_TO_PROP[p.market];
@@ -497,7 +504,7 @@ async function runScan(){
       }
     }
 
-    const propEntries = Object.values(propMap);
+    var propEntries = Object.values(propMap);
     console.log('Unique player+market combos:', propEntries.length);
 
     if (!propEntries.length) {
