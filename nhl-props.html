@@ -598,7 +598,7 @@ function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)retur
 // ── SIGNAL EXTRACTION (shared across all sport pages) ──
 // Maps Linemate signal types to display labels
 var SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
-var activeSignal='RECENT_FORM'; // which signal to show in table
+var activeSignal='RECENT_FORM'; // v9: all top-level vars
 
 function extractAllSignals(signals){
   const out=[];
