@@ -252,7 +252,7 @@ function populateTeamFilter(){const sel=document.getElementById('teamFilter');co
 function toMarketKey(name){return name.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');}
 
 // ── MONEYPUCK DATA ──
-let mpSkaters={};let mpGoalies={};window.mpSkaters=mpSkaters;
+var mpSkaters={};var mpGoalies={};window.mpSkaters=mpSkaters;
 function mpNormName(n){return(n||'').toLowerCase().replace(/[^a-z]/g,'');}
 function parseMP(csv){
   const lines=csv.trim().split('\n');if(lines.length<2)return{};
@@ -597,7 +597,7 @@ function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)retur
 
 // ── SIGNAL EXTRACTION (shared across all sport pages) ──
 // Maps Linemate signal types to display labels
-const SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
+var SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
 let activeSignal='RECENT_FORM'; // which signal to show in table
 
 function extractAllSignals(signals){
@@ -704,8 +704,8 @@ function logBet(p){
 }
 
 // ── LINE HISTORY SPARKLINES ──
-const LH_KEY='lineHistory_nhl-props';
-const MAX_LH_SNAPSHOTS=6;
+var LH_KEY='lineHistory_nhl-props';
+var MAX_LH_SNAPSHOTS=6;
 function saveLineHistory(data){const ds=new Date().toISOString().split('T')[0];let hist;try{hist=JSON.parse(localStorage.getItem(LH_KEY)||'{}');}catch(e){hist={};}if(hist.date!==ds){hist={date:ds,snaps:[]};}const snap={ts:Date.now(),lines:{}};data.forEach(p=>{const k=p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');snap.lines[k]=parseFloat(p.line)||0;});hist.snaps.push(snap);if(hist.snaps.length>MAX_LH_SNAPSHOTS)hist.snaps=hist.snaps.slice(-MAX_LH_SNAPSHOTS);try{localStorage.setItem(LH_KEY,JSON.stringify(hist));}catch(e){}}
 function getLineHistory(p){try{const hist=JSON.parse(localStorage.getItem(LH_KEY)||'{}');if(!hist.snaps||hist.snaps.length<2)return null;const ds=new Date().toISOString().split('T')[0];if(hist.date!==ds)return null;const k=p.player+'|'+(p.propKey||p.category||'')+' '+(p.direction||'OVER');const vals=hist.snaps.map(s=>s.lines[k]).filter(v=>v!=null&&v>0);if(vals.length<2)return null;return vals;}catch(e){return null;}}
 function lineSparkHtml(p){const vals=getLineHistory(p);if(!vals||vals.length<2)return'';const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn;if(range<0.5)return'';const first=vals[0],last=vals[vals.length-1];const moved=last-first;const color=moved>0?'var(--miss)':moved<0?'var(--accent2)':'var(--muted)';const arrow=moved>0?'▲':moved<0?'▼':'';const bars=vals.map(v=>{const h=range>0?Math.max(2,Math.round(((v-mn)/range)*14)+2):8;const bc=v===mx?'var(--miss)':v===mn?'var(--accent2)':'var(--muted)';return`<div class="line-spark-bar" style="height:${h}px;background:${bc}"></div>`;}).join('');return`<span class="line-spark" title="Line history: ${vals.join(' → ')}">${bars}</span><span class="line-spark-label" style="color:${color}">${arrow}${Math.abs(moved).toFixed(1)}</span>`;}
@@ -720,7 +720,7 @@ function clearSearch(){searchQuery='';document.getElementById('playerSearch').va
 
 // ── SGP BUILDER ──
 let sgpLegs=[];
-const CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15,timeOnIce_goals:0.35,timeOnIce_assists:0.40,timeOnIce_points:0.45,timeOnIce_shotsOnGoal:0.50,timeOnIce_powerPlayPoints:0.55};
+var CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15,timeOnIce_goals:0.35,timeOnIce_assists:0.40,timeOnIce_points:0.45,timeOnIce_shotsOnGoal:0.50,timeOnIce_powerPlayPoints:0.55};
 function getSGPStatKeyNHL(propKey,prop){const c=((propKey||'')+' '+(prop||'')).toLowerCase();if(/time.on.ice|timeonice|minutes.on.ice|toi|ice.time/.test(c))return'timeOnIce';if(/goal/.test(c)&&!/assist/.test(c)&&!/power/.test(c))return'goals';if(/assist/.test(c)&&!/power/.test(c))return'assists';if(/point/.test(c)&&!/power/.test(c))return'points';if(/shot/.test(c))return'shotsOnGoal';if(/save/.test(c))return'saves';if(/power.*point/.test(c))return'powerPlayPoints';if(/power.*goal/.test(c))return'powerPlayGoals';return'unknown';}
 function getSGPCorrNHL(kA,kB){return CORR_MAP_NHL[kA+'_'+kB]??CORR_MAP_NHL[kB+'_'+kA]??0;}
 function corrLabel(s){if(s>=0.5)return{label:'++ STRONG POS',cls:'pos'};if(s>=0.2)return{label:'+ MILD POS',cls:'pos'};if(s<=-0.3)return{label:'-- NEG',cls:'neg'};if(s<=-0.1)return{label:'- MILD NEG',cls:'neg'};return{label:'~ NEUTRAL',cls:'neutral'};}
