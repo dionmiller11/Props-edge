@@ -294,7 +294,7 @@ let _nbaGameLogLoading = null; // Promise while loading
 const NBA_PROXY = 'https://line-monitor.dion-miller11.workers.dev/nba/stats';
 const NBA_HEADERS = {}; // headers are set server-side by the worker
 
-async function loadNBABulkGameLogs(season='2025-26') {
+async function loadNBABulkGameLogs(season='2026-27') {
   // Return cached if already loaded
   if (_nbaGameLogCache !== null) return _nbaGameLogCache;
   // Deduplicate concurrent calls
@@ -371,7 +371,7 @@ async function getNBAStatVals(playerId, statCol) {
     return playerData[statCol];
   }
   // Fallback: per-player call with 5s timeout
-  const url = `${NBA_PROXY}/playergamelog?PlayerID=${playerId}&Season=2025-26&SeasonType=Regular+Season&LeagueID=00`;
+  const url = `${NBA_PROXY}/playergamelog?PlayerID=${playerId}&Season=2026-27&SeasonType=Regular+Season&LeagueID=00`;
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 5000);
@@ -409,7 +409,7 @@ async function getNBAPlayerId(playerName) {
   try {
     // Pull from bulk game log cache first (has PLAYER_ID but not names)
     // So we still need commonallplayers for name→ID mapping
-    const url = `${NBA_PROXY}/commonallplayers?LeagueID=00&Season=2025-26&IsOnlyCurrentSeason=1`;
+    const url = `${NBA_PROXY}/commonallplayers?LeagueID=00&Season=2026-27&IsOnlyCurrentSeason=1`;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 10000);
     const res = await fetch(url, {headers: NBA_HEADERS, signal: ac.signal});
@@ -512,7 +512,7 @@ async function runScan(){
     setProgress(50, 'Loading NBA rosters + game logs (1 bulk call)…');
     const [,] = await Promise.all([
       getNBAPlayerId('__preload__').catch(() => {}),
-      loadNBABulkGameLogs('2025-26').catch(() => {})
+      loadNBABulkGameLogs('2026-27').catch(() => {})
     ]);
 
     // For each player+prop, look up stats from bulk cache (no per-player HTTP calls)
