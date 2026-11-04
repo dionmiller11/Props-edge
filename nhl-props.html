@@ -179,21 +179,21 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <div class="toast" id="toast"></div>
 <script>
 // ── ODDS API (NHL) ──
-const NHL_ODDS_MARKETS = 'player_points,player_goals,player_assists,player_shots_on_goal,player_blocked_shots,player_power_play_points';
-const NHL_MARKET_MAP = {
+var NHL_ODDS_MARKETS = 'player_points,player_goals,player_assists,player_shots_on_goal,player_blocked_shots,player_power_play_points';
+var NHL_MARKET_MAP = {
   player_goals:'goals', player_assists:'assists', player_points:'points',
   player_shots_on_goal:'shotsOnGoal', player_blocked_shots:'blockedShots',
   player_power_play_points:'powerPlayPoints', player_saves:'saves',
   player_goals_assists:'goalsAssists'
 };
 // Map propKey → NHL API stat field name
-const NHL_STAT_COL = {
+var NHL_STAT_COL = {
   goals:'goals', assists:'assists', points:'points',
   shotsOnGoal:'shotsOnGoal', blockedShots:'blockedShots',
   powerPlayPoints:'powerPlayPoints', saves:'saves', goalsAssists:null
 };
 
-const PROP_LABELS={
+var PROP_LABELS={
   goals:'Goals',
   assists:'Assists',
   points:'Points',
@@ -211,9 +211,9 @@ const PROP_LABELS={
 };
 
 // Goalie props (shown differently in UI)
-const GOALIE_PROPS=['saves'];
+var GOALIE_PROPS=['saves'];
 
-const TAB_PROPS={
+var TAB_PROPS={
   all:null,
   goals:['goals','anytimeGoalScorer'],
   assists:['assists','powerPlayAssists'],
@@ -224,7 +224,7 @@ const TAB_PROPS={
   icetime:['timeOnIce'],
 };
 
-const TAB_TITLES={
+var TAB_TITLES={
   all:'🏒 ALL NHL PROPS',
   goals:'🥅 GOALS',
   assists:'🎯 ASSISTS',
@@ -235,8 +235,8 @@ const TAB_TITLES={
   icetime:'⏱️ MINUTES ON ICE',
 };
 
-const today=new Date(),todayStr=today.toISOString().split('T')[0];
-let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[],searchQuery='';
+var today=new Date(),todayStr=today.toISOString().split('T')[0];
+var allData=[],activeTab='all',edgeOnly=false,parlayLegs=[],searchQuery='';
 document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 
 ['oddsApiKey'].forEach(k=>{const v=getStored(k);if(v){document.getElementById(k).value=v;updateStatus(k,true);}});
@@ -598,7 +598,7 @@ function calcEdgePct(rate,odds){const imp=oddsToImplied(odds);if(imp==null)retur
 // ── SIGNAL EXTRACTION (shared across all sport pages) ──
 // Maps Linemate signal types to display labels
 var SIGNAL_DISPLAY={RECENT_FORM:'Overall',LAST_10:'Last 10',HEAD_TO_HEAD:'vs Opp',HOME_AWAY:'Home/Away',MATCHUP:'Matchup',PLAYER_TREND:'Trend'};
-let activeSignal='RECENT_FORM'; // which signal to show in table
+var activeSignal='RECENT_FORM'; // which signal to show in table
 
 function extractAllSignals(signals){
   const out=[];
@@ -719,7 +719,7 @@ function onSearch(val){searchQuery=val.toLowerCase().trim();document.getElementB
 function clearSearch(){searchQuery='';document.getElementById('playerSearch').value='';document.getElementById('searchClear').style.display='none';renderTable();}
 
 // ── SGP BUILDER ──
-let sgpLegs=[];
+var sgpLegs=[];
 var CORR_MAP_NHL={goals_assists:0.45,goals_points:0.80,assists_points:0.85,shotsOnGoal_goals:0.55,shotsOnGoal_points:0.50,powerPlayPoints_points:0.70,powerPlayGoals_powerPlayPoints:0.75,saves_goals:-0.15,timeOnIce_goals:0.35,timeOnIce_assists:0.40,timeOnIce_points:0.45,timeOnIce_shotsOnGoal:0.50,timeOnIce_powerPlayPoints:0.55};
 function getSGPStatKeyNHL(propKey,prop){const c=((propKey||'')+' '+(prop||'')).toLowerCase();if(/time.on.ice|timeonice|minutes.on.ice|toi|ice.time/.test(c))return'timeOnIce';if(/goal/.test(c)&&!/assist/.test(c)&&!/power/.test(c))return'goals';if(/assist/.test(c)&&!/power/.test(c))return'assists';if(/point/.test(c)&&!/power/.test(c))return'points';if(/shot/.test(c))return'shotsOnGoal';if(/save/.test(c))return'saves';if(/power.*point/.test(c))return'powerPlayPoints';if(/power.*goal/.test(c))return'powerPlayGoals';return'unknown';}
 function getSGPCorrNHL(kA,kB){return CORR_MAP_NHL[kA+'_'+kB]??CORR_MAP_NHL[kB+'_'+kA]??0;}
