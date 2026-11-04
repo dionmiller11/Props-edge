@@ -2001,6 +2001,55 @@ if (url.pathname.startsWith('/moneypuck/')) {
   });
 }
 
+  // NHL API proxy (api.nhle.com doesn't send CORS headers)
+  if (url.pathname.startsWith('/nhle-web/')) {
+    const nhlePathAndQuery = url.pathname.replace('/nhle-web', '') + url.search;
+    const nhleUrl = `https://api-web.nhle.com${nhlePathAndQuery}`;
+    try {
+      const nhleRes = await fetch(nhleUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      });
+      const body = await nhleRes.text();
+      return new Response(body, {
+        status: nhleRes.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=3600'
+        }
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+  }
+
+  if (url.pathname.startsWith('/nhle/')) {
+    const nhlePathAndQuery = url.pathname.replace('/nhle', '') + url.search;
+    const nhleUrl = `https://api.nhle.com${nhlePathAndQuery}`;
+    try {
+      const nhleRes = await fetch(nhleUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      });
+      const body = await nhleRes.text();
+      return new Response(body, {
+        status: nhleRes.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=3600'
+        }
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+  }
+
   // nflverse proxy (GitHub releases block direct browser fetch in some envs)
   if (url.pathname.startsWith('/nflverse/')) {
     const file = url.pathname.replace('/nflverse/', '');
