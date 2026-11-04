@@ -488,73 +488,97 @@ async function runScan(){
 
     setProgress(50, 'Loading NHL player roster…');
     await Promise.all([loadNHLRoster(), loadNHLGoalieRoster()]);
+    const rosterLoaded = Object.keys(_nhlPlayerCache).length > 0;
 
-    setProgress(55, 'Calculating hit rates from NHL.com game logs…');
     const results = [];
     let processed = 0;
     const total = propEntries.length;
-    const LOG_BATCH = 5;
 
-    for (let i = 0; i < propEntries.length; i += LOG_BATCH) {
-      const batch = propEntries.slice(i, i + LOG_BATCH);
-      await Promise.all(batch.map(async pm => {
-        try {
-          processed++;
-          if (processed % 5 === 0) setProgress(55 + Math.round(processed/total*35), `Hit rates… ${processed}/${total}`);
+    if (rosterLoaded) {
+      setProgress(55, 'Calculating hit rates from NHL.com game logs…');
+      const LOG_BATCH = 5;
+      for (let i = 0; i < propEntries.length; i += LOG_BATCH) {
+        const batch = propEntries.slice(i, i + LOG_BATCH);
+        await Promise.all(batch.map(async pm => {
+          try {
+            processed++;
+            if (processed % 5 === 0) setProgress(55 + Math.round(processed/total*35), `Hit rates… ${processed}/${total}`);
 
-          const pInfo = _nhlPlayerCache[pm.player];
-          if (!pInfo) return;
-          const isGoalie = pInfo.pos === 'G';
-          const statKey = NHL_STAT_COL[pm.propKey];
-          if (statKey === undefined) return;
+            const pInfo = _nhlPlayerCache[pm.player];
+            if (!pInfo) return;
+            const isGoalie = pInfo.pos === 'G';
+            const statKey = NHL_STAT_COL[pm.propKey];
+            if (statKey === undefined) return;
 
-          const gameLog = await fetchNHLGameLog(pInfo.id, isGoalie);
-          if (!gameLog?.gameLog?.length) return;
+            const gameLog = await fetchNHLGameLog(pInfo.id, isGoalie);
+            if (!gameLog?.gameLog?.length) return;
 
-          const mpData = getMPData(pm.player, isGoalie);
+            const mpData = getMPData(pm.player, isGoalie);
 
-          // Try both OVER and UNDER
-          for (const direction of ['OVER', 'UNDER']) {
-            const stats = calcNHLHitStats(gameLog, statKey || pm.propKey, pm.line, direction, 20);
-            if (!stats || stats.rate < minRate) continue;
+            for (const direction of ['OVER', 'UNDER']) {
+              const stats = calcNHLHitStats(gameLog, statKey || pm.propKey, pm.line, direction, 20);
+              if (!stats || stats.rate < minRate) continue;
 
-            const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
-            const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
-            const bookCount = pm.overBookCount + pm.underBookCount;
-            const bookAgreePct = bookCount > 0
-              ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
-              : null;
+              const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
+              const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+              const bookCount = pm.overBookCount + pm.underBookCount;
+              const bookAgreePct = bookCount > 0
+                ? Math.round((direction === 'OVER' ? pm.overBookCount : pm.underBookCount) / bookCount * 100)
+                : null;
 
-            results.push({
-              player: pm.player, team: pm.team, position: pInfo.pos,
-              propKey: pm.propKey, isGoalie,
-              prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
-              line: String(pm.line), direction,
-              rate: stats.rate, hits: stats.hits, games: stats.games,
-              last10: stats.last10, streak: stats.streak, hotStreak: stats.streak >= 3,
-              opposingTeam: pm.opposingTeam, gameTime: pm.gameTime,
-              matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
-              matchupNote: 'vs ' + pm.opposingTeam,
-              bestOdds, bookCount, bookAgreePct,
-              sport: 'NHL', category: pm.propKey, allSignals: [], mpData
-            });
-          }
-        } catch(e) { console.warn('NHL hit rate error:', pm.player, e.message); }
-      }));
-      if (i + LOG_BATCH < propEntries.length) await new Promise(r => setTimeout(r, 200));
+              results.push({
+                player: pm.player, team: pm.team, position: pInfo.pos,
+                propKey: pm.propKey, isGoalie,
+                prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
+                line: String(pm.line), direction,
+                rate: stats.rate, hits: stats.hits, games: stats.games,
+                last10: stats.last10, streak: stats.streak, hotStreak: stats.streak >= 3,
+                opposingTeam: pm.opposingTeam, gameTime: pm.gameTime,
+                matchupGrade: stats.rate >= 90 ? 'A' : stats.rate >= 80 ? 'B' : 'C',
+                matchupNote: 'vs ' + pm.opposingTeam,
+                bestOdds, bookCount, bookAgreePct,
+                sport: 'NHL', category: pm.propKey, allSignals: [], mpData
+              });
+            }
+          } catch(e) { console.warn('NHL hit rate error:', pm.player, e.message); }
+        }));
+        if (i + LOG_BATCH < propEntries.length) await new Promise(r => setTimeout(r, 200));
+      }
+    } else {
+      // Roster unavailable — show all props with lines only (no hit rate filter)
+      setProgress(55, 'NHL roster unavailable — showing lines only…');
+      for (const pm of propEntries) {
+        const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
+        for (const direction of ['OVER', 'UNDER']) {
+          const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+          const bookCount = (pm.overBookCount||0) + (pm.underBookCount||0);
+          results.push({
+            player: pm.player, team: pm.team, position: '?',
+            propKey: pm.propKey, isGoalie: false,
+            prop: propLabel + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line,
+            line: String(pm.line), direction,
+            rate: null, hits: null, games: null,
+            last10: [], streak: 0, hotStreak: false,
+            opposingTeam: pm.opposingTeam || '', gameTime: pm.gameTime || '',
+            matchupGrade: null, matchupNote: '',
+            bestOdds, bookCount, bookAgreePct: null,
+            sport: 'NHL', category: pm.propKey, allSignals: [], mpData: null
+          });
+        }
+      }
     }
 
     setProgress(95,'Sorting…');
     const seen = {};
     allData = results
-      .filter(p => { const k=p.player+p.propKey+p.direction; if(seen[k]&&seen[k]>=p.rate)return false; seen[k]=p.rate; return true; })
+      .filter(p => { const k=p.player+(p.propKey||'')+(p.direction||''); if(seen[k]&&(seen[k]>=(p.rate||0)))return false; seen[k]=p.rate||0; return true; })
       .sort((a,b) => (b.rate||0)-(a.rate||0));
 
     hideProgress(); populateTeamFilter(); renderTable(); updateSummary();
     document.getElementById('summary').style.display = 'grid';
     ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
-    document.getElementById('dataTs').textContent = 'NHL.com + Odds API · ' + new Date().toLocaleTimeString();
-    setStatus('done', '✅ ' + allData.length + ' NHL prop edges (last 20 games) — ' + new Date().toLocaleTimeString());
+    document.getElementById('dataTs').textContent = (rosterLoaded ? 'NHL.com + ' : '⚠️ No roster · ') + dataSource + ' · ' + new Date().toLocaleTimeString();
+    setStatus('done', rosterLoaded ? ('✅ ' + allData.length + ' NHL prop edges (last 20 games) — ' + new Date().toLocaleTimeString()) : ('⚠️ ' + allData.length + ' props shown — NHL.com roster unavailable, hit rates not calculated'));
     document.getElementById('lastRun').textContent = 'Last run: ' + new Date().toLocaleString();
     if (window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NHL');
     saveLineHistory(allData);
@@ -611,7 +635,7 @@ function renderTable(){
   const allowedProps=TAB_PROPS[activeTab];
   const ttl=TAB_TITLES[activeTab]||'🏒 NHL PROPS';
   document.getElementById('tableTitle').textContent=ttl+' — TODAY';
-  let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery)&&!p.team.toLowerCase().includes(searchQuery))return false;return true;});
+  let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if(p.rate!=null&&p.rate<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery)&&!p.team.toLowerCase().includes(searchQuery))return false;return true;});
   data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge'){const ae=calcEdgePct(a.rate,a.bestOdds)||0,be=calcEdgePct(b.rate,b.bestOdds)||0;return be-ae;}if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
   tbody.innerHTML=data.map(p=>{
