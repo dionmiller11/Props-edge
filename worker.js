@@ -2164,6 +2164,83 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  // ── ODDS API PROPS FALLBACK: /odds/props/nhl|nba|mlb etc ──
+  const oddsPropsMatch = url.pathname.match(/^\/odds\/props\/(nhl|nba|mlb|nfl|wnba|ncaaf)$/);
+  if (oddsPropsMatch && request.method === 'GET') {
+    try {
+      const sport = oddsPropsMatch[1];
+      const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
+      if (!oddsApiKey) return new Response(JSON.stringify({ ok: false, error: 'no odds api key' }), { headers: cors });
+      const cfg = SPORT_PROP_CONFIG[sport.toUpperCase()];
+      if (!cfg) return new Response(JSON.stringify({ ok: false, error: 'unsupported sport' }), { headers: cors });
+
+      const etOffset = -5;
+      const etNow = new Date(Date.now() + etOffset * 3600000);
+      const todayET = etNow.toISOString().split('T')[0];
+
+      // Get today's events
+      const evRes = await fetchWithTimeout(
+        `https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events?apiKey=${oddsApiKey}&dateFormat=iso`, {}, 8000);
+      if (!evRes.ok) return new Response(JSON.stringify({ ok: false, error: `Odds API events ${evRes.status}` }), { headers: cors });
+      const events = await evRes.json();
+      const todayEvents = events.filter(ev => {
+        if (!ev.commence_time) return false;
+        const evET = new Date(new Date(ev.commence_time).getTime() + etOffset * 3600000);
+        return evET.toISOString().split('T')[0] === todayET;
+      });
+
+      if (!todayEvents.length) return new Response(JSON.stringify({ ok: true, sport: sport.toUpperCase(), count: 0, props: [], source: 'odds-api' }), { headers: cors });
+
+      // Fetch props for each event, collect all into unified format
+      const props = [];
+      const seen = new Set();
+      for (const ev of todayEvents) {
+        const game = `${ev.away_team} @ ${ev.home_team}`;
+        const gameTime = ev.commence_time || '';
+        try {
+          const pRes = await fetchWithTimeout(
+            `https://api.the-odds-api.com/v4/sports/${cfg.oddsKey}/events/${ev.id}/odds?apiKey=${oddsApiKey}&regions=us&markets=${cfg.markets}&oddsFormat=american&dateFormat=iso`,
+            {}, 8000);
+          if (!pRes.ok) continue;
+          const pData = await pRes.json();
+          // Build consensus lines across bookmakers
+          const playerMarketMap = {}; // "player|market" → {over:[odds], under:[odds], line}
+          for (const bk of pData.bookmakers || []) {
+            for (const mkt of bk.markets || []) {
+              const marketKey = cfg.marketMap[mkt.key] || mkt.key;
+              for (const o of mkt.outcomes || []) {
+                const player = o.description || o.name;
+                if (!player || o.point == null) continue;
+                const k = `${player}|${marketKey}`;
+                if (!playerMarketMap[k]) playerMarketMap[k] = { player, market: mkt.key, marketKey, line: o.point, overOdds: [], underOdds: [] };
+                if (o.name === 'Over') playerMarketMap[k].overOdds.push(o.price);
+                if (o.name === 'Under') playerMarketMap[k].underOdds.push(o.price);
+              }
+            }
+          }
+          const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+          for (const [k, pm] of Object.entries(playerMarketMap)) {
+            if (seen.has(k)) continue;
+            seen.add(k);
+            const marketName = Object.entries(cfg.marketMap).find(([mk]) => mk === pm.market)?.[1] || pm.market;
+            props.push({
+              player: pm.player,
+              market: marketName,
+              line: pm.line,
+              overOdds: avg(pm.overOdds),
+              underOdds: avg(pm.underOdds),
+              game,
+              gameTime,
+            });
+          }
+        } catch(e) { continue; }
+      }
+      return new Response(JSON.stringify({ ok: true, sport: sport.toUpperCase(), count: props.length, props, source: 'odds-api' }), { headers: cors });
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
+    }
+  }
+
   // ── NTFY DEBUG: test ntfy send directly ──
   if (url.pathname === '/debug/ntfy' && request.method === 'POST') {
     try {
