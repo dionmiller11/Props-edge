@@ -2169,7 +2169,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
   if (oddsPropsMatch && request.method === 'GET') {
     try {
       const sport = oddsPropsMatch[1];
-      const oddsApiKey = await env.LINE_MONITOR_KV.get('config:odds_api_key');
+      const oddsApiKey = await env.LINE_MONITOR_KV.get('odds_api_key') || await env.LINE_MONITOR_KV.get('config:odds_api_key');
       if (!oddsApiKey) return new Response(JSON.stringify({ ok: false, error: 'no odds api key' }), { headers: cors });
       const cfg = SPORT_PROP_CONFIG[sport.toUpperCase()];
       if (!cfg) return new Response(JSON.stringify({ ok: false, error: 'unsupported sport' }), { headers: cors });
