@@ -346,7 +346,7 @@ function mpBadgeHtml(mp,isGoalie){
 
 // ── NHL.COM GAME LOG FETCHER ──
 // NHL API returns player game logs; open CORS from browser
-const _nhlPlayerCache = {}; // name → {id, pos}
+var _nhlPlayerCache = {}; // name → {id, pos}
 
 async function loadNHLRoster() {
   if (Object.keys(_nhlPlayerCache).length > 10) return; // already loaded
