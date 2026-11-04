@@ -185,9 +185,9 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <div class="toast" id="toast"></div>
 <script>
 // ── ODDS API MARKETS ──
-const ODDS_MARKETS = 'player_points,player_rebounds,player_assists,player_threes,player_steals,player_blocks,player_points_rebounds_assists,player_turnovers';
+var ODDS_MARKETS = 'player_points,player_rebounds,player_assists,player_threes,player_steals,player_blocks,player_points_rebounds_assists,player_turnovers';
 // Map Odds API market keys → internal propKey
-const ODDS_MARKET_MAP = {
+var ODDS_MARKET_MAP = {
   player_points:'points', player_rebounds:'rebounds', player_assists:'assists',
   player_threes:'threePointersMade', player_steals:'steals', player_blocks:'blocks',
   player_points_rebounds_assists:'pointsReboundsAssists', player_turnovers:'turnovers',
@@ -195,17 +195,17 @@ const ODDS_MARKET_MAP = {
   player_rebounds_assists:'reboundsAssists'
 };
 // Map propKey → stats.nba.com stat column
-const NBA_STAT_COL = {
+var NBA_STAT_COL = {
   points:'PTS', rebounds:'REB', assists:'AST', threePointersMade:'FG3M',
   steals:'STL', blocks:'BLK', pointsReboundsAssists:null,
   pointsRebounds:null, pointsAssists:null, reboundsAssists:null, turnovers:'TOV'
 };
-const PROP_LABELS={points:'Points',rebounds:'Rebounds',assists:'Assists',threePointersMade:'3-Pointers',steals:'Steals',blocks:'Blocks',pointsReboundsAssists:'PTS+REB+AST',pointsAssists:'PTS+AST',pointsRebounds:'PTS+REB',reboundsAssists:'REB+AST',turnovers:'Turnovers',personalFouls:'Fouls'};
-const PITCHER_PROPS=[];
-const TAB_PROPS={all:null,hitter:null,pitcher:[],hits:['points'],total_bases:['rebounds'],rbi:['assists'],runs:['threePointersMade'],strikeouts:['steals'],hits_allowed:['blocks'],walks:['pointsReboundsAssists'],earned_runs:['turnovers']};
-const TAB_TITLES={all:'🏀 ALL NBA PROPS',hitter:'🏀 ALL PROPS',pitcher:'',hits:'🏀 POINTS',total_bases:'💪 REBOUNDS',rbi:'🎯 ASSISTS',runs:'3️⃣ 3-POINTERS',strikeouts:'🤲 STEALS',hits_allowed:'🚫 BLOCKS',walks:'📊 PTS+REB+AST',earned_runs:'🔄 TURNOVERS'};
-const today=new Date(),todayStr=today.toISOString().split('T')[0];
-let allData=[],activeTab='all',edgeOnly=false,parlayLegs=[];
+var PROP_LABELS={points:'Points',rebounds:'Rebounds',assists:'Assists',threePointersMade:'3-Pointers',steals:'Steals',blocks:'Blocks',pointsReboundsAssists:'PTS+REB+AST',pointsAssists:'PTS+AST',pointsRebounds:'PTS+REB',reboundsAssists:'REB+AST',turnovers:'Turnovers',personalFouls:'Fouls'};
+var PITCHER_PROPS=[];
+var TAB_PROPS={all:null,hitter:null,pitcher:[],hits:['points'],total_bases:['rebounds'],rbi:['assists'],runs:['threePointersMade'],strikeouts:['steals'],hits_allowed:['blocks'],walks:['pointsReboundsAssists'],earned_runs:['turnovers']};
+var TAB_TITLES={all:'🏀 ALL NBA PROPS',hitter:'🏀 ALL PROPS',pitcher:'',hits:'🏀 POINTS',total_bases:'💪 REBOUNDS',rbi:'🎯 ASSISTS',runs:'3️⃣ 3-POINTERS',strikeouts:'🤲 STEALS',hits_allowed:'🚫 BLOCKS',walks:'📊 PTS+REB+AST',earned_runs:'🔄 TURNOVERS'};
+var today=new Date(),todayStr=today.toISOString().split('T')[0];
+var allData=[],activeTab='all',edgeOnly=false,parlayLegs=[];
 document.getElementById('dateBadge').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 ['oddsApiKey','mseCookie'].forEach(k=>{const v=getStored(k);if(v){const el=document.getElementById(k);if(el)el.value=v;updateStatus(k,true);}});
 function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
@@ -236,12 +236,12 @@ async function getB2BTeams(espnPath) {
     return teams;
   } catch(e) { return new Set(); }
 }
-let b2bTeams = new Set();
-let b2bOnly = false;
+var b2bTeams = new Set();
+var b2bOnly = false;
 function toggleB2B(el){b2bOnly=!b2bOnly;el.classList.toggle('active',b2bOnly);renderTable();}
 
 // ── NBA DEFENSIVE MATCHUP GRADES ──
-let defRankings = {};
+var defRankings = {};
 
 function buildDefRankings(teamMap){
   const teams=Object.entries(teamMap).map(([abbr,v])=>({abbr,...v}));
@@ -287,12 +287,12 @@ function defBadge(opp){
 // Single bulk fetch: leaguegamelog returns all players' games in one call.
 // Structure: { playerId: { PTS:[...], REB:[...], AST:[...], ... } }
 // Games are ordered newest-first.
-let _nbaGameLogCache = null; // null = not loaded, {} = loaded (may be empty)
-let _nbaGameLogLoading = null; // Promise while loading
+var _nbaGameLogCache = null; // null = not loaded, {} = loaded (may be empty)
+var _nbaGameLogLoading = null; // Promise while loading
 
 // Route all stats.nba.com calls through Cloudflare Worker to avoid CORS blocks
-const NBA_PROXY = 'https://line-monitor.dion-miller11.workers.dev/nba/stats';
-const NBA_HEADERS = {}; // headers are set server-side by the worker
+var NBA_PROXY = 'https://line-monitor.dion-miller11.workers.dev/nba/stats';
+var NBA_HEADERS = {}; // headers are set server-side by the worker
 
 async function loadNBABulkGameLogs(season='2026-27') {
   // Return cached if already loaded
@@ -402,7 +402,7 @@ function calcHitStats(vals, line, direction, nGames=20) {
 }
 
 // NBA player name → ID cache
-const _playerIdCache = {};
+var _playerIdCache = {};
 
 async function getNBAPlayerId(playerName) {
   if (_playerIdCache[playerName]) return _playerIdCache[playerName];
@@ -643,8 +643,8 @@ function renderTable(){
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-pitchers').textContent=q.filter(p=>p.propKey==='pointsReboundsAssists').length;}
 
 // ── MSE INTEGRATION ──
-let mseMap = {};
-const MSE_NBA_MARKET_MAP = {
+var mseMap = {};
+var MSE_NBA_MARKET_MAP = {
   'points':'points','rebounds':'rebounds','assists':'assists',
   'threes':'threes','three_pointers_made':'threes',
   'blocks':'blocks','steals':'steals',
@@ -752,8 +752,8 @@ function logBet(p){
 
 
 // ── LINE HISTORY SPARKLINE ──
-const LH_KEY = 'lineHistory_' + window.location.pathname.split('/').pop().replace('.html','');
-const MAX_LH_SNAPSHOTS = 6;
+var LH_KEY = 'lineHistory_' + window.location.pathname.split('/').pop().replace('.html','');
+var MAX_LH_SNAPSHOTS = 6;
 
 function saveLineHistory(data){
   const ds = new Date().toISOString().split('T')[0];
@@ -832,7 +832,7 @@ function correlateParlay(){
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
 }
 
-let searchQuery = '';
+var searchQuery = '';
 function onSearch(val){
   searchQuery=val.toLowerCase().trim();
   document.getElementById('searchClear').style.display=val?'block':'none';
@@ -855,8 +855,8 @@ function clearSearch(){
 }
 
 // SGP BUILDER
-let sgpLegs=[];
-const CORR_MAP={NFL:{passingyards_receivingyards:0.75,passingyards_receptions:0.70,passingyards_passingtd:0.55,passingyards_rushingyards:-0.25,receivingyards_receptions:0.80,rushingyards_rushingattempts:0.85,receivingyards_receivingtd:0.45},NBA:{points_assists:0.35,points_rebounds:-0.10,points_threepointers:0.50,assists_rebounds:0.15,points_steals:0.20},WNBA:{points_assists:0.35,points_rebounds:-0.10,points_threepointers:0.50},MLB:{hits_totalbases:0.75,hits_rbi:0.40,hits_runs:0.45,totalbases_rbi:0.55}};
+var sgpLegs=[];
+var CORR_MAP={NFL:{passingyards_receivingyards:0.75,passingyards_receptions:0.70,passingyards_passingtd:0.55,passingyards_rushingyards:-0.25,receivingyards_receptions:0.80,rushingyards_rushingattempts:0.85,receivingyards_receivingtd:0.45},NBA:{points_assists:0.35,points_rebounds:-0.10,points_threepointers:0.50,assists_rebounds:0.15,points_steals:0.20},WNBA:{points_assists:0.35,points_rebounds:-0.10,points_threepointers:0.50},MLB:{hits_totalbases:0.75,hits_rbi:0.40,hits_runs:0.45,totalbases_rbi:0.55}};
 function getSGPStatKey(propType,prop){const c=((propType||'')+' '+(prop||'')).toLowerCase();if(/pass.*yd|pass.*yard/.test(c))return'passingyards';if(/rush.*yd|rush.*yard/.test(c))return'rushingyards';if(/rec.*yd|rec.*yard/.test(c))return'receivingyards';if(/reception|catch/.test(c))return'receptions';if(/pass.*td/.test(c))return'passingtd';if(/point|pts/.test(c)&&!/3pt/.test(c))return'points';if(/rebound|reb/.test(c))return'rebounds';if(/assist|ast/.test(c))return'assists';if(/3.pt|three/.test(c))return'threepointers';if(/hit/.test(c))return'hits';if(/total base|tb/.test(c))return'totalbases';if(/strikeout/.test(c))return'strikeouts';if(/rbi/.test(c))return'rbi';return'unknown';}
 function getSGPCorr(kA,kB,sp){const m=CORR_MAP[sp]||CORR_MAP.NFL;return m[kA+'_'+kB]??m[kB+'_'+kA]??0;}
 function corrLabel(s){if(s>=0.5)return{label:'++ STRONG POS',cls:'pos'};if(s>=0.2)return{label:'+ MILD POS',cls:'pos'};if(s<=-0.3)return{label:'-- NEG',cls:'neg'};if(s<=-0.1)return{label:'- MILD NEG',cls:'neg'};return{label:'~ NEUTRAL',cls:'neutral'};}
