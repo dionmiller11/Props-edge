@@ -563,7 +563,7 @@ async function runScan(){
         // Try both OVER and UNDER — keep whichever meets minRate
         for (const direction of ['OVER', 'UNDER']) {
           const stats = calcHitStats(vals, pm.line, direction, 20);
-          if (!stats || stats.rate < minRate) continue;
+          if (!stats) continue;
 
           const propLabel = PROP_LABELS[pm.propKey] || pm.propKey;
           const bestOdds = direction === 'OVER' ? pm.overOdds : pm.underOdds;

@@ -422,7 +422,6 @@ async function runScan() {
         const primary = allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
         if (!primary || !primary.rate) continue;
         const hitRate = primary.rate;
-        if (hitRate < minRate) continue;
 
         const hits  = primary.hits;
         const games = primary.games;

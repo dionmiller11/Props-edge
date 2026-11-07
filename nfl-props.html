@@ -656,7 +656,6 @@ async function runScan(){
         const primary = allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
         if(!primary||!primary.rate) continue;
         const hitRate = primary.rate, hits = primary.hits, games = primary.games;
-        if(hitRate < minRate) continue;
 
         const misses = games - hits;
         const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
@@ -697,7 +696,7 @@ async function runScan(){
     document.getElementById('summary').style.display='grid';
     ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
     document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
-    setStatus('done',`✅ ${allData.length} NFL prop edges from Linemate — ${new Date().toLocaleTimeString()}`);
+    setStatus('done',`✅ ${allData.length} NFL props from Linemate — ${new Date().toLocaleTimeString()}`);
     document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
     if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NFL');
 
