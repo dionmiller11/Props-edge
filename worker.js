@@ -1266,9 +1266,14 @@ async function runAutoProps(env) {
   const lmToken = await getLmAccessToken(env);
   if (!lmToken) return { skipped: true, reason: 'no linemate token — store refresh token first' };
 
+  const dayOfWeekET = etNow.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+
   // ── Scan each Linemate sport ──
   for (const sport of PROP_SPORTS) {
     const sportLabel = sport.label; // 'NBA', 'NHL', 'MLB', 'WNBA'
+
+    // Skip NFL on Sundays — by 6pm ET most games are over, alert is useless
+    if (sportLabel === 'NFL' && dayOfWeekET === 0) continue;
 
     // Fetch prop lines from Linemate
     let items = [];
