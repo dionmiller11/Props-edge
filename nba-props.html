@@ -126,7 +126,7 @@ footer{max-width:1140px;margin:18px auto 0;padding:12px 16px;display:flex;align-
 <main>
   <div class="filters">
     <div class="filter-group"><span class="filter-label">MIN RATE</span><input type="number" id="minRate" value="70" min="50" max="100" step="5" oninput="renderTable()"> %</div>
-    <div class="filter-group"><span class="filter-label">SORT</span><select id="sortBy" onchange="renderTable()"><option value="rate">Hit Rate</option><option value="streak">Streak</option><option value="edge">Edge</option><option value="time">Game Time</option></select></div>
+    <div class="filter-group"><span class="filter-label">SORT</span><select id="sortBy" onchange="renderTable()"><option value="rate">Hit Rate</option><option value="weighted">Weighted Rate</option><option value="streak">Streak</option><option value="edge">Edge</option><option value="time">Game Time</option></select></div>
     <div class="filter-group"><span class="filter-label">DIRECTION</span><select id="dirFilter" onchange="renderTable()"><option value="all">All</option><option value="OVER">Over Only</option><option value="UNDER">Under Only</option></select></div>
     <div class="filter-group"><span class="filter-label">TEAM</span><select id="teamFilter" onchange="renderTable()"><option value="all">All</option></select></div>
     <div class="filter-group"><span class="filter-label">TIME</span><select id="timeFilter" onchange="renderTable()"><option value="all">All Games</option><option value="early">Early (before 5pm)</option><option value="night">Night (5pm+)</option></select></div>
@@ -391,14 +391,30 @@ async function getNBAStatVals(playerId, statCol) {
 function calcHitStats(vals, line, direction, nGames=20) {
   if (!vals || vals.length < 3) return null;
   const use = vals.slice(0, nGames);
-  const hits = use.filter(v => direction === 'OVER' ? v > line : v < line).length;
+  const hitArr = use.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
+  const hits = hitArr.reduce((s,v) => s+v, 0);
   const games = use.length;
   const rate = Math.round(hits / games * 100);
+
+  // Recency-weighted rate: last 3 → 50%, games 4-7 → 30%, games 8+ → 20%
+  let weightedRate = rate;
+  if (games >= 5) {
+    const g3 = hitArr.slice(0, 3);
+    const g47 = hitArr.slice(3, 7);
+    const g8p = hitArr.slice(7);
+    const w3 = g3.length ? g3.reduce((s,v)=>s+v,0)/g3.length : 0;
+    const w47 = g47.length ? g47.reduce((s,v)=>s+v,0)/g47.length : w3;
+    const w8p = g8p.length ? g8p.reduce((s,v)=>s+v,0)/g8p.length : w47;
+    const wSum = 0.50 * w3 + 0.30 * w47 + 0.20 * w8p;
+    weightedRate = Math.round(wSum * 100);
+  }
+
   const last10vals = use.slice(0, 10);
   const last10 = last10vals.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
   let streak = 0;
   for (const h of last10) { if (h) streak++; else break; }
-  return {rate, hits, games, last10, streak};
+  const trend = weightedRate > rate + 5 ? '▲' : weightedRate < rate - 5 ? '▼' : null;
+  return {rate, weightedRate, trend, hits, games, last10, streak};
 }
 
 // NBA player name → ID cache
@@ -581,6 +597,8 @@ async function runScan(){
             line: String(pm.line),
             direction,
             rate: stats.rate,
+            weightedRate: stats.weightedRate,
+            trend: stats.trend,
             hits: stats.hits,
             games: stats.games,
             last10: stats.last10,
@@ -632,7 +650,7 @@ function renderTable(){
   const tbody=document.getElementById('tableBody');const minRate=parseInt(document.getElementById('minRate').value)||70;const sortBy=document.getElementById('sortBy')?.value||'rate';const dirFilter=document.getElementById('dirFilter')?.value||'all';const teamFilter=document.getElementById('teamFilter')?.value||'all';const timeFilter=document.getElementById('timeFilter')?.value||'all';
   const allowedProps=TAB_PROPS[activeTab];
   let data=allData.filter(p=>{if(allowedProps&&!allowedProps.includes(p.propKey))return false;if((p.rate||0)<minRate)return false;if(edgeOnly&&!p.hotStreak&&(p.streak||0)<3)return false;if(dirFilter!=='all'&&p.direction!==dirFilter)return false;if(teamFilter!=='all'&&p.team!==teamFilter)return false;if(timeFilter==='early'&&p.gameTime&&toHr(p.gameTime)>=17)return false;if(timeFilter==='night'&&p.gameTime&&toHr(p.gameTime)<17)return false;if(b2bOnly&&!p.b2b)return false;if(searchQuery&&!p.player.toLowerCase().includes(searchQuery))return false;return true;});
-  data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
+  data=[...data].sort((a,b)=>{if(sortBy==='streak')return(b.streak||0)-(a.streak||0);if(sortBy==='weighted')return(b.weightedRate||b.rate||0)-(a.weightedRate||a.rate||0);if(sortBy==='edge')return(b.rate>=90?3:b.rate>=80?2:1)-(a.rate>=90?3:a.rate>=80?2:1);if(sortBy==='time')return toHr(a.gameTime)-toHr(b.gameTime);return(b.rate||0)-(a.rate||0);});
   if(!data.length){tbody.innerHTML=`<tr><td colspan="12"><div class="empty"><div class="empty-icon">🔍</div><p>No props at ${minRate}%+.<br>${allData.length===0?'Run the scan first.':'Try lowering the rate or changing filters.'}</p></div></td></tr>`;return;}
   tbody.innerHTML=data.map(p=>{
     const rate=p.rate||0,ip=p.isPitcher,rc=rate>=90?'elite':rate>=80?'strong':'solid',ec=rate>=90?'fire':rate>=80?'strong':'ok';
@@ -644,7 +662,7 @@ function renderTable(){
     const dir=p.direction||'OVER',dc=dir==='OVER'?'var(--accent2)':'var(--miss)',op=p.bestOdds;
     const lineHtml=`<div><span style="font-size:11px;font-weight:700;color:${dc}">${dir==='OVER'?'▲ OVER':'▼ UNDER'} ${p.line}</span>${lineSparkHtml(p)}<br>${op?`<span style="font-size:10px;color:${dc}">${op>0?'+':''}${op}</span>`:'<span style="color:var(--muted);font-size:10px">—</span>'}</div>`;
     const timeStr=p.gameTime?` · ${esc(p.gameTime)}`:'';
-    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">NBA</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span><br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td class="hide-mobile-sm mse-col">${renderMSECell(p)}</td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA",propType:p.propType||p.prop})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
+    return`<tr class="${p.b2b?'b2b-fade':''}"><td><div class="player-name">${esc(p.player)}<span class="lm-badge">NBA</span>${p.b2b?'<span class="b2b-badge">⚠️ B2B</span>':''}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td><td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td><td><span class="prop-type ${ip?'pitcher':''}">${esc(p.prop)}</span></td><td>${lineHtml}</td><td><span class="hit-rate ${ip?'purple':rc}">${rate}%</span> <span style="font-size:10px;font-weight:700;color:${dc}">${dir==='OVER'?'▲':'▼'}</span>${p.trend?`<span style="font-size:10px;font-weight:700;margin-left:4px;color:${p.trend==='▲'?'var(--accent2)':'var(--miss)'}">${p.trend}${p.weightedRate}%</span>`:''}<br><span style="font-size:10px;color:var(--muted)">${p.hits}/${p.games} ${dir}</span></td><td>${spark}</td><td class="hide-mobile-sm"><span style="font-size:10px;color:var(--muted)">${esc(p.matchupNote||'—')}${defBadge(p.opposingTeam)}</span></td><td class="hide-mobile-sm">${st}</td><td class="hide-mobile-sm"><span class="edge-badge ${ip?'purple':ecFinal}" ${_cs==='sharp'?'style=\\"background:rgba(255,215,0,.2);color:var(--gold);border-color:rgba(255,215,0,.4)\\"':''}>${el}</span></td><td class="hide-mobile-sm mse-col">${renderMSECell(p)}</td><td><button class="add-parlay-btn" id="pb-${esc(p.player+p.prop)}" onclick='addToParlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA"})})'>+</button> <button class="add-parlay-btn" style="margin-left:3px;background:rgba(0,212,255,.1);color:var(--accent);border-color:rgba(0,212,255,.2)" onclick='addToSGP({player:p.player,team:p.team,prop:p.prop,line:p.line,direction:dir,rate:p.rate,sport:"NBA",propType:p.propType||p.prop})' title="Add to SGP">🎰</button></td><td><button class="add-parlay-btn" onclick="logBet(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Log to Bet Tracker">📋</button></td></tr>`;
   }).join('');
 }
 function updateSummary(){const m=parseInt(document.getElementById('minRate').value)||70;const q=allData.filter(p=>(p.rate||0)>=m);document.getElementById('s-total').textContent=q.length;document.getElementById('s-fire').textContent=q.filter(p=>(p.rate||0)>=90).length;document.getElementById('s-strong').textContent=q.filter(p=>(p.rate||0)>=80&&(p.rate||0)<90).length;document.getElementById('s-pitchers').textContent=q.filter(p=>p.propKey==='pointsReboundsAssists').length;}
