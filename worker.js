@@ -59,7 +59,7 @@ const GAME_SPORTS = [
 ];
 
 // Prop sports via Linemate
-const LM_EXTRA = '&outcomes=OVER,YES,COVER&signals=HEAD_TO_HEAD&sortBySignals=HEAD_TO_HEAD';
+const LM_EXTRA = '&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM';
 const PROP_SPORTS = [
   { key: 'nfl',  label: 'NFL',  lmUrl: 'https://api.linemate.io/api/nfl/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200'+LM_EXTRA  },
   { key: 'nba',  label: 'NBA',  lmUrl: 'https://api.linemate.io/api/nba/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200'+LM_EXTRA  },
