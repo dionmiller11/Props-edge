@@ -489,15 +489,18 @@ function boxMuller() {
 function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, sport = '') {
   const expA = (avgPtsA + avgAllowedH) / 2;
   const expH = (avgPtsH + avgAllowedA) / 2;
+  // Home court/field advantage adjustment
+  const hca = sport === 'NBA' ? 3.0 : sport === 'NFL' ? 2.5 : sport === 'NCAAFB' ? 3.5 : sport === 'MLB' ? 0.15 : 0;
+  const expH_adj = expH + hca;
   const isHockey = sport === 'NHL';
   const varFactor = isHockey ? 0.30 : 0.22;
   const minSd = isHockey ? 0.8 : 3;
   const sdA = Math.max(expA * varFactor, minSd);
-  const sdH = Math.max(expH * varFactor, minSd);
+  const sdH = Math.max(expH_adj * varFactor, minSd);
   let overCount = 0, awaySpreadCount = 0, awayWinCount = 0;
   for (let i = 0; i < MC_N; i++) {
     const sA = Math.max(0, expA + sdA * boxMuller());
-    const sH = Math.max(0, expH + sdH * boxMuller());
+    const sH = Math.max(0, expH_adj + sdH * boxMuller());
     if (sA + sH > total) overCount++;
     if (sA > sH) awayWinCount++;
     if (spread !== null && (sA - sH) + spread > 0) awaySpreadCount++;
@@ -669,8 +672,8 @@ async function runAutoSim(env) {
   existing.updatedAt = Date.now();
   await env.LINE_MONITOR_KV.put(kvKey, JSON.stringify(existing), { expirationTtl: 1209600 });
 
-  // Build ntfy morning picks digest (60-69% bucket)
-  const picks6069 = allPredictions.filter(p => p.confidence >= 60 && p.confidence <= 69);
+  // Build ntfy morning picks digest (63-69% bucket — raised from 60 to cut marginal plays)
+  const picks6069 = allPredictions.filter(p => p.confidence >= 63 && p.confidence <= 69);
   const picks70plus = allPredictions.filter(p => p.confidence >= 70);
 
   if (picks6069.length || picks70plus.length) {
@@ -1556,7 +1559,7 @@ async function runAutoGrade(env) {
 
   const buckets = [
     { label: '70%+',   preds: all.filter(p => p.confidence >= 70) },
-    { label: '60-69%', preds: all.filter(p => p.confidence >= 60 && p.confidence <= 69) },
+    { label: '63-69%', preds: all.filter(p => p.confidence >= 63 && p.confidence <= 69) },
   ];
 
   let totalW = 0, totalL = 0;
