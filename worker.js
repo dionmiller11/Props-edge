@@ -2147,7 +2147,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
       const sport = url.searchParams.get('sport') || 'nba';
       const token = await getLmAccessToken(env);
       if (!token) return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
-      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&signals=HEAD_TO_HEAD&sortBySignals=HEAD_TO_HEAD`;
+      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
         'Authorization': `Bearer ${token}`,
         'Origin': 'https://linemate.io',
@@ -2174,7 +2174,7 @@ if (url.pathname.startsWith('/moneypuck/')) {
       const sport = propsMatch[1];
       const token = await getLmAccessToken(env);
       if (!token) return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
-      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&signals=HEAD_TO_HEAD&sortBySignals=HEAD_TO_HEAD`;
+      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
         'Authorization': `Bearer ${token}`,
         'Origin': 'https://linemate.io',
