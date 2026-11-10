@@ -387,9 +387,7 @@ async function runScan() {
     ));
 
     const data = responses.flat();
-    console.log('CFB raw from Linemate:', data.length, 'sample:', JSON.stringify(data[0]||{}).slice(0,300));
     setProgress(70, 'Processing '+data.length+' props…');
-    setStatus('running', '📡 Got '+data.length+' raw props from Linemate, processing…');
 
     const results = [];
     for (const item of data) {
