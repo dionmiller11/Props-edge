@@ -187,6 +187,13 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
             <option value="loss">Loss ❌</option><option value="push">Push 🟡</option>
           </select>
         </div>
+        <div class="form-group"><span class="form-label">ERA</span>
+          <select class="form-input" id="f-era">
+            <option value="v2">v2 — Nov 2026+ (clean)</option>
+            <option value="v1">v1 — pre-fix</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><span class="form-label">NOTES</span><input class="form-input" id="f-notes" placeholder="e.g. back-to-back, line moved, sharp money" /></div>
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" onclick="addBet()">➕ Add Bet</button>
@@ -206,6 +213,8 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
       <button class="filter-chip" onclick="setFilter('NBA',this)">🏀 NBA</button>
       <button class="filter-chip" onclick="setFilter('WNBA',this)">WNBA</button>
       <button class="filter-chip" onclick="setFilter('NHL',this)">🏒 NHL</button>
+      <button class="filter-chip" onclick="setFilter('era-v2',this)" style="border-color:var(--accent2);color:var(--accent2)">✨ v2 Clean</button>
+      <button class="filter-chip" onclick="setFilter('era-v1',this)" style="border-color:var(--muted)">v1 Pre-fix</button>
     </div>
     <div class="table-wrap">
       <div class="table-header">
@@ -221,7 +230,7 @@ td{padding:9px 10px;font-family:var(--font);font-size:12px;vertical-align:middle
           <th id="chkHeader" style="display:none;width:28px"></th>
           <th>DATE</th><th>PLAYER</th><th>PROP</th><th class="hide-mobile">SPORT</th>
           <th>ODDS</th><th class="hide-mobile">RATE</th><th class="hide-mobile">BOOK</th>
-          <th>UNITS</th><th>RESULT</th><th>P/L</th><th></th>
+          <th>UNITS</th><th>RESULT</th><th>P/L</th><th class="hide-mobile">NOTES / ERA</th><th></th>
         </tr></thead>
         <tbody id="betBody"></tbody>
       </table>
@@ -496,6 +505,8 @@ function addBet(){
     rate:document.getElementById('f-rate').value||'',
     book:document.getElementById('f-book').value.trim()||'',
     result:document.getElementById('f-result').value,
+    era:document.getElementById('f-era').value||'v2',
+    notes:document.getElementById('f-notes').value.trim()||'',
   };
   bets.unshift(bet); saveBets(); renderBets(); updateStats(); clearForm(); showToast('✅ Bet logged!');
 }
@@ -508,6 +519,8 @@ function renderBets(){
   const body=document.getElementById('betBody');
   let filtered=bets.filter(b=>{
     if(activeFilter==='all')return true;
+    if(activeFilter==='era-v2')return (b.era||'v2')==='v2';
+    if(activeFilter==='era-v1')return b.era==='v1';
     if(['win','loss','pending','push'].includes(activeFilter))return b.result===activeFilter;
     return b.sport===activeFilter;
   });
@@ -535,7 +548,9 @@ function renderBets(){
             <div style="display:flex;gap:10px;margin-top:6px;align-items:center;flex-wrap:wrap">
               <span style="color:var(--muted);font-size:11px">${esc(b.odds)} · ${esc(b.units)}u</span>
               ${b.result!=='pending'?`<span style="font-weight:700;font-size:11px;color:${plColor}">${plStr}</span>`:''}
+              ${b.era==='v1'?`<span style="font-size:9px;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:1px 5px">v1</span>`:''}
             </div>
+            ${b.notes?`<div style="font-size:10px;color:var(--muted);margin-top:3px;font-style:italic">${esc(b.notes)}</div>`:''}
             <div style="margin-top:6px">${resultBadge}</div>
           </div>
           <button class="del-btn" onclick="deleteBet(${b.id})" style="margin-top:2px">✕</button>
@@ -555,6 +570,7 @@ function renderBets(){
       <td>${esc(b.units)}u</td>
       <td>${resultBadge}</td>
       <td style="font-weight:700;color:${plColor}">${b.result==='pending'?'—':plStr}</td>
+      <td class="hide-mobile" style="color:var(--muted);font-size:10px;max-width:140px;white-space:normal">${b.notes?`<span style="font-style:italic">${esc(b.notes)}</span>`:'—'}${b.era==='v1'?` <span style="color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:1px 4px;font-size:9px">v1</span>`:''}</td>
       <td><button class="del-btn" onclick="deleteBet(${b.id})">✕</button></td>
     </tr>`;
   }).join('');
@@ -803,7 +819,8 @@ function renderDailyLog(){
 }
 
 function clearForm(){
-  ['f-player','f-prop','f-odds','f-rate','f-book'].forEach(id=>document.getElementById(id).value='');
+  ['f-player','f-prop','f-odds','f-rate','f-book','f-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-era').value='v2';
   document.getElementById('f-units').value='1';document.getElementById('f-result').value='pending';
   document.getElementById('f-direction').value='OVER';
   document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
