@@ -490,11 +490,13 @@ function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, spor
   const expA = (avgPtsA + avgAllowedH) / 2;
   const expH = (avgPtsH + avgAllowedA) / 2;
   // Home court/field advantage adjustment
-  const hca = sport === 'NBA' ? 3.0 : sport === 'NFL' ? 2.5 : sport === 'NCAAFB' ? 3.5 : sport === 'MLB' ? 0.15 : 0;
+  const hca = sport === 'NBA' ? 3.0 : sport === 'NFL' ? 2.5 : sport === 'NCAAFB' ? 3.5 : sport === 'MLB' ? 0.15 : sport === 'NHL' ? 0.15 : 0;
   const expH_adj = expH + hca;
   const isHockey = sport === 'NHL';
-  const varFactor = isHockey ? 0.30 : 0.22;
-  const minSd = isHockey ? 0.8 : 3;
+  // Hockey: very high variance, low scoring — needs wider distribution
+  // varFactor 0.42 reflects ~1.2 goal SD on a 2.9 goal average (real NHL data)
+  const varFactor = isHockey ? 0.42 : 0.22;
+  const minSd = isHockey ? 1.1 : 3;
   const sdA = Math.max(expA * varFactor, minSd);
   const sdH = Math.max(expH_adj * varFactor, minSd);
   let overCount = 0, awaySpreadCount = 0, awayWinCount = 0;
@@ -503,7 +505,9 @@ function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, spor
     const sH = Math.max(0, expH_adj + sdH * boxMuller());
     if (sA + sH > total) overCount++;
     if (sA > sH) awayWinCount++;
-    if (spread !== null && (sA - sH) + spread > 0) awaySpreadCount++;
+    // NHL puck line is always -1.5, treat spread as fixed -1.5 for home team
+    const effectiveSpread = isHockey ? -1.5 : spread;
+    if (effectiveSpread !== null && (sA - sH) + effectiveSpread > 0) awaySpreadCount++;
   }
   return {
     overPct:      Math.round(overCount / MC_N * 100),
