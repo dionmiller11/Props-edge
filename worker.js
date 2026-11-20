@@ -495,7 +495,8 @@ function simGame(avgPtsA, avgPtsH, avgAllowedA, avgAllowedH, total, spread, spor
   const isHockey = sport === 'NHL';
   // Hockey: very high variance, low scoring — needs wider distribution
   // varFactor 0.42 reflects ~1.2 goal SD on a 2.9 goal average (real NHL data)
-  const varFactor = isHockey ? 0.42 : 0.22;
+  // NBA varFactor 0.28 (was 0.22) — wider spread reduces false 60-69% confidence reads
+  const varFactor = isHockey ? 0.42 : sport === 'NBA' ? 0.28 : 0.22;
   const minSd = isHockey ? 1.1 : 3;
   const sdA = Math.max(expA * varFactor, minSd);
   const sdH = Math.max(expH_adj * varFactor, minSd);
@@ -1367,7 +1368,9 @@ async function runAutoProps(env) {
 
           for (const direction of ['OVER', 'UNDER']) {
             const stats = calcHitRate(vals, pm.line, direction, 20);
-            if (!stats || stats.rate < MIN_RATE || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
+            // NBA threshold raised to 65% — 60-69% bucket hitting only 35% in calibration data
+            const sportMinRate = pm.sport === 'NBA' ? 65 : MIN_RATE;
+            if (!stats || stats.rate < sportMinRate || stats.edge < MIN_EDGE || stats.games < MIN_GAMES) continue;
             edgePlays.push({
               player: pm.player, sport: pm.sport,
               prop: `${pm.propKey} ${direction === 'OVER' ? 'O' : 'U'}${pm.line}`,
