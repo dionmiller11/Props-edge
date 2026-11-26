@@ -443,49 +443,77 @@ let _nflGameLogCache = {}; // pid → { statKey: [val, val, ...] }
 let _nflRosterCache  = {}; // name.lower → { id, team, position }
 
 // Fetch ESPN game log for a player (last 20 games)
+// ESPN NFL gamelog season: NFL 2025 season runs Sept 2025 – Feb 2026
+function getNFLSeason() {
+  const now = new Date();
+  const mo = now.getMonth() + 1; // 1-12
+  const yr = now.getFullYear();
+  // Before August = still previous season
+  return mo >= 8 ? yr : yr - 1;
+}
+
 async function fetchNFLGameLog(athleteId) {
   if (_nflGameLogCache[athleteId] !== undefined) return _nflGameLogCache[athleteId];
   try {
-    const url = `${NFL_WORKER}/nfl/espn/athletes/${athleteId}/gamelog?season=2026`;
+    const season = getNFLSeason();
+    const url = `${NFL_WORKER}/nfl/espn/athletes/${athleteId}/gamelog?season=${season}`;
     const res = await fetch(url);
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
-    // ESPN gamelog structure: data.seasonTypes[0].categories[n].events[m].stats[]
-    // Parse out per-game stats
-    const statsByGame = {};
-    // Headers come from categories
+
+    // ESPN gamelog structure varies — handle both v2 and v3 formats
+    // v3: data.seasonTypes[].categories[].events[] with stats[] per event
+    //     categories have .names[] (column labels) and events[].stats[]
+    // Also: data.events is a dict of eventId→{...} used as ordering
+
+    const statsByGame = []; // array of {gameId, headers[], vals[]} in ESPN order
+
     for (const st of (data.seasonTypes || [])) {
-      if ((st.displayName || '').toLowerCase().includes('regular')) {
-        for (const cat of (st.categories || [])) {
-          const headers = cat.names || [];
-          for (const [eidx, evt] of (cat.events || []).entries()) {
-            const vals = evt.stats || [];
-            const eid = Object.keys(data.events || {})[eidx] || eidx;
-            if (!statsByGame[eid]) statsByGame[eid] = { headers, vals };
-            else {
-              // Merge headers/vals from multiple categories
-              statsByGame[eid].headers = statsByGame[eid].headers.concat(headers);
-              statsByGame[eid].vals = statsByGame[eid].vals.concat(vals);
-            }
+      const stName = (st.displayName || st.type?.name || '').toLowerCase();
+      if (!stName.includes('regular')) continue;
+      for (const cat of (st.categories || [])) {
+        // Column names may be in .names, .labels, or .columns
+        const headers = cat.names || cat.labels || cat.columns || [];
+        const events   = cat.events || [];
+        for (let ei = 0; ei < events.length; ei++) {
+          const evt   = events[ei];
+          const vals  = evt.stats || evt.values || [];
+          // Use event's own id or fall back to index
+          const gameId = evt.eventId || evt.id || `g${ei}`;
+          const existing = statsByGame.find(g => g.gameId === gameId);
+          if (existing) {
+            existing.headers = existing.headers.concat(headers);
+            existing.vals    = existing.vals.concat(vals);
+          } else {
+            statsByGame.push({ gameId, headers: [...headers], vals: [...vals] });
           }
         }
       }
     }
-    // Build per-stat arrays (newest first = events object order reversed)
+
+    // Build per-stat arrays — statsByGame is already in ESPN chronological order;
+    // reverse so index 0 = most recent game
     const statArrays = {};
-    const gameKeys = Object.keys(statsByGame).reverse(); // newest first
-    for (const eid of gameKeys.slice(0, 20)) {
-      const { headers, vals } = statsByGame[eid];
+    const ordered = statsByGame.reverse().slice(0, 20);
+    for (const { headers, vals } of ordered) {
       for (let i = 0; i < headers.length; i++) {
         const col = headers[i];
+        if (!col) continue;
         if (!statArrays[col]) statArrays[col] = [];
         const v = parseFloat(vals[i]);
         if (!isNaN(v)) statArrays[col].push(v);
       }
     }
-    _nflGameLogCache[athleteId] = statArrays;
-    return statArrays;
+
+    // Debug first player fetched
+    if (Object.keys(_nflGameLogCache).length === 0) {
+      console.log(`[NFL GameLog] athlete=${athleteId} season=${season} games=${ordered.length} cols:`, Object.keys(statArrays));
+    }
+
+    _nflGameLogCache[athleteId] = Object.keys(statArrays).length ? statArrays : null;
+    return _nflGameLogCache[athleteId];
   } catch(e) {
+    console.warn('[NFL GameLog] fetch error', athleteId, e.message);
     _nflGameLogCache[athleteId] = null;
     return null;
   }
@@ -859,12 +887,32 @@ async function runScan(){
         const statData = _nflGameLogCache[athleteId];
         if (!statData) continue;
 
+        // ESPN column name aliases (ESPN v3 gamelog API uses these names)
+        const ESPN_COL_ALIASES = {
+          passingYards:       ['passingYards','passYards','YDS','passYds','passingYds'],
+          passingAttempts:    ['passingAttempts','passAttempts','ATT','passAtt'],
+          passingCompletions: ['passingCompletions','completions','CMP','passComp'],
+          passingTouchdowns:  ['passingTouchdowns','passTouchdowns','TD','passTds','passTD'],
+          interceptions:      ['interceptions','INT','interception'],
+          rushingYards:       ['rushingYards','rushYards','YDS','rushYds'],
+          rushingAttempts:    ['rushingAttempts','rushAttempts','CAR','rushAtt','carries'],
+          receptions:         ['receptions','REC','rec'],
+          receivingYards:     ['receivingYards','recYards','YDS','recYds'],
+          targets:            ['receivingTargets','targets','TGT','tgt'],
+          fieldGoalsMade:     ['fieldGoalsMade','FGM','fgm'],
+          kickingPoints:      ['totalKickingPts','kickingPoints','PTS','kickPts'],
+        };
         const espnKey = ESPN_STAT_MAP[pm.propKey]?.espn || pm.propKey;
-        // ESPN uses multiple possible column names — try several
-        const colCandidates = [espnKey, pm.propKey, pm.propKey.charAt(0).toLowerCase()+pm.propKey.slice(1)];
+        const candidates = ESPN_COL_ALIASES[pm.propKey] || [espnKey, pm.propKey];
         let vals = null;
-        for (const col of colCandidates) {
+        for (const col of candidates) {
           if (statData[col] && statData[col].length >= 3) { vals = statData[col]; break; }
+        }
+        // Last resort: fuzzy match any key containing the base word
+        if (!vals) {
+          const baseWord = pm.propKey.replace(/([A-Z])/g,' $1').trim().split(' ')[0].toLowerCase();
+          const fuzzyKey = Object.keys(statData).find(k => k.toLowerCase().includes(baseWord) && statData[k].length >= 3);
+          if (fuzzyKey) vals = statData[fuzzyKey];
         }
         if (!vals || vals.length < 3) continue;
 
