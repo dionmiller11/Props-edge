@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=7 -->
+<!-- v=8 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -509,11 +509,15 @@ async function fetchNFLGameLog(athleteId) {
     if (topCats.length) {
       processCategories(topCats, 'g');
     } else {
-      for (const st of seasonTypes) {
-        const stType = st.type || 0;
-        const hasRegular = seasonTypes.some(s => (s.type||0) === 2 || (s.displayName||'').toLowerCase().includes('regular'));
-        if (hasRegular && stType !== 2 && !(st.displayName||'').toLowerCase().includes('regular')) continue;
-        processCategories(st.categories || [], `st${stType}`);
+      // Process all seasonTypes — don't filter by type since ESPN uses varying numeric types
+      // (Lamar=type "event", Barkley may use different value; just take all regular season data)
+      // If multiple seasonTypes exist, prefer the one with most events
+      const stToProcess = seasonTypes.length === 1
+        ? seasonTypes
+        : seasonTypes.filter(s => (s.displayName||'').toLowerCase().includes('regular') || (s.type||'') === 2 || (s.type||'') === '2');
+      const finalSts = stToProcess.length ? stToProcess : seasonTypes;
+      for (const st of finalSts) {
+        processCategories(st.categories || [], `st${st.type||0}`);
       }
     }
 
