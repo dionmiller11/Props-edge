@@ -477,7 +477,7 @@ if(_urlToken){ try{localStorage.setItem('lmToken',_urlToken);}catch(e){} }
 
 ['lmToken','oddsApiKey','mseCookie'].forEach(k=>{const v=getStored(k);if(v){const el=document.getElementById(k);if(el)el.value=v;updateStatus(k,true);}});
 
-function saveKey(k,v){try{localStorage.setItem(k,v.trim());}catch(e){}updateStatus(k,!!v.trim());}
+function saveKey(k,v){const clean=v.replace(/[^\x00-\x7F]/g,'').trim();try{localStorage.setItem(k,clean);}catch(e){}updateStatus(k,!!clean);}
 function updateStatus(k,ok){
   if(k==='lmToken'){const el=document.getElementById('lmStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
   if(k==='oddsApiKey'){const el=document.getElementById('oddsStatus');el.textContent=ok?'CONNECTED':'NOT SET';el.className='api-status '+(ok?'connected':'missing');}
@@ -591,7 +591,7 @@ function defBadge(opp){
 }
 
 async function runScan(){
-  const token = getStored('lmToken');
+  const token = getStored('lmToken').replace(/[^\x00-\x7F]/g, '').trim();
   if(!token){showError('Paste your Linemate JWT token above first.');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
   const btn=document.getElementById('runBtn');
   const minRate=parseInt(document.getElementById('minRate').value)||70;
