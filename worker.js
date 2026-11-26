@@ -2090,6 +2090,66 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
+  // ── NFL ESPN PROXY (bypasses CORS on site.web.api.espn.com) ──
+  // Routes: /nfl/espn/scoreboard, /nfl/espn/athletes/{id}/gamelog, /nfl/espn/teams/{id}/roster
+  if (url.pathname.startsWith('/nfl/espn/')) {
+    const espnPath = url.pathname.replace('/nfl/espn/', '');
+    const espnUrl = `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/${espnPath}?${url.searchParams.toString()}`;
+    try {
+      const espnRes = await fetchWithTimeout(espnUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Origin': 'https://www.espn.com',
+          'Referer': 'https://www.espn.com/',
+        }
+      }, 10000);
+      const body = await espnRes.text();
+      return new Response(body, {
+        status: espnRes.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=1800',
+        }
+      });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { status: 502, headers: { ...cors } });
+    }
+  }
+
+  // ── NFL SCOREBOARD PROXY (site.api.espn.com — different host than above) ──
+  if (url.pathname === '/nfl/scoreboard') {
+    try {
+      const sbRes = await fetchWithTimeout('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      }, 8000);
+      const body = await sbRes.text();
+      return new Response(body, {
+        status: sbRes.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'max-age=300' }
+      });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { status: 502, headers: { ...cors } });
+    }
+  }
+
+  // ── NFL TEAM ROSTER PROXY ──
+  if (url.pathname.startsWith('/nfl/roster/')) {
+    const teamId = url.pathname.replace('/nfl/roster/', '').replace(/\/$/, '');
+    const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`;
+    try {
+      const rRes = await fetchWithTimeout(rosterUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 8000);
+      const body = await rRes.text();
+      return new Response(body, {
+        status: rRes.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'max-age=3600' }
+      });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { status: 502, headers: { ...cors } });
+    }
+  }
+
   // ── NBA STATS PROXY (bypasses CORS on stats.nba.com) ──
   if (url.pathname.startsWith('/nba/stats/')) {
     const statsPath = url.pathname.replace('/nba/stats/', '');

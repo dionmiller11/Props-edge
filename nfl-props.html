@@ -243,8 +243,8 @@
 </div>
 
 <div class="data-banner">
-  <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
-  LINEMATE MODE — real hit rates + lines from 20+ sportsbooks
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--accent2);display:inline-block;flex-shrink:0"></span>
+  SELF-CALC MODE — hit rates from ESPN game logs · lines from Odds API (no Linemate required)
 </div>
 
 <div class="tabs">
@@ -291,9 +291,7 @@
     </div>
     <div class="filter-group">
       <span class="filter-label">SHOW RATE BY</span>
-      <button class="chip sig-chip active" onclick="setSignalFilter('RECENT_FORM',this)">Overall</button>
-      <button class="chip sig-chip" onclick="setSignalFilter('HEAD_TO_HEAD',this)">vs Opp</button>
-      <button class="chip sig-chip" onclick="setSignalFilter('HOME_AWAY',this)">Home/Away</button>
+      <button class="chip sig-chip active" onclick="setSignalFilter('RECENT_FORM',this)">Overall (L20)</button>
     </div>
     <div class="filter-group" style="margin-left:auto">
       <button class="chip" id="edgeChip" onclick="toggleEdge(this)">EDGE ONLY</button>
@@ -305,7 +303,7 @@
   <div style="font-size:11px;color:var(--muted);font-family:var(--font);padding:6px 4px 2px;letter-spacing:.03em;">
   <span style="color:var(--gold)">⚡ CONSENSUS</span> = 80%+ hit rate · 2+ game streak · odds -130 or better &nbsp;·&nbsp; click any row to copy pick
 </div>
-<div class="status-bar" id="statusBar">Ready — paste your Linemate token then click ⚡ RUN SCAN</div>
+<div class="status-bar" id="statusBar">Ready — click ⚡ RUN SCAN to load props from ESPN + Odds API</div>
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-label" id="progressLabel">Starting…</div>
@@ -320,15 +318,8 @@
 
   <div id="errorBox" style="display:none" class="error-box"></div>
 
-  <div id="tokenBox" class="token-box">
-    <p>To get your Linemate token:</p>
-    <ol>
-      <li>Open linemate.io/nfl/trends in Firefox on your Mac</li>
-      <li>Press Cmd+Option+I → Network tab</li>
-      <li>Filter by "api" → click any api.linemate.io request</li>
-      <li>Click Headers → copy the Authorization Bearer token</li>
-      <li>Paste it above — valid for ~1 hour</li>
-    </ol>
+  <div id="tokenBox" class="token-box" style="display:none">
+    <p><strong>Tips:</strong> Hit rates calculated directly from ESPN game logs (last 20 games). No Linemate token required. For lines/odds, paste your Odds API key above.</p>
   </div>
 
   <div class="optimizer-panel" id="optimizerPanel">
@@ -404,21 +395,147 @@
 
 <footer>
   <span id="lastRun">Never run</span>
-  <span style="color:var(--accent2)">● LINEMATE · REAL HIT RATES</span>
+  <span style="color:var(--accent2)">● ESPN GAME LOGS · SELF-CALC HIT RATES</span>
 </footer>
 <div class="copy-toast" id="copyToast"></div>
 <div class="toast" id="toast"></div>
 
 <script>
-const LINEMATE_PROVIDERS = 'betmgm,betrivers,betrpicks,fanduel,caesars,dabble,draftkings,fanatics,hardrock,novig,prizepicks,prophetx,sleeper,underdog,onyxodds,rebet,fliff,thescore,bet365,kalshi,williamhill';
-const LINEMATE_BASE = 'https://api.linemate.io/api/nfl/v1/trends/straights?preferredProviders='+LINEMATE_PROVIDERS+'&lineTypes=MAIN&outcomes=OVER,YES,COVER&trendTypes=PLAYER&sortBySignals=RECENT_FORM';
-const LINEMATE_ENDPOINTS = [
-  LINEMATE_BASE + '&limit=200&offset=0',
-  LINEMATE_BASE + '&limit=200&offset=200',
-  LINEMATE_BASE + '&limit=200&offset=400',
-  LINEMATE_BASE + '&limit=200&offset=600',
-];
+const NFL_WORKER = 'https://line-monitor.dion-miller11.workers.dev';
 const PROXY = 'https://sports-proxy.dion-miller11.workers.dev';
+
+// ── ESPN NFL STAT COLUMNS ──
+// ESPN gamelog keys we care about per prop category
+const ESPN_STAT_MAP = {
+  // key: [ESPN stat name, friendly label, category]
+  passingYards:        { espn: 'passingYards',       label: 'Pass Yds',    cat: 'passing'  },
+  passingAttempts:     { espn: 'passingAttempts',    label: 'Pass Att',    cat: 'passing'  },
+  passingCompletions:  { espn: 'completions',        label: 'Completions', cat: 'passing'  },
+  passingTouchdowns:   { espn: 'passingTouchdowns',  label: 'Pass TDs',    cat: 'passing'  },
+  interceptions:       { espn: 'interceptions',      label: 'INTs',        cat: 'passing'  },
+  rushingYards:        { espn: 'rushingYards',       label: 'Rush Yds',    cat: 'rushing'  },
+  rushingAttempts:     { espn: 'rushingAttempts',    label: 'Rush Att',    cat: 'rushing'  },
+  receptions:          { espn: 'receptions',         label: 'Receptions',  cat: 'receiving'},
+  receivingYards:      { espn: 'receivingYards',     label: 'Rec Yds',     cat: 'receiving'},
+  targets:             { espn: 'receivingTargets',   label: 'Targets',     cat: 'receiving'},
+  kickingPoints:       { espn: 'totalKickingPts',    label: 'Kicking Pts', cat: 'kicking'  },
+  fieldGoalsMade:      { espn: 'fieldGoalsMade',     label: 'FG Made',     cat: 'kicking'  },
+};
+
+// Lines from the NFL props we want to scan (Odds API player props)
+const ODDS_PROP_MAP = {
+  'player_pass_yds':          { key: 'passingYards',       label: 'Pass Yds',    cat: 'passing'  },
+  'player_pass_attempts':     { key: 'passingAttempts',    label: 'Pass Att',    cat: 'passing'  },
+  'player_pass_completions':  { key: 'passingCompletions', label: 'Completions', cat: 'passing'  },
+  'player_pass_tds':          { key: 'passingTouchdowns',  label: 'Pass TDs',    cat: 'passing'  },
+  'player_pass_interceptions':{ key: 'interceptions',      label: 'INTs',        cat: 'passing'  },
+  'player_rush_yds':          { key: 'rushingYards',       label: 'Rush Yds',    cat: 'rushing'  },
+  'player_rush_attempts':     { key: 'rushingAttempts',    label: 'Rush Att',    cat: 'rushing'  },
+  'player_receptions':        { key: 'receptions',         label: 'Receptions',  cat: 'receiving'},
+  'player_reception_yds':     { key: 'receivingYards',     label: 'Rec Yds',     cat: 'receiving'},
+  'player_reception_longest': { key: 'longestReception',   label: 'Longest Rec', cat: 'receiving'},
+  'player_kicking_points':    { key: 'kickingPoints',      label: 'Kicking Pts', cat: 'kicking'  },
+  'player_field_goals':       { key: 'fieldGoalsMade',     label: 'FG Made',     cat: 'kicking'  },
+};
+
+// ── ESPN GAME LOG CACHE ──
+let _nflGameLogCache = {}; // pid → { statKey: [val, val, ...] }
+let _nflRosterCache  = {}; // name.lower → { id, team, position }
+
+// Fetch ESPN game log for a player (last 20 games)
+async function fetchNFLGameLog(athleteId) {
+  if (_nflGameLogCache[athleteId] !== undefined) return _nflGameLogCache[athleteId];
+  try {
+    const url = `${NFL_WORKER}/nfl/espn/athletes/${athleteId}/gamelog?season=2026`;
+    const res = await fetch(url);
+    if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
+    const data = await res.json();
+    // ESPN gamelog structure: data.seasonTypes[0].categories[n].events[m].stats[]
+    // Parse out per-game stats
+    const statsByGame = {};
+    // Headers come from categories
+    for (const st of (data.seasonTypes || [])) {
+      if ((st.displayName || '').toLowerCase().includes('regular')) {
+        for (const cat of (st.categories || [])) {
+          const headers = cat.names || [];
+          for (const [eidx, evt] of (cat.events || []).entries()) {
+            const vals = evt.stats || [];
+            const eid = Object.keys(data.events || {})[eidx] || eidx;
+            if (!statsByGame[eid]) statsByGame[eid] = { headers, vals };
+            else {
+              // Merge headers/vals from multiple categories
+              statsByGame[eid].headers = statsByGame[eid].headers.concat(headers);
+              statsByGame[eid].vals = statsByGame[eid].vals.concat(vals);
+            }
+          }
+        }
+      }
+    }
+    // Build per-stat arrays (newest first = events object order reversed)
+    const statArrays = {};
+    const gameKeys = Object.keys(statsByGame).reverse(); // newest first
+    for (const eid of gameKeys.slice(0, 20)) {
+      const { headers, vals } = statsByGame[eid];
+      for (let i = 0; i < headers.length; i++) {
+        const col = headers[i];
+        if (!statArrays[col]) statArrays[col] = [];
+        const v = parseFloat(vals[i]);
+        if (!isNaN(v)) statArrays[col].push(v);
+      }
+    }
+    _nflGameLogCache[athleteId] = statArrays;
+    return statArrays;
+  } catch(e) {
+    _nflGameLogCache[athleteId] = null;
+    return null;
+  }
+}
+
+// Fetch ESPN roster for a team, build name→id map
+async function fetchNFLTeamRoster(teamId) {
+  try {
+    const res = await fetch(`${NFL_WORKER}/nfl/roster/${teamId}`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map = {};
+    for (const group of (data.athletes || [])) {
+      for (const p of (group.items || [])) {
+        const id = p.id;
+        const name = (p.fullName || p.displayName || '').toLowerCase();
+        const short = (p.shortName || '').toLowerCase();
+        const pos = (p.position?.abbreviation || '').toUpperCase();
+        const team = (data.team?.abbreviation || '').toUpperCase();
+        map[name] = { id, pos, team };
+        if (short && short !== name) map[short] = { id, pos, team };
+      }
+    }
+    return map;
+  } catch(e) { return {}; }
+}
+
+// Calculate hit rate + meta from stat array
+function calcNFLHitRate(vals, line, direction, nGames = 20) {
+  if (!vals || vals.length < 3) return null;
+  const use = vals.slice(0, nGames);
+  const hitArr = use.map(v => direction === 'OVER' ? (v > line ? 1 : 0) : (v < line ? 1 : 0));
+  const hits = hitArr.reduce((s, v) => s + v, 0);
+  const games = use.length;
+  const rate = Math.round(hits / games * 100);
+  // Recency weighting: last 3 → 50%, games 4-7 → 30%, games 8+ → 20%
+  let weightedRate = rate;
+  if (games >= 5) {
+    const g3 = hitArr.slice(0, 3), g47 = hitArr.slice(3, 7), g8p = hitArr.slice(7);
+    const w3  = g3.length  ? g3.reduce((s,v)=>s+v,0)/g3.length   : 0;
+    const w47 = g47.length ? g47.reduce((s,v)=>s+v,0)/g47.length : w3;
+    const w8p = g8p.length ? g8p.reduce((s,v)=>s+v,0)/g8p.length : w47;
+    weightedRate = Math.round(0.50 * w3 * 100 + 0.30 * w47 * 100 + 0.20 * w8p * 100);
+  }
+  const last10 = hitArr.slice(0, 10);
+  // Streak: consecutive hits from most recent
+  let streak = 0;
+  for (const h of last10) { if (h) streak++; else break; }
+  return { rate, weightedRate, hits, games, last10, streak };
+}
 
 const today = new Date();
 const todayStr = today.toISOString().split('T')[0];
@@ -591,119 +708,223 @@ function defBadge(opp){
 }
 
 async function runScan(){
-  const token = getStored('lmToken').replace(/[^\x00-\x7F]/g, '').trim();
-  if(!token){showError('Paste your Linemate JWT token above first.');btn.disabled=false;btn.textContent='⚡ RUN SCAN';return;}
-  const btn=document.getElementById('runBtn');
-  const minRate=parseInt(document.getElementById('minRate').value)||70;
-  btn.disabled=true;btn.textContent='⏳ Scanning...';
-  document.getElementById('summary').style.display='none';
-  document.getElementById('errorBox').style.display='none';
-  document.getElementById('tokenBox').style.display='none';
-  ['exportBtn','parlayBtn','obsidianBtn'].forEach(id=>document.getElementById(id).style.display='none');
-  setStatus('running','📡 Fetching NFL props from Linemate…');
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Scanning...';
+  document.getElementById('summary').style.display = 'none';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('tokenBox').style.display = 'none';
+  ['exportBtn','parlayBtn','obsidianBtn'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  setStatus('running', '📡 Fetching today\'s NFL games from ESPN…');
   setLoadingRow();
   fetchNFLDefense();
 
   try {
-    setProgress(20,'Fetching Linemate NFL trends…');
+    // ── STEP 1: Get today's games from ESPN scoreboard ──
+    setProgress(5, 'Loading today\'s NFL games…');
+    const sbRes = await fetch(`${NFL_WORKER}/nfl/scoreboard`);
+    if (!sbRes.ok) throw new Error('ESPN scoreboard error ' + sbRes.status);
+    const sbData = await sbRes.json();
+    const games = sbData.events || [];
+    if (!games.length) throw new Error('No NFL games today — check back on game day!');
 
-    setProgress(30, 'Fetching player props…');
-    // Route through worker (server-side auth) — avoids CORS/500 from direct browser calls
-    const workerRes = await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/props?sport=nfl');
-    if (!workerRes.ok) throw new Error('Worker error: ' + workerRes.status);
-    const workerJson = await workerRes.json();
-    if (!workerJson.ok) throw new Error('Linemate error: ' + (workerJson.error || 'unknown'));
-    const rawData = workerJson.data;
-    const data = Array.isArray(rawData) ? rawData : (rawData?.data || rawData?.trends || rawData?.items || []);
-    if (workerJson.cached) {
-      const cacheAge = workerJson.cachedAt ? new Date(workerJson.cachedAt).toLocaleString() : 'unknown time';
-      setStatus('running', `⚠️ Linemate down — showing cached data from ${cacheAge}`);
+    // Extract teams playing today
+    const teamsToday = []; // { teamId, abbr, opp, gameTime }
+    const gameInfoMap = {}; // abbr → { opp, gameTime }
+    for (const evt of games) {
+      const comp = evt.competitions?.[0];
+      if (!comp) continue;
+      const homeComp = comp.competitors?.find(c => c.homeAway === 'home');
+      const awayComp = comp.competitors?.find(c => c.homeAway === 'away');
+      if (!homeComp || !awayComp) continue;
+      const gameTime = evt.date ? new Date(evt.date).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+      const homeId   = homeComp.id;
+      const awayId   = awayComp.id;
+      const homeAbbr = (homeComp.team?.abbreviation || '').toUpperCase();
+      const awayAbbr = (awayComp.team?.abbreviation || '').toUpperCase();
+      teamsToday.push({ teamId: homeId, abbr: homeAbbr, opp: awayAbbr,  gameTime });
+      teamsToday.push({ teamId: awayId, abbr: awayAbbr,  opp: homeAbbr, gameTime });
+      gameInfoMap[homeAbbr] = { opp: awayAbbr,  gameTime };
+      gameInfoMap[awayAbbr] = { opp: homeAbbr,  gameTime };
     }
-    setProgress(70, 'Processing '+data.length+' props…');
+    console.log(`NFL games today: ${games.length} games, ${teamsToday.length} teams`);
 
-    const results = [];
-    for(const item of data) {
+    // ── STEP 2: Fetch rosters for all teams playing today ──
+    setProgress(15, `Loading rosters for ${teamsToday.length} teams…`);
+    const rosterFetches = teamsToday.map(t => fetchNFLTeamRoster(t.teamId).then(map => ({ abbr: t.abbr, opp: t.opp, gameTime: t.gameTime, map })));
+    const rosterResults = await Promise.all(rosterFetches);
+    // Merge into global name→{id, pos, team, opp, gameTime} map
+    const playerLookup = {}; // name.lower → {id, pos, team, opp, gameTime}
+    for (const { abbr, opp, gameTime, map } of rosterResults) {
+      for (const [name, info] of Object.entries(map)) {
+        playerLookup[name] = { ...info, team: abbr, opp, gameTime };
+      }
+    }
+    const totalPlayers = Object.keys(playerLookup).length;
+    console.log(`Rosters loaded: ${totalPlayers} players`);
+
+    // ── STEP 3: Fetch Odds API player props for today's NFL games ──
+    setProgress(30, 'Fetching player prop lines from Odds API…');
+    const oddsKey = getStored('oddsApiKey');
+    let propLines = []; // [{player, propKey, label, line, overOdds, underOdds, cat}]
+    if (oddsKey) {
+      const propMarkets = Object.keys(ODDS_PROP_MAP).join(',');
       try {
-        const playerName = item.player?.fullName||'Unknown';
-        const team = item.team?.code||'—';
-        const opp = item.opposingTeam?.code||'—';
-        const pos = item.player?.position||'';
-        const rawName = item.market?.name||'';
-        const propType = rawName.toLowerCase().split('_').map((w,i)=>i===0?w:w[0].toUpperCase()+w.slice(1)).join('');
-        const propLabel = PROP_LABELS[propType]||cleanPropName(rawName)||propType;
-        const gameTime = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}) : '';
-        const direction = (item.outcome||'over').toUpperCase();
-
-        const books = item.market?.books||{};
-        let bestLine=null, bestOverOdds=null, bestUnderOdds=null, bestOverBook=null, bestUnderBook=null;
-        let bookOverCount=0, bookUnderCount=0;
-        for(const bk of Object.keys(books)){
-          const b=books[bk];
-          const ol=b?.over?.current?.value;
-          const oo=b?.over?.current?.odds?.american;
-          const uo=b?.under?.current?.odds?.american;
-          if(ol&&!bestLine)bestLine=ol;
-          if(oo){bookOverCount++;if(!bestOverOdds||Math.abs(oo)<Math.abs(bestOverOdds)){bestOverOdds=oo;bestOverBook=bk;}}
-          if(uo){bookUnderCount++;if(!bestUnderOdds||Math.abs(uo)<Math.abs(bestUnderOdds)){bestUnderOdds=uo;bestUnderBook=bk;}}
+        const oddsRes = await fetch(
+          `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?apiKey=${oddsKey}&regions=us&markets=${propMarkets}&oddsFormat=american&dateFormat=iso`
+        );
+        if (oddsRes.ok) {
+          const oddsGames = await oddsRes.json();
+          for (const game of (oddsGames || [])) {
+            for (const book of (game.bookmakers || [])) {
+              for (const market of (book.markets || [])) {
+                const propInfo = ODDS_PROP_MAP[market.key];
+                if (!propInfo) continue;
+                for (const outcome of (market.outcomes || [])) {
+                  const playerName = (outcome.description || outcome.name || '').toLowerCase();
+                  const line = parseFloat(outcome.point);
+                  if (!playerName || isNaN(line)) continue;
+                  // Over or under?
+                  const isOver = (outcome.name || '').toLowerCase() === 'over';
+                  const isUnder = (outcome.name || '').toLowerCase() === 'under';
+                  if (!isOver && !isUnder) continue;
+                  // Find or create entry
+                  let entry = propLines.find(p => p.playerName === playerName && p.propKey === propInfo.key && p.line === line);
+                  if (!entry) {
+                    entry = { playerName, propKey: propInfo.key, label: propInfo.label, line, cat: propInfo.cat, overOdds: null, underOdds: null, books: 0 };
+                    propLines.push(entry);
+                  }
+                  entry.books++;
+                  if (isOver && (!entry.overOdds || Math.abs(outcome.price) < Math.abs(entry.overOdds))) entry.overOdds = outcome.price;
+                  if (isUnder && (!entry.underOdds || Math.abs(outcome.price) < Math.abs(entry.underOdds))) entry.underOdds = outcome.price;
+                }
+              }
+            }
+          }
+          console.log(`Odds API: ${propLines.length} prop lines loaded`);
         }
-        if(!bestLine) continue;
-
-        const signals = item.signals||[];
-        const allSignals = extractAllSignals(signals);
-        const primary = allSignals.find(s=>s.type==='RECENT_FORM')||allSignals[0];
-        if(!primary||!primary.rate) continue;
-        const hitRate = primary.rate, hits = primary.hits, games = primary.games;
-
-        const misses = games - hits;
-        const last10 = Array(Math.min(hits,10)).fill(1).concat(Array(Math.min(misses,10)).fill(0)).slice(0,10);
-        const streak = (hits===games && games>=2) ? Math.min(games,10) : 0;
-
-        const h2h = signals.find(s=>s.type==='HEAD_TO_HEAD');
-        const matchupNote = h2h ? h2h.description : ('vs '+opp);
-        const bestOdds = direction==='OVER' ? bestOverOdds : bestUnderOdds;
-
-        results.push({
-          player: playerName, team, position: pos, propKey: propType,
-          prop: propLabel+' '+(direction==='OVER'?'O':'U')+bestLine,
-          line: String(bestLine), direction, rate: hitRate,
-          hits, games, last10, streak, hotStreak: streak>=2,
-          bookCount: direction==='OVER' ? bookOverCount : bookUnderCount,
-          opposingTeam: opp, gameTime,
-          matchupGrade: hitRate>=90?'A':hitRate>=80?'B':'C',
-          matchupNote, bestOdds, bestBook: direction==='OVER' ? bestOverBook : bestUnderBook, realData: true, source: 'linemate',
-          category: Object.entries(PROP_CATS).find(([,v])=>v.includes(propType))?.[0]||'other',
-          allSignals,
-        });
-      } catch(e){ console.warn('Parse error:', e); }
+      } catch(e) { console.warn('Odds API error:', e.message); }
     }
 
-    setProgress(95,'Sorting…');
-    const seen={};
-    allData = results.filter(p=>{
-      const k=p.player+p.propKey+p.direction;
-      if(seen[k]&&seen[k]>=p.rate)return false;
-      seen[k]=p.rate;return true;
-    }).sort((a,b)=>(b.rate||0)-(a.rate||0));
+    if (!propLines.length) {
+      // No Odds API key or no props — build synthetic prop list from key players + common lines
+      setStatus('running', '⚠️ No Odds API key — using estimated lines. Add your Odds API key for real lines.');
+      // We'll still show players with their game log stats, flagged as estimated
+      for (const [name, info] of Object.entries(playerLookup)) {
+        const pos = info.pos;
+        if (!pos) continue;
+        const synths = [];
+        if (pos === 'QB') synths.push({ propKey: 'passingYards', label: 'Pass Yds', line: 239.5, cat: 'passing' }, { propKey: 'passingTouchdowns', label: 'Pass TDs', line: 1.5, cat: 'passing' });
+        else if (pos === 'RB') synths.push({ propKey: 'rushingYards', label: 'Rush Yds', line: 59.5, cat: 'rushing' }, { propKey: 'receptions', label: 'Receptions', line: 2.5, cat: 'receiving' });
+        else if (['WR','TE'].includes(pos)) synths.push({ propKey: 'receivingYards', label: 'Rec Yds', line: 49.5, cat: 'receiving' }, { propKey: 'receptions', label: 'Receptions', line: 3.5, cat: 'receiving' });
+        for (const s of synths) propLines.push({ playerName: name, ...s, overOdds: null, underOdds: null, books: 0, estimated: true });
+      }
+    }
+
+    // ── STEP 4: For each prop, look up player ID → fetch game log → calc hit rate ──
+    setProgress(45, `Calculating hit rates for ${propLines.length} props…`);
+    const results = [];
+    let processed = 0;
+
+    // Batch by unique player IDs
+    const uniquePlayerNames = [...new Set(propLines.map(p => p.playerName))];
+    const playerIdMap = {}; // name.lower → {id, pos, team, opp, gameTime}
+    for (const name of uniquePlayerNames) {
+      // Try exact match, then partial match
+      let info = playerLookup[name];
+      if (!info) {
+        // Try last name
+        const lastName = name.split(' ').pop();
+        const match = Object.keys(playerLookup).find(k => k.endsWith(lastName) || k.startsWith(name.split(' ')[0]));
+        if (match) info = playerLookup[match];
+      }
+      if (info) playerIdMap[name] = info;
+    }
+
+    // Fetch game logs in parallel batches of 8
+    const playerIds = [...new Set(Object.values(playerIdMap).map(v => v.id))];
+    console.log(`Fetching game logs for ${playerIds.length} players…`);
+    for (let i = 0; i < playerIds.length; i += 8) {
+      const batch = playerIds.slice(i, i + 8);
+      await Promise.all(batch.map(id => fetchNFLGameLog(id)));
+      const pct = 45 + Math.round((i / playerIds.length) * 40);
+      setProgress(pct, `Loading game logs… ${Math.min(i + 8, playerIds.length)}/${playerIds.length} players`);
+    }
+
+    // Now calculate hit rates
+    for (const pm of propLines) {
+      try {
+        const pInfo = playerIdMap[pm.playerName];
+        if (!pInfo) continue;
+        const { id: athleteId, pos, team, opp, gameTime } = pInfo;
+        const statData = _nflGameLogCache[athleteId];
+        if (!statData) continue;
+
+        const espnKey = ESPN_STAT_MAP[pm.propKey]?.espn || pm.propKey;
+        // ESPN uses multiple possible column names — try several
+        const colCandidates = [espnKey, pm.propKey, pm.propKey.charAt(0).toLowerCase()+pm.propKey.slice(1)];
+        let vals = null;
+        for (const col of colCandidates) {
+          if (statData[col] && statData[col].length >= 3) { vals = statData[col]; break; }
+        }
+        if (!vals || vals.length < 3) continue;
+
+        for (const direction of ['OVER', 'UNDER']) {
+          const stats = calcNFLHitRate(vals, pm.line, direction, 20);
+          if (!stats || stats.rate < 60 || stats.games < 3) continue;
+          // Show OVER and UNDER — keep both directions for user to choose
+          const odds = direction === 'OVER' ? pm.overOdds : pm.underOdds;
+          const propKey = pm.propKey;
+          const propLabel = pm.label + ' ' + (direction === 'OVER' ? 'O' : 'U') + pm.line;
+          const category = pm.cat || Object.entries(PROP_CATS).find(([,v]) => v.includes(propKey))?.[0] || 'other';
+
+          results.push({
+            player: pm.playerName.split(' ').map(w => w ? w[0].toUpperCase()+w.slice(1) : '').join(' '),
+            team, position: pos, propKey,
+            prop: propLabel, line: String(pm.line), direction,
+            rate: stats.rate, weightedRate: stats.weightedRate,
+            hits: stats.hits, games: stats.games, last10: stats.last10, streak: stats.streak,
+            hotStreak: stats.streak >= 2,
+            opposingTeam: opp, gameTime,
+            matchupNote: 'vs ' + opp,
+            bestOdds: odds, bestBook: null,
+            bookCount: pm.books || 0,
+            estimated: pm.estimated || false,
+            realData: true, source: 'espn',
+            category,
+            allSignals: [{ type: 'RECENT_FORM', label: 'L'+stats.games, rate: stats.rate, hits: stats.hits, games: stats.games }],
+          });
+        }
+        processed++;
+      } catch(e) { console.warn('Prop calc error:', pm.playerName, e.message); }
+    }
+
+    setProgress(90, 'Sorting results…');
+    const seen = {};
+    allData = results.filter(p => {
+      const k = p.player + p.propKey + p.direction;
+      if (seen[k] && seen[k] >= p.rate) return false;
+      seen[k] = p.rate; return true;
+    }).sort((a, b) => (b.rate || 0) - (a.rate || 0));
 
     hideProgress();
     populateTeamFilter();
-    saveLines(allData);saveLineHistory(allData);
+    saveLines(allData); saveLineHistory(allData);
     await prefetchInjuries(allData);
-    switchTab(activeTab);updateSummary();
-    document.getElementById('summary').style.display='grid';
-    ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
-    document.getElementById('dataTs').textContent=`Linemate · ${new Date().toLocaleTimeString()}`;
-    setStatus('done',`✅ ${allData.length} NFL props from Linemate — ${new Date().toLocaleTimeString()}`);
-    document.getElementById('lastRun').textContent=`Last run: ${new Date().toLocaleString()}`;
-    if(window.savePropsSnapshot) window.savePropsSnapshot(allData,'NFL');
+    switchTab(activeTab); updateSummary();
+    document.getElementById('summary').style.display = 'grid';
+    ['exportBtn','parlayBtn','obsidianBtn','optimizerBtn'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'inline-block'; });
+    document.getElementById('dataTs').textContent = `ESPN game logs · ${new Date().toLocaleTimeString()}`;
+    setStatus('done', `✅ ${allData.length} NFL props (${games.length} games, ${playerIds.length} players) — ${new Date().toLocaleTimeString()}`);
+    document.getElementById('lastRun').textContent = `Last run: ${new Date().toLocaleString()}`;
+    if (window.savePropsSnapshot) window.savePropsSnapshot(allData, 'NFL');
 
-  } catch(err){
+  } catch(err) {
     hideProgress();
     showError(err.message);
-    setStatus('error','❌ '+err.message);
-    document.getElementById('tokenBox').style.display='block';
+    setStatus('error', '❌ ' + err.message);
+    console.error('NFL scan error:', err);
   }
-  btn.disabled=false;btn.textContent='⚡ RUN SCAN';
+  btn.disabled = false; btn.textContent = '⚡ RUN SCAN';
 }
 
 function calcStreak(hits,games){return(hits===games&&games>=2)?Math.min(games,10):0;}
@@ -789,7 +1010,7 @@ function renderTable(){
     const consistent=isConsistentRate(p); const conLabel=consistencyLabel(p);
     const conBadge=consistent?`<span title="${conLabel||'Holds across splits'}" style="font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.3);margin-left:4px">📊 CONSISTENT</span>`:'';
     return `<tr class="copy-row" onclick='copyPlay(${JSON.stringify({player:p.player,team:p.team,prop:p.prop,direction:p.direction,rate:p.rate,games:p.games,bestOdds:p.bestOdds})})' title="Click to copy">
-      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge">LM</span>${getInjuryBadge(p.player)}${conBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
+      <td><div class="player-name"><span class="pos-badge">${esc(p.position)}</span>${esc(p.player)}<span class="lm-badge" style="background:rgba(0,255,136,.08);color:var(--accent2);border-color:rgba(0,255,136,.2)">${p.estimated?'EST':'ESPN'}</span>${getInjuryBadge(p.player)}${conBadge}</div><div class="sub-text">${esc(p.team)} vs ${esc(p.opposingTeam||'—')}${timeStr}</div></td>
       <td class="hide-mobile"><span style="color:var(--muted);font-size:11px">${esc(p.team)}</span></td>
       <td><span class="prop-type">${esc(p.prop)}</span></td>
       <td>${lineHtml}</td>
@@ -897,7 +1118,7 @@ function renderParlay(){document.getElementById('parlayCount').textContent=parla
 function copyParlay(){if(!parlayLegs.length){showToast('No legs');return;}const t=parlayLegs.map((l,i)=>`${i+1}. ${l.player} (${l.team}) — ${l.direction} ${l.prop} [${l.rate}%]`).join('\n');navigator.clipboard.writeText(`🎰 NFL PARLAY — ${today.toLocaleDateString()}\n${calcParlayOdds(parlayLegs)} | ${parlayLegs.length} legs\n\n${t}`).then(()=>showToast('📋 Copied!')).catch(()=>showToast('Copy failed'));}
 
 function exportCSV(){const rows=allData;const csv=['Player,Team,Pos,Prop,Direction,Line,Rate%,Streak,Opp,GameTime',...rows.map(p=>[`"${p.player}"`,p.team,p.position,`"${p.prop}"`,p.direction,p.line,p.rate,p.streak||0,p.opposingTeam||'',p.gameTime||''].join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`nfl-props-${todayStr}.csv`;a.click();URL.revokeObjectURL(url);showToast('📊 Exported');}
-function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏈 Player Props\n\n| Player | Pos | Team | Prop | Dir | Rate | Opp | Game | Streak |\n|--------|-----|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.position} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}W |`).join('\n')}\n`;const md=`---\ntags: [props, nfl, betting, linemate]\ndate: ${todayStr}\nsport: NFL\nsource: linemate\ntotal_edges: ${rows.length}\n---\n\n# 🏈 NFL Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via Linemate · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NFL Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
+function exportObsidian(){const rows=allData.filter(p=>(p.rate||0)>=70);const ps=parlayLegs.length?`\n## 🎰 Parlay\n**Legs:** ${parlayLegs.length} | **Odds:** ${calcParlayOdds(parlayLegs)}\n\n${parlayLegs.map((l,i)=>`${i+1}. **${l.player}** (${l.team}) — ${l.direction} ${l.prop} | ${l.rate}%`).join('\n')}\n`:'';const ts=`\n## 🏈 Player Props\n\n| Player | Pos | Team | Prop | Dir | Rate | Opp | Game | Streak |\n|--------|-----|------|------|-----|------|-----|------|--------|\n${rows.map(p=>`| ${p.player} | ${p.position} | ${p.team} | ${p.prop} | ${p.direction} | ${p.rate}% | vs ${p.opposingTeam||'—'} | ${p.gameTime||'—'} | ${p.streak||0}W |`).join('\n')}\n`;const md=`---\ntags: [props, nfl, betting, linemate]\ndate: ${todayStr}\nsport: NFL\nsource: espn-game-logs\ntotal_edges: ${rows.length}\n---\n\n# 🏈 NFL Props — ${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${ps}${ts}\n---\n*Hit rates via ESPN game logs · Lines via Odds API · Props Edge Finder*`;const blob=new Blob([md],{type:'text/markdown'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`NFL Props ${todayStr}.md`;a.click();URL.revokeObjectURL(url);showToast('🟣 Obsidian downloaded!');}
 
 function copyPlay(p) {
   const dir = p.direction||'OVER';
@@ -929,7 +1150,7 @@ function consensusStrength(p){
 }
 
 function setStatus(cls,msg){const b=document.getElementById('statusBar');b.className='status-bar '+cls;b.innerHTML=cls==='running'?`<span class="spinner"></span>${msg}`:msg;}
-function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="10"><span class="spinner"></span> Fetching NFL props from Linemate…</td><td><button class='add-parlay-btn' onclick='logBet(p)' title='Log to Bet Tracker' style='background:rgba(0,255,136,.1);color:var(--accent2);border-color:rgba(0,255,136,.25)'>📋</button></td></tr>`;}
+function setLoadingRow(){document.getElementById('tableBody').innerHTML=`<tr class="loading-row"><td colspan="12"><span class="spinner"></span> Fetching NFL props from ESPN game logs…</td></tr>`;}
 function showError(msg){const b=document.getElementById('errorBox');b.textContent=msg;b.style.display='block';}
 function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1369,7 +1590,8 @@ window.savePropsSnapshot=function(plays,sport){
 
 // Restore search query on load
 try{const sq=sessionStorage.getItem('nflSearchQuery');if(sq){searchQuery=sq;const si=document.getElementById('playerSearch');if(si)si.value=sq;}}catch(e){}
-if(getStored('lmToken')) setTimeout(()=>runScan(), 900);
+// Auto-run always (no token required for ESPN game logs)
+setTimeout(() => runScan(), 900);
 
 // ── AUTO-RUN ON PAGE OPEN ──
 (function(){
