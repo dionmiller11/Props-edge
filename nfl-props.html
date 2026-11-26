@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=9 -->
+<!-- v=10 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -799,11 +799,28 @@ async function runScan(){
     if (oddsKey) {
       const propMarkets = Object.keys(ODDS_PROP_MAP).join(',');
       try {
-        const oddsRes = await fetch(
-          `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?apiKey=${oddsKey}&regions=us&markets=${propMarkets}&oddsFormat=american&dateFormat=iso`
+        // Step 3a: Get today's NFL event IDs
+        const eventsRes = await fetch(
+          `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/events?apiKey=${oddsKey}&dateFormat=iso`
         );
-        if (oddsRes.ok) {
-          const oddsGames = await oddsRes.json();
+        const eventsData = eventsRes.ok ? await eventsRes.json() : [];
+        // Filter to events within next 7 days
+        const now = Date.now();
+        const week = 7 * 24 * 60 * 60 * 1000;
+        const upcomingEvents = (eventsData || []).filter(e => {
+          const t = new Date(e.commence_time).getTime();
+          return t >= now - 3600000 && t <= now + week;
+        });
+        console.log(`Odds API: ${upcomingEvents.length} upcoming NFL events`);
+
+        // Step 3b: Fetch player props for each event
+        for (const evt of upcomingEvents) {
+          try {
+            const oddsRes = await fetch(
+              `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/events/${evt.id}/odds?apiKey=${oddsKey}&regions=us&markets=${propMarkets}&oddsFormat=american&dateFormat=iso`
+            );
+            if (!oddsRes.ok) continue;
+            const oddsGames = [await oddsRes.json()];
           for (const game of (oddsGames || [])) {
             for (const book of (game.bookmakers || [])) {
               for (const market of (book.markets || [])) {
@@ -830,8 +847,9 @@ async function runScan(){
               }
             }
           }
-          console.log(`Odds API: ${propLines.length} prop lines loaded`);
+          } catch(evtErr) { console.warn('Odds API event error:', evt.id, evtErr.message); }
         }
+        console.log(`Odds API: ${propLines.length} prop lines loaded from ${upcomingEvents.length} events`);
       } catch(e) { console.warn('Odds API error:', e.message); }
     }
 
