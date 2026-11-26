@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=3 -->
+<!-- v=6 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -477,9 +477,38 @@ async function fetchNFLGameLog(athleteId) {
     const topCats = data.categories || [];
     const seasonTypes = data.seasonTypes || [];
 
+    // ESPN v3 column orders by category displayName (labels not on category object)
+    // Verified from live API: cat keys = ["displayName","type","splitType","events","totals"]
+    // event keys = {eventId, stats:[...values]}
+    const ESPN_COL_MAP = {
+      'passing':   ['completions','attempts','passingYards','completionPct','yardsPerAttempt','passingTDs','interceptions','longPassing','sacks','QBRating','QBR','fumbles','fumbleLost','twoPointConversions','passerRating2','dummy1'],
+      'rushing':   ['rushingAttempts','rushingYards','yardsPerCarry','rushingTDs','longRushing','fumbles','fumbleLost'],
+      'receiving': ['receptions','receivingTargets','receivingYards','yardsPerReception','receivingTDs','longReceiving','fumbles','fumbleLost'],
+      'fumbles':   ['fumbles','fumbleLost','fumblesRecovered'],
+      'kicking':   ['fgMade','fgAttempts','fgPct','longFG','xpMade','xpAttempts','points'],
+      'punting':   ['punts','puntYards','grossPuntAvg','touchbacks','puntIn20','longPunt','netPuntAvg'],
+      'kickreturns':['kickReturns','kickReturnYards','yardsPerKickReturn','kickReturnTDs','longKickReturn'],
+      'puntreturns':['puntReturns','puntReturnYards','yardsPerPuntReturn','puntReturnTDs','longPuntReturn'],
+      'defense':   ['soloTackles','assistedTackles','totalTackles','sacks','sackYards','tackles4Loss','passesDefended','QBHurries','fumbles','fumblesRecovered','interceptions','intYards','intTDs'],
+    };
+    // Also try to get labels from totals[0] if it has them
+    const getTotalsLabels = (cat) => {
+      const t = (cat.totals || [])[0];
+      if (!t) return null;
+      // totals[0] might have {stats:[...]} parallel to events, or keys
+      return null; // ESPN totals don't have labels either
+    };
+
     const processCategories = (cats, prefix) => {
       for (const cat of cats) {
-        const headers = cat.labels || cat.names || cat.columns || [];
+        // Get column names: try labels/names first, then map by displayName
+        let headers = cat.labels || cat.names || cat.columns || [];
+        if (!headers.length) {
+          const dn = (cat.displayName || cat.type?.displayName || '').toLowerCase().replace(/\s+/g,'');
+          // Find matching key
+          const mapKey = Object.keys(ESPN_COL_MAP).find(k => dn.includes(k) || k.includes(dn.replace(/\W/g,'')));
+          if (mapKey) headers = ESPN_COL_MAP[mapKey];
+        }
         const events = cat.events || [];
         for (let ei = 0; ei < events.length; ei++) {
           const evt = events[ei];
