@@ -465,24 +465,21 @@ async function fetchNFLGameLog(athleteId) {
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
 
-    // ESPN gamelog structure varies — handle both v2 and v3 formats
-    // v3: data.seasonTypes[].categories[].events[] with stats[] per event
-    //     categories have .names[] (column labels) and events[].stats[]
-    // Also: data.events is a dict of eventId→{...} used as ordering
-
+    // ESPN gamelog structure — handle site.web.api.espn.com v3 AND cdn.espn.com formats
     const statsByGame = []; // array of {gameId, headers[], vals[]} in ESPN order
 
-    for (const st of (data.seasonTypes || [])) {
-      const stName = (st.displayName || st.type?.name || '').toLowerCase();
-      if (!stName.includes('regular')) continue;
+    // Format A: site.web.api.espn.com/apis/common/v3 → data.seasonTypes[].categories[].events[]
+    const seasonTypes = data.seasonTypes || (data.gamepackage?.player?.gamelog?.seasonTypes) || [];
+    for (const st of seasonTypes) {
+      const stName = (st.displayName || st.type?.name || st.name || '').toLowerCase();
+      // Accept regular season (type 2) or any season if none labeled regular
+      if (seasonTypes.length > 1 && stName && !stName.includes('regular') && !stName.includes('2')) continue;
       for (const cat of (st.categories || [])) {
-        // Column names may be in .names, .labels, or .columns
         const headers = cat.names || cat.labels || cat.columns || [];
         const events   = cat.events || [];
         for (let ei = 0; ei < events.length; ei++) {
           const evt   = events[ei];
           const vals  = evt.stats || evt.values || [];
-          // Use event's own id or fall back to index
           const gameId = evt.eventId || evt.id || `g${ei}`;
           const existing = statsByGame.find(g => g.gameId === gameId);
           if (existing) {
