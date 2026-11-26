@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=6 -->
+<!-- v=7 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -467,48 +467,23 @@ async function fetchNFLGameLog(athleteId) {
     const data = await res.json();
 
     // ESPN gamelog v3 response structure (site.web.api.espn.com/apis/common/v3):
-    // Top-level: { categories: [{name, displayName, count, labels[], events[]}], seasonTypes:[], events:{} }
-    // Each category has labels[] (column names) and events[] (one per game)
-    // event.stats[] = values parallel to labels[]
-    // events{} dict maps eventId → event metadata (opponent, date, etc.)
+    // Top-level keys: categories, filters, labels, names, displayNames, events, seasonTypes, glossary
+    // CRITICAL: labels/names/displayNames are TOP-LEVEL arrays, NOT on each category
+    // seasonTypes[].categories[].events[].stats[] = values parallel to top-level labels[]
+    // events{} dict maps eventId → game metadata (opponent, date, etc.)
     const statsByGame = [];
+
+    // Top-level column names (the actual labels ESPN provides)
+    const topLabels = data.labels || data.names || data.displayNames || [];
 
     // Handle both structures: top-level categories OR seasonTypes[].categories
     const topCats = data.categories || [];
     const seasonTypes = data.seasonTypes || [];
 
-    // ESPN v3 column orders by category displayName (labels not on category object)
-    // Verified from live API: cat keys = ["displayName","type","splitType","events","totals"]
-    // event keys = {eventId, stats:[...values]}
-    const ESPN_COL_MAP = {
-      'passing':   ['completions','attempts','passingYards','completionPct','yardsPerAttempt','passingTDs','interceptions','longPassing','sacks','QBRating','QBR','fumbles','fumbleLost','twoPointConversions','passerRating2','dummy1'],
-      'rushing':   ['rushingAttempts','rushingYards','yardsPerCarry','rushingTDs','longRushing','fumbles','fumbleLost'],
-      'receiving': ['receptions','receivingTargets','receivingYards','yardsPerReception','receivingTDs','longReceiving','fumbles','fumbleLost'],
-      'fumbles':   ['fumbles','fumbleLost','fumblesRecovered'],
-      'kicking':   ['fgMade','fgAttempts','fgPct','longFG','xpMade','xpAttempts','points'],
-      'punting':   ['punts','puntYards','grossPuntAvg','touchbacks','puntIn20','longPunt','netPuntAvg'],
-      'kickreturns':['kickReturns','kickReturnYards','yardsPerKickReturn','kickReturnTDs','longKickReturn'],
-      'puntreturns':['puntReturns','puntReturnYards','yardsPerPuntReturn','puntReturnTDs','longPuntReturn'],
-      'defense':   ['soloTackles','assistedTackles','totalTackles','sacks','sackYards','tackles4Loss','passesDefended','QBHurries','fumbles','fumblesRecovered','interceptions','intYards','intTDs'],
-    };
-    // Also try to get labels from totals[0] if it has them
-    const getTotalsLabels = (cat) => {
-      const t = (cat.totals || [])[0];
-      if (!t) return null;
-      // totals[0] might have {stats:[...]} parallel to events, or keys
-      return null; // ESPN totals don't have labels either
-    };
-
     const processCategories = (cats, prefix) => {
       for (const cat of cats) {
-        // Get column names: try labels/names first, then map by displayName
-        let headers = cat.labels || cat.names || cat.columns || [];
-        if (!headers.length) {
-          const dn = (cat.displayName || cat.type?.displayName || '').toLowerCase().replace(/\s+/g,'');
-          // Find matching key
-          const mapKey = Object.keys(ESPN_COL_MAP).find(k => dn.includes(k) || k.includes(dn.replace(/\W/g,'')));
-          if (mapKey) headers = ESPN_COL_MAP[mapKey];
-        }
+        // Use top-level labels (ESPN v3 stores them at response root, not on category)
+        const headers = topLabels;
         const events = cat.events || [];
         for (let ei = 0; ei < events.length; ei++) {
           const evt = events[ei];
@@ -517,8 +492,13 @@ async function fetchNFLGameLog(athleteId) {
           const gameId = evt.eventId || evt.id || `${prefix}_${ei}`;
           const existing = statsByGame.find(g => g.gameId === gameId);
           if (existing) {
-            existing.headers = existing.headers.concat(headers);
-            existing.vals    = existing.vals.concat(vals);
+            // Merge additional stat columns from other categories for same game
+            for (let i = 0; i < headers.length; i++) {
+              if (!existing.headers.includes(headers[i])) {
+                existing.headers.push(headers[i]);
+                existing.vals.push(vals[i] ?? '');
+              }
+            }
           } else {
             statsByGame.push({ gameId, headers: [...headers], vals: [...vals] });
           }
@@ -527,10 +507,8 @@ async function fetchNFLGameLog(athleteId) {
     };
 
     if (topCats.length) {
-      // v3 direct format: categories at top level
       processCategories(topCats, 'g');
     } else {
-      // Nested under seasonTypes
       for (const st of seasonTypes) {
         const stType = st.type || 0;
         const hasRegular = seasonTypes.some(s => (s.type||0) === 2 || (s.displayName||'').toLowerCase().includes('regular'));
