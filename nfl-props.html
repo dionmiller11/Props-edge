@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=10 -->
+<!-- v=11 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -1775,6 +1775,236 @@ function correlateParlay(){
   params.set('count', parlayLegs.length);
   window.open('https://dionmiller11.github.io/Props-edge/parlay-correlation.html?'+params.toString(),'_blank');
 }
+
+// ── AUTO-GRADER ──
+// Runs on page load: finds any snapshots from yesterday with ungraded props,
+// fetches ESPN box scores, marks each prop hit/miss, stores accuracy stats.
+
+const GRADE_KEY = 'propsGrading_NFL';
+const PROP_STAT_MAP = {
+  passingYards:       { espnStat: 'passingYards' },
+  passingTouchdowns:  { espnStat: 'passingTouchdowns' },
+  passingAttempts:    { espnStat: 'passingAttempts' },
+  passingCompletions: { espnStat: 'completions' },
+  interceptions:      { espnStat: 'interceptions' },
+  rushingYards:       { espnStat: 'rushingYards' },
+  rushingTouchdowns:  { espnStat: 'rushingTouchdowns' },
+  rushingAttempts:    { espnStat: 'rushingAttempts' },
+  receivingYards:     { espnStat: 'receivingYards' },
+  receptions:         { espnStat: 'receptions' },
+  receivingTouchdowns:{ espnStat: 'receivingTouchdowns' },
+};
+
+async function fetchNFLBoxScores(dateStr) {
+  // dateStr: "2026-11-26" → ESPN format: "20261126"
+  const d = dateStr.replace(/-/g, '');
+  try {
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${d}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.events || []).filter(e => e.status?.type?.completed);
+  } catch(e) { return []; }
+}
+
+async function fetchGamePlayerStats(espnEventId) {
+  // Returns map of playerName.lower → {statName: value}
+  try {
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${espnEventId}`);
+    if (!r.ok) return {};
+    const data = await r.json();
+    const stats = {};
+    for (const team of (data.boxscore?.players || [])) {
+      for (const statCat of (team.statistics || [])) {
+        const labels = statCat.labels || [];
+        for (const athlete of (statCat.athletes || [])) {
+          const name = (athlete.athlete?.displayName || '').toLowerCase();
+          if (!name) continue;
+          if (!stats[name]) stats[name] = {};
+          (athlete.stats || []).forEach((val, i) => {
+            const label = labels[i];
+            if (label) stats[name][label] = parseFloat(val) || 0;
+          });
+        }
+      }
+    }
+    return stats;
+  } catch(e) { return {}; }
+}
+
+// Map ESPN box score label names to our propKey names
+const ESPN_LABEL_TO_PROP = {
+  'YDS': null, // ambiguous — handled per-category
+  'C/ATT': null,
+  'TD': null,
+  'INT': 'interceptions',
+  'QBR': null,
+  'ATT': null,
+  'AVG': null,
+  'REC': 'receptions',
+  'TGTS': null,
+  // We'll use the gamelog stat names instead — they match our propKey names
+};
+
+async function runAutoGrade() {
+  const today = new Date().toISOString().split('T')[0];
+  // Check yesterday and today
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const datesToCheck = [yesterday, today];
+
+  let grading;
+  try { grading = JSON.parse(localStorage.getItem(GRADE_KEY) || '{}'); } catch(e) { grading = {}; }
+
+  for (const dateStr of datesToCheck) {
+    const snapKey = 'propsSnapshot_' + dateStr;
+    let snap;
+    try { snap = JSON.parse(localStorage.getItem(snapKey) || 'null'); } catch(e) { continue; }
+    if (!snap || !snap.plays || !snap.plays.length) continue;
+
+    // Skip if already fully graded
+    const ungradedPlays = snap.plays.filter(p => p.graded !== true && !p.estimated);
+    if (!ungradedPlays.length) continue;
+
+    console.log(`[AutoGrade] Grading ${ungradedPlays.length} props from ${dateStr}…`);
+
+    // Fetch completed ESPN games for that date
+    const completedGames = await fetchNFLBoxScores(dateStr);
+    if (!completedGames.length) {
+      console.log(`[AutoGrade] No completed games found for ${dateStr}`);
+      continue;
+    }
+
+    // Fetch player stats for all completed games
+    const allPlayerStats = {}; // playerName.lower → {statKey: val}
+    for (const game of completedGames) {
+      const gameStats = await fetchGamePlayerStats(game.id);
+      for (const [name, stats] of Object.entries(gameStats)) {
+        if (!allPlayerStats[name]) allPlayerStats[name] = {};
+        Object.assign(allPlayerStats[name], stats);
+      }
+    }
+
+    // Grade each prop
+    let graded = 0, hits = 0, misses = 0;
+    for (const play of snap.plays) {
+      if (play.graded === true || play.estimated) continue;
+      const playerName = (play.player || '').toLowerCase();
+      const propKey = play.propKey || play.prop || '';
+      const line = parseFloat(play.line);
+      const direction = (play.direction || 'OVER').toUpperCase();
+      if (!playerName || !propKey || isNaN(line)) continue;
+
+      // Find player in box scores (fuzzy: last name match)
+      const lastName = playerName.split(' ').pop();
+      const matchedName = Object.keys(allPlayerStats).find(n =>
+        n === playerName || n.endsWith(' ' + lastName) || n.startsWith(playerName.split(' ')[0])
+      );
+      if (!matchedName) continue;
+
+      const pStats = allPlayerStats[matchedName];
+      // Map propKey to ESPN stat label
+      const statMapping = {
+        passingYards: ['passingYards', 'YDS', 'passing yards'],
+        passingTouchdowns: ['passingTouchdowns', 'TD', 'passing touchdowns'],
+        passingAttempts: ['passingAttempts', 'ATT'],
+        passingCompletions: ['completions', 'C/ATT'],
+        interceptions: ['interceptions', 'INT'],
+        rushingYards: ['rushingYards', 'rushingYards'],
+        rushingTouchdowns: ['rushingTouchdowns'],
+        rushingAttempts: ['rushingAttempts'],
+        receivingYards: ['receivingYards'],
+        receptions: ['receptions', 'REC'],
+        receivingTouchdowns: ['receivingTouchdowns'],
+        targets: ['targets', 'TGTS'],
+      };
+      const candidates = statMapping[propKey] || [propKey];
+      let actualVal = null;
+      for (const c of candidates) {
+        if (pStats[c] != null && !isNaN(pStats[c])) { actualVal = parseFloat(pStats[c]); break; }
+      }
+      if (actualVal === null) continue;
+
+      const hit = direction === 'OVER' ? actualVal > line : actualVal < line;
+      play.graded = true;
+      play.actualVal = actualVal;
+      play.gradedHit = hit;
+      play.gradedAt = Date.now();
+      graded++;
+      if (hit) hits++; else misses++;
+    }
+
+    // Save updated snapshot back
+    try { localStorage.setItem(snapKey, JSON.stringify(snap)); } catch(e) {}
+
+    if (graded > 0) {
+      // Update running accuracy stats
+      if (!grading[dateStr]) grading[dateStr] = { graded: 0, hits: 0, misses: 0, byType: {}, byTier: {} };
+      grading[dateStr].graded += graded;
+      grading[dateStr].hits += hits;
+      grading[dateStr].misses += misses;
+
+      // Break down by prop type and hit rate tier
+      snap.plays.filter(p => p.graded && p.gradedHit != null).forEach(p => {
+        const t = p.propKey || p.prop || 'other';
+        if (!grading[dateStr].byType[t]) grading[dateStr].byType[t] = {g:0,h:0};
+        grading[dateStr].byType[t].g++;
+        if (p.gradedHit) grading[dateStr].byType[t].h++;
+        const tier = (p.rate||0) >= 90 ? '90+' : (p.rate||0) >= 80 ? '80-89' : '70-79';
+        if (!grading[dateStr].byTier[tier]) grading[dateStr].byTier[tier] = {g:0,h:0};
+        grading[dateStr].byTier[tier].g++;
+        if (p.gradedHit) grading[dateStr].byTier[tier].h++;
+      });
+
+      console.log(`[AutoGrade] ${dateStr}: ${graded} graded, ${hits} hits, ${misses} misses (${Math.round(hits/graded*100)}% accuracy)`);
+      try { localStorage.setItem(GRADE_KEY, JSON.stringify(grading)); } catch(e) {}
+
+      // Show accuracy badge in UI if we have enough data
+      showGradingBadge(grading);
+    }
+  }
+}
+
+function showGradingBadge(grading) {
+  const entries = Object.values(grading);
+  if (!entries.length) return;
+  const totalGraded = entries.reduce((s, e) => s + e.graded, 0);
+  const totalHits = entries.reduce((s, e) => s + e.hits, 0);
+  if (totalGraded < 5) return; // need enough sample
+  const pct = Math.round(totalHits / totalGraded * 100);
+
+  // Inject badge into the data banner
+  const banner = document.getElementById('dataTs');
+  if (!banner) return;
+  const color = pct >= 70 ? 'var(--accent2)' : pct >= 55 ? 'var(--gold)' : 'var(--warn)';
+  const existing = document.getElementById('grading-badge');
+  const html = `<span id="grading-badge" style="margin-left:12px;color:${color};cursor:pointer" title="Click for grading breakdown" onclick="showGradingReport()">${pct}% ACTUAL ACC (${totalGraded} graded)</span>`;
+  if (existing) existing.outerHTML = html;
+  else banner.insertAdjacentHTML('afterend', html);
+}
+
+function showGradingReport() {
+  let grading;
+  try { grading = JSON.parse(localStorage.getItem(GRADE_KEY) || '{}'); } catch(e) { return; }
+  const lines = ['📊 MODEL ACCURACY REPORT\n'];
+  for (const [date, data] of Object.entries(grading).sort().reverse()) {
+    if (!data.graded) continue;
+    const pct = Math.round(data.hits / data.graded * 100);
+    lines.push(`${date}: ${pct}% (${data.hits}/${data.graded})`);
+    if (data.byTier) {
+      for (const [tier, td] of Object.entries(data.byTier)) {
+        lines.push(`  ${tier}% tier: ${Math.round(td.h/td.g*100)}% (${td.h}/${td.g})`);
+      }
+    }
+    if (data.byType) {
+      for (const [type, td] of Object.entries(data.byType)) {
+        lines.push(`  ${type}: ${Math.round(td.h/td.g*100)}% (${td.h}/${td.g})`);
+      }
+    }
+  }
+  alert(lines.join('\n'));
+}
+
+// Run auto-grader on page load after a short delay (don't block main data load)
+setTimeout(runAutoGrade, 4000);
 
 let searchQuery = '';
 function onSearch(val){
