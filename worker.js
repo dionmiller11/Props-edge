@@ -2090,33 +2090,16 @@ if (url.pathname.startsWith('/moneypuck/')) {
     }
   }
 
-  // ── NFL ESPN PROXY (bypasses CORS on ESPN APIs) ──
-  // Routes: /nfl/espn/athletes/{id}/gamelog
+  // ── NFL ESPN GAMELOG PROXY ──
+  // Uses site.api.espn.com/apis/site/v2 — same host as scoreboard/roster (known to work)
+  // Route: /nfl/espn/athletes/{id}/gamelog
   if (url.pathname.startsWith('/nfl/espn/')) {
     const espnPath = url.pathname.replace('/nfl/espn/', '');
     const qstr = url.searchParams.toString();
-    // Try site.web.api.espn.com first; fall back to cdn.espn.com if blocked
-    const espnUrl = `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/${espnPath}${qstr ? '?'+qstr : ''}`;
+    // site.api.espn.com public v2 — same host as /nfl/scoreboard and /nfl/roster (works)
+    const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/${espnPath}${qstr ? '?'+qstr : ''}`;
     try {
-      const espnRes = await fetchWithTimeout(espnUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Origin': 'https://www.espn.com',
-          'Referer': 'https://www.espn.com/nfl/player/gamelog/_/id/' + espnPath.split('/')[1],
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'same-site',
-        }
-      }, 10000);
-      if (espnRes.status === 403) {
-        // Fall back to cdn.espn.com public API
-        const cdnUrl = `https://cdn.espn.com/core/nfl/player-gamelog?xhr=1&id=${espnPath.split('/')[1]}&${qstr}`;
-        const cdnRes = await fetchWithTimeout(cdnUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 10000);
-        const body = await cdnRes.text();
-        return new Response(body, { status: cdnRes.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'max-age=1800' } });
-      }
+      const espnRes = await fetchWithTimeout(espnUrl, {}, 10000);
       const body = await espnRes.text();
       return new Response(body, {
         status: espnRes.status,

@@ -465,22 +465,27 @@ async function fetchNFLGameLog(athleteId) {
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
 
-    // ESPN gamelog structure — handle site.web.api.espn.com v3 AND cdn.espn.com formats
-    const statsByGame = []; // array of {gameId, headers[], vals[]} in ESPN order
+    // ESPN gamelog — site.api.espn.com/apis/site/v2 format:
+    // data.seasonTypes[].categories[].events[]
+    //   category.labels[] = column headers, category.totals[] = totals row (skip)
+    //   event.stats[] = per-game values (parallel to labels)
+    // Also handles v3 format (names[] instead of labels[])
+    const statsByGame = [];
 
-    // Format A: site.web.api.espn.com/apis/common/v3 → data.seasonTypes[].categories[].events[]
-    const seasonTypes = data.seasonTypes || (data.gamepackage?.player?.gamelog?.seasonTypes) || [];
+    const seasonTypes = data.seasonTypes || [];
     for (const st of seasonTypes) {
-      const stName = (st.displayName || st.type?.name || st.name || '').toLowerCase();
-      // Accept regular season (type 2) or any season if none labeled regular
-      if (seasonTypes.length > 1 && stName && !stName.includes('regular') && !stName.includes('2')) continue;
+      const stType = st.type || 0;
+      // Type 2 = regular season; skip preseason (1) and postseason (3) if regular exists
+      const hasRegular = seasonTypes.some(s => (s.type||0) === 2 || (s.displayName||'').toLowerCase().includes('regular'));
+      if (hasRegular && stType !== 2 && !(st.displayName||'').toLowerCase().includes('regular')) continue;
       for (const cat of (st.categories || [])) {
-        const headers = cat.names || cat.labels || cat.columns || [];
+        const headers = cat.labels || cat.names || cat.columns || [];
         const events   = cat.events || [];
         for (let ei = 0; ei < events.length; ei++) {
           const evt   = events[ei];
           const vals  = evt.stats || evt.values || [];
-          const gameId = evt.eventId || evt.id || `g${ei}`;
+          if (!vals.length) continue;
+          const gameId = evt.eventId || evt.id || `g${st.type||0}_${ei}`;
           const existing = statsByGame.find(g => g.gameId === gameId);
           if (existing) {
             existing.headers = existing.headers.concat(headers);
