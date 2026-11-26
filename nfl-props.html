@@ -466,27 +466,26 @@ async function fetchNFLGameLog(athleteId) {
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
 
-    // ESPN gamelog — site.api.espn.com/apis/site/v2 format:
-    // data.seasonTypes[].categories[].events[]
-    //   category.labels[] = column headers, category.totals[] = totals row (skip)
-    //   event.stats[] = per-game values (parallel to labels)
-    // Also handles v3 format (names[] instead of labels[])
+    // ESPN gamelog v3 response structure (site.web.api.espn.com/apis/common/v3):
+    // Top-level: { categories: [{name, displayName, count, labels[], events[]}], seasonTypes:[], events:{} }
+    // Each category has labels[] (column names) and events[] (one per game)
+    // event.stats[] = values parallel to labels[]
+    // events{} dict maps eventId → event metadata (opponent, date, etc.)
     const statsByGame = [];
 
+    // Handle both structures: top-level categories OR seasonTypes[].categories
+    const topCats = data.categories || [];
     const seasonTypes = data.seasonTypes || [];
-    for (const st of seasonTypes) {
-      const stType = st.type || 0;
-      // Type 2 = regular season; skip preseason (1) and postseason (3) if regular exists
-      const hasRegular = seasonTypes.some(s => (s.type||0) === 2 || (s.displayName||'').toLowerCase().includes('regular'));
-      if (hasRegular && stType !== 2 && !(st.displayName||'').toLowerCase().includes('regular')) continue;
-      for (const cat of (st.categories || [])) {
+
+    const processCategories = (cats, prefix) => {
+      for (const cat of cats) {
         const headers = cat.labels || cat.names || cat.columns || [];
-        const events   = cat.events || [];
+        const events = cat.events || [];
         for (let ei = 0; ei < events.length; ei++) {
-          const evt   = events[ei];
-          const vals  = evt.stats || evt.values || [];
+          const evt = events[ei];
+          const vals = evt.stats || evt.values || [];
           if (!vals.length) continue;
-          const gameId = evt.eventId || evt.id || `g${st.type||0}_${ei}`;
+          const gameId = evt.eventId || evt.id || `${prefix}_${ei}`;
           const existing = statsByGame.find(g => g.gameId === gameId);
           if (existing) {
             existing.headers = existing.headers.concat(headers);
@@ -495,6 +494,19 @@ async function fetchNFLGameLog(athleteId) {
             statsByGame.push({ gameId, headers: [...headers], vals: [...vals] });
           }
         }
+      }
+    };
+
+    if (topCats.length) {
+      // v3 direct format: categories at top level
+      processCategories(topCats, 'g');
+    } else {
+      // Nested under seasonTypes
+      for (const st of seasonTypes) {
+        const stType = st.type || 0;
+        const hasRegular = seasonTypes.some(s => (s.type||0) === 2 || (s.displayName||'').toLowerCase().includes('regular'));
+        if (hasRegular && stType !== 2 && !(st.displayName||'').toLowerCase().includes('regular')) continue;
+        processCategories(st.categories || [], `st${stType}`);
       }
     }
 
