@@ -2163,7 +2163,25 @@ if (url.pathname.startsWith('/moneypuck/')) {
         }
         return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
       }
-      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM`;
+      // Build gameIds from ESPN scoreboard — Linemate requires this param or returns 500
+      const espnSportPath = { nfl: 'football/nfl', nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb', ncaab: 'basketball/mens-college-basketball', ncaaf: 'football/college-football', wnba: 'basketball/wnba' }[sport] || `football/${sport}`;
+      let gameIdsParam = '';
+      try {
+        const sbRes = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${espnSportPath}/scoreboard`, {}, 8000);
+        if (sbRes.ok) {
+          const sb = await sbRes.json();
+          const gameIds = (sb.events || []).map(e => {
+            const comps = e.competitions?.[0]?.competitors || [];
+            const away = comps.find(c => c.homeAway === 'away')?.team?.abbreviation || '';
+            const home = comps.find(c => c.homeAway === 'home')?.team?.abbreviation || '';
+            const dateStr = (e.date || '').slice(0, 10).replace(/-/g, '');
+            return `${dateStr}-${away}-${home}`;
+          }).filter(Boolean);
+          if (gameIds.length) gameIdsParam = `&gameIds=${gameIds.join(',')}`;
+        }
+      } catch(_) { /* fall through without gameIds */ }
+
+      const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM${gameIdsParam}`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
         'Authorization': `Bearer ${token}`,
         'Origin': 'https://linemate.io',
