@@ -457,7 +457,9 @@ async function fetchNFLGameLog(athleteId) {
   try {
     const season = getNFLSeason();
     const url = `${NFL_WORKER}/nfl/espn/athletes/${athleteId}/gamelog?season=${season}`;
-    const res = await fetch(url);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
 
@@ -513,7 +515,7 @@ async function fetchNFLGameLog(athleteId) {
     _nflGameLogCache[athleteId] = Object.keys(statArrays).length ? statArrays : null;
     return _nflGameLogCache[athleteId];
   } catch(e) {
-    console.warn('[NFL GameLog] fetch error', athleteId, e.message);
+    if (e.name !== 'AbortError') console.warn('[NFL GameLog] fetch error', athleteId, e.message);
     _nflGameLogCache[athleteId] = null;
     return null;
   }
@@ -868,14 +870,15 @@ async function runScan(){
       if (info) playerIdMap[name] = info;
     }
 
-    // Fetch game logs in parallel batches of 8
+    // Fetch game logs in parallel batches of 20
     const playerIds = [...new Set(Object.values(playerIdMap).map(v => v.id))];
     console.log(`Fetching game logs for ${playerIds.length} players…`);
-    for (let i = 0; i < playerIds.length; i += 8) {
-      const batch = playerIds.slice(i, i + 8);
+    const BATCH = 20;
+    for (let i = 0; i < playerIds.length; i += BATCH) {
+      const batch = playerIds.slice(i, i + BATCH);
       await Promise.all(batch.map(id => fetchNFLGameLog(id)));
       const pct = 45 + Math.round((i / playerIds.length) * 40);
-      setProgress(pct, `Loading game logs… ${Math.min(i + 8, playerIds.length)}/${playerIds.length} players`);
+      setProgress(pct, `Loading game logs… ${Math.min(i + BATCH, playerIds.length)}/${playerIds.length} players`);
     }
 
     // Now calculate hit rates
