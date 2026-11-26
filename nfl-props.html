@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=11 -->
+<!-- v=12 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -1645,7 +1645,7 @@ window.savePropsSnapshot=function(plays,sport){
   var seen=new Set(cur.plays.map(function(p){return p.player+'|'+(p.prop||p.propKey||'');}));
   var newPlays=[];
   var _snapshotMin=parseInt((document.getElementById('minRate')||{}).value||'70');
-  plays.filter(function(p){return(p.rate||0)>=_snapshotMin;}).forEach(function(p){
+  plays.filter(function(p){return(p.rate||0)>=_snapshotMin && !p.estimated;}).forEach(function(p){
     var k=p.player+'|'+(p.prop||p.propKey||'');
     if(!seen.has(k)){var np=Object.assign({},p,{prop:p.prop||p.propKey||p.category||'',sport:p.sport||sport,savedAt:Date.now()});cur.plays.push(np);seen.add(k);newPlays.push(np);}
   });
