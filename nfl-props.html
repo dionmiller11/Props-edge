@@ -607,21 +607,14 @@ async function runScan(){
   try {
     setProgress(20,'Fetching Linemate NFL trends…');
 
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-
     setProgress(30, 'Fetching player props…');
-    const responses = await Promise.all(LINEMATE_ENDPOINTS.map(url =>
-      fetch(url, {headers}).then(r => {
-        if(r.status===401) throw new Error('Token expired — get a new one from linemate.io DevTools');
-        if(!r.ok) throw new Error('Linemate API error: '+r.status);
-        return r.json();
-      }).catch(e => { console.warn('Endpoint failed:', e); return []; })
-    ));
-
-    const data = responses.flat();
+    // Route through worker (server-side auth) — avoids CORS/500 from direct browser calls
+    const workerRes = await fetch('https://line-monitor.dion-miller11.workers.dev/linemate/props?sport=nfl');
+    if (!workerRes.ok) throw new Error('Worker error: ' + workerRes.status);
+    const workerJson = await workerRes.json();
+    if (!workerJson.ok) throw new Error('Linemate error: ' + (workerJson.error || 'unknown'));
+    const rawData = workerJson.data;
+    const data = Array.isArray(rawData) ? rawData : (rawData?.data || rawData?.trends || rawData?.items || []);
     setProgress(70, 'Processing '+data.length+' props…');
 
     const results = [];
