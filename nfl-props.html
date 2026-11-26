@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NFL Props Edge Finder</title>
-<!-- v=8 -->
+<!-- v=9 -->
 <style>
   :root {
     --bg:#0a0f1a;--surface:#111827;--surface2:#1a2233;--border:#1e2d45;
@@ -457,8 +457,6 @@ async function fetchNFLGameLog(athleteId) {
   if (_nflGameLogCache[athleteId] !== undefined) return _nflGameLogCache[athleteId];
   try {
     const season = getNFLSeason();
-    // Call ESPN directly from browser — site.web.api.espn.com allows browser CORS
-    // Worker proxy was returning 403 (ESPN blocks server-to-server CF worker IPs)
     const url = `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${athleteId}/gamelog?season=${season}&seasontype=2`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -466,80 +464,52 @@ async function fetchNFLGameLog(athleteId) {
     if (!res.ok) { _nflGameLogCache[athleteId] = null; return null; }
     const data = await res.json();
 
-    // ESPN gamelog v3 response structure (site.web.api.espn.com/apis/common/v3):
-    // Top-level keys: categories, filters, labels, names, displayNames, events, seasonTypes, glossary
-    // CRITICAL: labels/names/displayNames are TOP-LEVEL arrays, NOT on each category
-    // seasonTypes[].categories[].events[].stats[] = values parallel to top-level labels[]
-    // events{} dict maps eventId → game metadata (opponent, date, etc.)
-    const statsByGame = [];
+    // ESPN v3: column names at data.names[], stats in seasonTypes[*].categories[*].events[*].stats[]
+    // Some players return {filters:[]} or {code,message} — guard against that
+    if (!data.names && !data.seasonTypes) { _nflGameLogCache[athleteId] = null; return null; }
 
-    // Top-level column names (the actual labels ESPN provides)
-    const topLabels = data.labels || data.names || data.displayNames || [];
+    const colNames = data.names || data.labels || data.displayNames || [];
+    const statArrays = {}; // colName → [val per game, most recent first]
 
-    // Handle both structures: top-level categories OR seasonTypes[].categories
-    const topCats = data.categories || [];
-    const seasonTypes = data.seasonTypes || [];
-
-    const processCategories = (cats, prefix) => {
-      for (const cat of cats) {
-        // Use top-level labels (ESPN v3 stores them at response root, not on category)
-        const headers = topLabels;
-        const events = cat.events || [];
-        for (let ei = 0; ei < events.length; ei++) {
-          const evt = events[ei];
-          const vals = evt.stats || evt.values || [];
-          if (!vals.length) continue;
-          const gameId = evt.eventId || evt.id || `${prefix}_${ei}`;
-          const existing = statsByGame.find(g => g.gameId === gameId);
-          if (existing) {
-            // Merge additional stat columns from other categories for same game
-            for (let i = 0; i < headers.length; i++) {
-              if (!existing.headers.includes(headers[i])) {
-                existing.headers.push(headers[i]);
-                existing.vals.push(vals[i] ?? '');
-              }
-            }
-          } else {
-            statsByGame.push({ gameId, headers: [...headers], vals: [...vals] });
-          }
+    // Collect all events across all seasonTypes and categories
+    const allEvents = []; // {eventId, stats[]}
+    for (const st of (data.seasonTypes || [])) {
+      for (const cat of (st.categories || [])) {
+        for (const evt of (cat.events || [])) {
+          if ((evt.stats || []).length) allEvents.push(evt);
         }
       }
-    };
-
-    if (topCats.length) {
-      processCategories(topCats, 'g');
-    } else {
-      // Process all seasonTypes — don't filter by type since ESPN uses varying numeric types
-      // (Lamar=type "event", Barkley may use different value; just take all regular season data)
-      // If multiple seasonTypes exist, prefer the one with most events
-      const stToProcess = seasonTypes.length === 1
-        ? seasonTypes
-        : seasonTypes.filter(s => (s.displayName||'').toLowerCase().includes('regular') || (s.type||'') === 2 || (s.type||'') === '2');
-      const finalSts = stToProcess.length ? stToProcess : seasonTypes;
-      for (const st of finalSts) {
-        processCategories(st.categories || [], `st${st.type||0}`);
+    }
+    // Also check top-level categories
+    for (const cat of (data.categories || [])) {
+      for (const evt of (cat.events || [])) {
+        if ((evt.stats || []).length) allEvents.push(evt);
       }
     }
 
-    // Build per-stat arrays — statsByGame is already in ESPN chronological order;
-    // reverse so index 0 = most recent game
-    const statArrays = {};
-    const ordered = statsByGame.reverse().slice(0, 20);
-    for (const { headers, vals } of ordered) {
-      for (let i = 0; i < headers.length; i++) {
-        const col = headers[i];
+    // Deduplicate by eventId, keep last occurrence
+    const seen = {};
+    for (const evt of allEvents) {
+      const id = evt.eventId || evt.id || Math.random();
+      seen[id] = evt.stats;
+    }
+
+    // Build stat arrays — ESPN order is oldest first, so reverse for most-recent-first
+    const rows = Object.values(seen).reverse().slice(0, 20);
+    for (const vals of rows) {
+      for (let i = 0; i < colNames.length; i++) {
+        const col = colNames[i];
         if (!col) continue;
-        if (!statArrays[col]) statArrays[col] = [];
         const v = parseFloat(vals[i]);
-        if (!isNaN(v)) statArrays[col].push(v);
+        if (!isNaN(v)) {
+          if (!statArrays[col]) statArrays[col] = [];
+          statArrays[col].push(v);
+        }
       }
     }
 
-    // Debug first few players fetched
-    if (Object.keys(_nflGameLogCache).length < 3) {
-      console.log(`[NFL GameLog] athlete=${athleteId} season=${season} games=${ordered.length} statsByGame=${statsByGame.length} seasonTypes:`, (data.seasonTypes||[]).map(s=>s.displayName||s.type?.name));
-      if (ordered.length > 0) console.log(`[NFL GameLog] cols:`, Object.keys(statArrays));
-      else console.log(`[NFL GameLog] RAW seasonTypes keys:`, Object.keys(data));
+    if (Object.keys(_nflGameLogCache).length < 5) {
+      console.log(`[GameLog] ${athleteId} rows=${rows.length} cols=${Object.keys(statArrays).join(',')}`);
     }
 
     _nflGameLogCache[athleteId] = Object.keys(statArrays).length ? statArrays : null;
