@@ -457,8 +457,9 @@ async function fetchNFLGameLog(athleteId) {
   if (_nflGameLogCache[athleteId] !== undefined) return _nflGameLogCache[athleteId];
   try {
     const season = getNFLSeason();
-    // Try current season first, fall back to no season param (ESPN returns current by default)
-    const url = `${NFL_WORKER}/nfl/espn/athletes/${athleteId}/gamelog?season=${season}&seasontype=2`;
+    // Call ESPN directly from browser — site.web.api.espn.com allows browser CORS
+    // Worker proxy was returning 403 (ESPN blocks server-to-server CF worker IPs)
+    const url = `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${athleteId}/gamelog?season=${season}&seasontype=2`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
     const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
