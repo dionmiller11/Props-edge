@@ -615,6 +615,10 @@ async function runScan(){
     if (!workerJson.ok) throw new Error('Linemate error: ' + (workerJson.error || 'unknown'));
     const rawData = workerJson.data;
     const data = Array.isArray(rawData) ? rawData : (rawData?.data || rawData?.trends || rawData?.items || []);
+    if (workerJson.cached) {
+      const cacheAge = workerJson.cachedAt ? new Date(workerJson.cachedAt).toLocaleString() : 'unknown time';
+      setStatus('running', `⚠️ Linemate down — showing cached data from ${cacheAge}`);
+    }
     setProgress(70, 'Processing '+data.length+' props…');
 
     const results = [];

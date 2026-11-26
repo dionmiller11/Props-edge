@@ -2152,8 +2152,17 @@ if (url.pathname.startsWith('/moneypuck/')) {
   if (url.pathname === '/linemate/props' && request.method === 'GET') {
     try {
       const sport = url.searchParams.get('sport') || 'nba';
+      const kvCacheKey = `linemate:props:cache:${sport}`;
       const token = await getLmAccessToken(env);
-      if (!token) return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
+      if (!token) {
+        // No token — try cache
+        const cached = await env.LINE_MONITOR_KV.get(kvCacheKey);
+        if (cached) {
+          const c = JSON.parse(cached);
+          return new Response(JSON.stringify({ ok: true, data: c.data, cached: true, cachedAt: c.ts }), { headers: cors });
+        }
+        return new Response(JSON.stringify({ ok: false, error: 'no linemate token' }), { headers: cors });
+      }
       const lmUrl = `https://api.linemate.io/api/${sport}/v1/trends/straights?lineTypes=MAIN&trendTypes=PLAYER&limit=200&outcomes=OVER,YES,COVER&sortBySignals=RECENT_FORM`;
       const propsRes = await fetchWithTimeout(lmUrl, { headers: {
         'Authorization': `Bearer ${token}`,
@@ -2164,10 +2173,29 @@ if (url.pathname.startsWith('/moneypuck/')) {
         'linemate-client-platform': 'web',
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0',
       } }, 10000);
-      if (!propsRes.ok) return new Response(JSON.stringify({ ok: false, error: `Linemate ${propsRes.status}` }), { headers: cors });
+      if (!propsRes.ok) {
+        // Linemate down — try cache fallback
+        const cached = await env.LINE_MONITOR_KV.get(kvCacheKey);
+        if (cached) {
+          const c = JSON.parse(cached);
+          return new Response(JSON.stringify({ ok: true, data: c.data, cached: true, cachedAt: c.ts }), { headers: cors });
+        }
+        return new Response(JSON.stringify({ ok: false, error: `Linemate ${propsRes.status}` }), { headers: cors });
+      }
       const props = await propsRes.json();
-      return new Response(JSON.stringify({ ok: true, data: props }), { headers: cors });
+      // Save to KV cache (48hr TTL)
+      await env.LINE_MONITOR_KV.put(kvCacheKey, JSON.stringify({ ts: new Date().toISOString(), data: props }), { expirationTtl: 172800 });
+      return new Response(JSON.stringify({ ok: true, data: props, cached: false }), { headers: cors });
     } catch(e) {
+      // On exception also try cache
+      try {
+        const sport = url.searchParams.get('sport') || 'nba';
+        const cached = await env.LINE_MONITOR_KV.get(`linemate:props:cache:${sport}`);
+        if (cached) {
+          const c = JSON.parse(cached);
+          return new Response(JSON.stringify({ ok: true, data: c.data, cached: true, cachedAt: c.ts }), { headers: cors });
+        }
+      } catch(_) {}
       return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: cors });
     }
   }
